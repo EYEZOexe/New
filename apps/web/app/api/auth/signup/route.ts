@@ -36,7 +36,8 @@ export async function POST(req: Request) {
 
   // In Route Handlers, set cookies on the response (not via `cookies()`).
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(cfg.sessionCookieName, session.secret, {
+  // `Client.setSession(...)` expects the session ID (the `$id`), not the secret.
+  res.cookies.set(cfg.sessionCookieName, session.$id, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

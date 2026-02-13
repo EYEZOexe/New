@@ -78,6 +78,9 @@ export function createSessionAppwriteClient(sessionSecret?: string) {
 
   const client = new Client().setEndpoint(cfg.endpoint).setProject(cfg.projectId).setSession(secret);
 
+  // Note: `setSession` expects the user session ID.
+  // We store the Appwrite session `$id` in our cookie.
+
   return {
     client,
     account: new Account(client),

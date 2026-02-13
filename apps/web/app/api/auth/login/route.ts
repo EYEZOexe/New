@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   const cfg = getAppwritePublicConfig();
   const { account } = createPublicAppwriteClient();
 
-  // Create session (server-side, returns secret)
+  // Create session
   const session = await account.createEmailPasswordSession(body.email, body.password);
 
   const h = await headers();
@@ -30,7 +30,8 @@ export async function POST(req: Request) {
   // In Route Handlers, set cookies on the response (not via `cookies()`)
   // so the Set-Cookie header is reliably included.
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(cfg.sessionCookieName, session.secret, {
+  // `Client.setSession(...)` expects the session ID (the `$id`), not the secret.
+  res.cookies.set(cfg.sessionCookieName, session.$id, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
