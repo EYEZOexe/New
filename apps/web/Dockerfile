@@ -12,8 +12,11 @@ COPY packages/appwrite/package.json ./packages/appwrite/package.json
 RUN pnpm install --frozen-lockfile
 
 FROM base AS builder
-COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
+COPY --from=deps /app/packages/appwrite/node_modules ./packages/appwrite/node_modules
 ENV NEXT_OUTPUT=standalone
 RUN pnpm --filter @g3netic/web build
 

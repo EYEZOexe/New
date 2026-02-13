@@ -12,8 +12,10 @@ COPY packages/shared/package.json ./packages/shared/package.json
 RUN pnpm install --frozen-lockfile
 
 FROM base AS builder
-COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/bot/node_modules ./apps/bot/node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 RUN pnpm --filter @g3netic/bot build
 
 FROM node:20-alpine AS runner
