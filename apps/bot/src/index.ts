@@ -1,3 +1,5 @@
+import "dotenv/config";
+
 import { Client, GatewayIntentBits, Partials } from "discord.js";
 import * as sdk from "node-appwrite";
 import { z } from "zod";
@@ -13,7 +15,15 @@ const envSchema = z.object({
   CUSTOMER_GUILD_ID: z.string().min(1)
 });
 
-const env = envSchema.parse(process.env);
+const envResult = envSchema.safeParse(process.env);
+if (!envResult.success) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    "Bot is not configured (missing env vars). Copy apps/bot/.env.example to apps/bot/.env and set values. Skipping bot startup."
+  );
+  process.exit(0);
+}
+const env = envResult.data;
 
 /**
  * MVP placeholder bot:

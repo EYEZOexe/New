@@ -41,10 +41,23 @@ Each app has its own `.env.example`.
 
 ## Deployment (Coolify)
 
-This repo includes Dockerfiles per service:
+This repo includes Dockerfiles per service (recommended build context: **repo root**):
 
 - `apps/web/Dockerfile`
 - `apps/admin/Dockerfile`
 - `apps/bot/Dockerfile`
 
+Additionally, for easier Coolify configuration you can point directly to the root Dockerfiles:
+
+- `Dockerfile.web`
+- `Dockerfile.admin`
+- `Dockerfile.bot`
+
 Coolify services should set the appropriate domain(s) and environment variables.
+
+### Important: Build context / base directory
+If Coolify is configured with **Base Directory = `apps/admin`** (or `apps/web`), Docker will NOT be able to `COPY packages/*` and the build will fail.
+
+Set **Base Directory / Build Context** to the **repository root**, and select either:
+- `Dockerfile.admin` / `Dockerfile.web` / `Dockerfile.bot`, or
+- `apps/admin/Dockerfile` / `apps/web/Dockerfile` / `apps/bot/Dockerfile`.
