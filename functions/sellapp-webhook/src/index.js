@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import sdk from "node-appwrite";
+import * as sdk from "node-appwrite";
 
 /**
  * Sell.app webhook handler (Appwrite Function)

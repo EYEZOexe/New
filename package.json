@@ -11,7 +11,8 @@
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "format": "prettier -w .",
-    "appwrite:bootstrap": "node scripts/appwrite/bootstrap.mjs"
+    "appwrite:bootstrap": "node scripts/appwrite/bootstrap.mjs",
+    "appwrite:deploy:sellapp-webhook": "node scripts/appwrite/deploy-sellapp-webhook.mjs --env-file .env.appwrite"
   },
   "devDependencies": {
     "prettier": "^3.3.3",
