@@ -9,7 +9,8 @@ export async function POST() {
   const sessionSecret = cookieStore.get(cfg.sessionCookieName)?.value;
 
   // Clear cookie regardless (idempotent)
-  cookieStore.delete(cfg.sessionCookieName);
+  const res = NextResponse.json({ ok: true });
+  res.cookies.delete(cfg.sessionCookieName);
 
   if (sessionSecret) {
     try {
@@ -20,5 +21,5 @@ export async function POST() {
     }
   }
 
-  return NextResponse.json({ ok: true });
+  return res;
 }
