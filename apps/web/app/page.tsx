@@ -9,6 +9,12 @@ export default function MarketingHome() {
         <li>
           <Link href="/dashboard">Go to dashboard</Link>
         </li>
+        <li>
+          <Link href="/login">Login</Link>
+        </li>
+        <li>
+          <Link href="/signup">Sign up</Link>
+        </li>
       </ul>
     </main>
   );

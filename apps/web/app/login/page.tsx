@@ -1,0 +1,82 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import Link from "next/link";
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as any;
+        throw new Error(data?.error ?? `Login failed (${res.status})`);
+      }
+
+      router.push("/dashboard");
+      router.refresh();
+    } catch (err: any) {
+      setError(err?.message ?? "Login failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <main style={{ padding: 24, maxWidth: 420 }}>
+      <h1>Login</h1>
+      <p>
+        Don&apos;t have an account? <Link href="/signup">Sign up</Link>
+      </p>
+
+      <form onSubmit={onSubmit} style={{ display: "grid", gap: 12 }}>
+        <label style={{ display: "grid", gap: 6 }}>
+          <span>Email</span>
+          <input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            type="email"
+            autoComplete="email"
+            required
+          />
+        </label>
+
+        <label style={{ display: "grid", gap: 6 }}>
+          <span>Password</span>
+          <input
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            type="password"
+            autoComplete="current-password"
+            required
+          />
+        </label>
+
+        <button disabled={loading} type="submit">
+          {loading ? "Logging in..." : "Login"}
+        </button>
+      </form>
+
+      {error ? (
+        <p style={{ color: "crimson", marginTop: 12 }}>
+          <strong>Error:</strong> {error}
+        </p>
+      ) : null}
+    </main>
+  );
+}

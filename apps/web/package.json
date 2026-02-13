@@ -12,6 +12,7 @@
   "dependencies": {
     "@g3netic/appwrite": "workspace:*",
     "@g3netic/shared": "workspace:*",
+    "node-appwrite": "^14.0.0",
     "next": "^15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
