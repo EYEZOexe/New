@@ -16,13 +16,13 @@ export type AuthContext = {
 export async function getAuthContext(): Promise<AuthContext | null> {
   const cfg = getAppwriteServerConfig();
   const cookieStore = await cookies();
-  const sessionSecret = cookieStore.get(cfg.sessionCookieName)?.value;
-  if (!sessionSecret) return null;
+  const sessionToken = cookieStore.get(cfg.sessionCookieName)?.value;
+  if (!sessionToken) return null;
 
   // Get the logged-in user using the session secret.
   let user;
   try {
-    const { account } = createSessionAppwriteClient(sessionSecret);
+    const { account } = createSessionAppwriteClient(sessionToken);
     user = await account.get();
   } catch {
     return null;

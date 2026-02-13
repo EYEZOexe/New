@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 
-import { createPublicAppwriteClient, getAppwritePublicConfig } from "../../../../lib/appwrite-server";
+import { createPublicAppwriteClient, createSessionAppwriteClient, getAppwritePublicConfig } from "../../../../lib/appwrite-server";
 
 type LoginBody = {
   email: string;
@@ -21,8 +21,35 @@ export async function POST(req: Request) {
     // Create session
     const session = await account.createEmailPasswordSession(body.email, body.password);
 
+    // Different Appwrite versions/environments may require the session *secret* or session `$id`
+    // for `X-Appwrite-Session`. Verify by calling `account.get()`.
+    const candidates = [
+      typeof (session as any).secret === "string" ? (session as any).secret : undefined,
+      session.$id
+    ].filter(Boolean) as string[];
+
+    let sessionToken: string | null = null;
+    for (const token of candidates) {
+      try {
+        const { account: authedAccount } = createSessionAppwriteClient(token);
+        await authedAccount.get();
+        sessionToken = token;
+        break;
+      } catch {
+        // try next candidate
+      }
+    }
+
+    if (!sessionToken) {
+      return NextResponse.json(
+        { error: "Login succeeded but session could not be validated. Check Appwrite session settings." },
+        { status: 500 }
+      );
+    }
+
     const h = await headers();
-    const host = h.get("host") ?? "";
+    const hostHeader = h.get("host") ?? "";
+    const host = hostHeader.startsWith("[") ? hostHeader : hostHeader.split(":")[0];
     const cookieDomain =
       cfg.cookieDomain && host.endsWith(cfg.cookieDomain.replace(/^\./, ""))
         ? cfg.cookieDomain
@@ -31,8 +58,7 @@ export async function POST(req: Request) {
   // In Route Handlers, set cookies on the response (not via `cookies()`)
   // so the Set-Cookie header is reliably included.
     const res = NextResponse.json({ ok: true });
-    // `Client.setSession(...)` expects the session ID (the `$id`), not the secret.
-    res.cookies.set(cfg.sessionCookieName, session.$id, {
+    res.cookies.set(cfg.sessionCookieName, sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
