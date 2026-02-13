@@ -20,7 +20,8 @@ export async function POST(req: Request) {
 
   // Create user (admin scope)
   const { users } = createAdminAppwriteClient();
-  await users.create(ID.unique(), body.email, "", body.password, body.name);
+  // Important: don't pass empty string for `phone` (Appwrite validates phone format).
+  await users.create(ID.unique(), body.email, undefined, body.password, body.name);
 
   // Create session (public scope)
   const { account } = createPublicAppwriteClient();
