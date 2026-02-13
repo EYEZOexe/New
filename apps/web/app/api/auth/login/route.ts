@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { headers } from "next/headers";
 
 import { createPublicAppwriteClient, getAppwritePublicConfig } from "../../../../lib/appwrite-server";
 
@@ -19,6 +20,13 @@ export async function POST(req: Request) {
   // Create session (server-side, returns secret)
   const session = await account.createEmailPasswordSession(body.email, body.password);
 
+  const h = await headers();
+  const host = h.get("host") ?? "";
+  const cookieDomain =
+    cfg.cookieDomain && host.endsWith(cfg.cookieDomain.replace(/^\./, ""))
+      ? cfg.cookieDomain
+      : undefined;
+
   // In Route Handlers, set cookies on the response (not via `cookies()`)
   // so the Set-Cookie header is reliably included.
   const res = NextResponse.json({ ok: true });
@@ -27,7 +35,7 @@ export async function POST(req: Request) {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    ...(cfg.cookieDomain ? { domain: cfg.cookieDomain } : {})
+    ...(cookieDomain ? { domain: cookieDomain } : {})
   });
 
   return res;

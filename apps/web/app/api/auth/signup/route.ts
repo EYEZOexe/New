@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { headers } from "next/headers";
 
 import { ID } from "node-appwrite";
 import { createAdminAppwriteClient, createPublicAppwriteClient, getAppwritePublicConfig } from "../../../../lib/appwrite-server";
@@ -17,6 +18,13 @@ export async function POST(req: Request) {
 
   const cfg = getAppwritePublicConfig();
 
+  const h = await headers();
+  const host = h.get("host") ?? "";
+  const cookieDomain =
+    cfg.cookieDomain && host.endsWith(cfg.cookieDomain.replace(/^\./, ""))
+      ? cfg.cookieDomain
+      : undefined;
+
   // Create user (admin scope)
   const { users } = createAdminAppwriteClient();
   // Important: don't pass empty string for `phone` (Appwrite validates phone format).
@@ -33,7 +41,7 @@ export async function POST(req: Request) {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    ...(cfg.cookieDomain ? { domain: cfg.cookieDomain } : {})
+    ...(cookieDomain ? { domain: cookieDomain } : {})
   });
 
   return res;
