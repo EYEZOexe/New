@@ -10,7 +10,8 @@
     "build": "turbo build --concurrency=1",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
-    "format": "prettier -w ."
+    "format": "prettier -w .",
+    "appwrite:bootstrap": "node scripts/appwrite/bootstrap.mjs"
   },
   "devDependencies": {
     "prettier": "^3.3.3",

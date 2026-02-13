@@ -1,0 +1,8 @@
+{
+  "name": "@g3netic/function-sellapp-webhook",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "node-appwrite": "^22.0.0"
+  }
+}
