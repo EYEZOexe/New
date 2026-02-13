@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies, headers } from "next/headers";
 
-import { getAppwritePublicConfig } from "../../../../lib/appwrite-server";
+import { createSessionAppwriteClient, getAppwritePublicConfig } from "../../../../lib/appwrite-server";
 
 // Debug endpoint to help diagnose cookie issues in environments.
 // Do not expose in production long-term.
@@ -9,6 +9,20 @@ export async function GET() {
   const cfg = getAppwritePublicConfig();
   const cookieStore = await cookies();
   const h = await headers();
+
+  const token = cookieStore.get(cfg.sessionCookieName)?.value;
+  let accountGetOk: boolean | null = null;
+  let accountGetError: string | null = null;
+  if (token) {
+    try {
+      const { account } = createSessionAppwriteClient(token);
+      await account.get();
+      accountGetOk = true;
+    } catch (err: any) {
+      accountGetOk = false;
+      accountGetError = err?.message ?? String(err);
+    }
+  }
 
   return NextResponse.json({
     env: {
@@ -25,7 +39,10 @@ export async function GET() {
     },
     cookie: {
       name: cfg.sessionCookieName,
-      valuePresent: Boolean(cookieStore.get(cfg.sessionCookieName)?.value)
+      valuePresent: Boolean(token),
+      // Do not leak token value
+      accountGetOk,
+      accountGetError
     }
   });
 }

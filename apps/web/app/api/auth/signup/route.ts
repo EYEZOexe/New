@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 
 import { ID } from "node-appwrite";
-import { createAdminAppwriteClient, createPublicAppwriteClient, createSessionAppwriteClient, getAppwritePublicConfig } from "../../../../lib/appwrite-server";
+import { createAdminAppwriteClient, createEmailPasswordSessionToken, getAppwritePublicConfig } from "../../../../lib/appwrite-server";
 
 type SignupBody = {
   email: string;
@@ -32,33 +32,8 @@ export async function POST(req: Request) {
     // Important: don't pass empty string for `phone` (Appwrite validates phone format).
     await users.create(ID.unique(), body.email, undefined, body.password, body.name);
 
-    // Create session (public scope)
-    const { account } = createPublicAppwriteClient();
-    const session = await account.createEmailPasswordSession(body.email, body.password);
-
-    const candidates = [
-      typeof (session as any).secret === "string" ? (session as any).secret : undefined,
-      session.$id
-    ].filter(Boolean) as string[];
-
-    let sessionToken: string | null = null;
-    for (const token of candidates) {
-      try {
-        const { account: authedAccount } = createSessionAppwriteClient(token);
-        await authedAccount.get();
-        sessionToken = token;
-        break;
-      } catch {
-        // try next candidate
-      }
-    }
-
-    if (!sessionToken) {
-      return NextResponse.json(
-        { error: "Signup succeeded but session could not be validated. Check Appwrite session settings." },
-        { status: 500 }
-      );
-    }
+    // Create session token (Appwrite session cookie value)
+    const sessionToken = await createEmailPasswordSessionToken(body.email, body.password);
 
     // In Route Handlers, set cookies on the response (not via `cookies()`).
     const res = NextResponse.json({ ok: true });

@@ -18,6 +18,19 @@ export type AppwritePublicConfig = {
   cookieDomain?: string;
 };
 
+function extractCookieValue(setCookieHeader: string, nameStartsWith: string): string | null {
+  // A single Set-Cookie header value looks like:
+  //   a_session_<projectId>=<value>; Path=/; HttpOnly; Secure; SameSite=None
+  // We only need the cookie VALUE.
+  const firstPart = setCookieHeader.split(";")[0] ?? "";
+  const eqIndex = firstPart.indexOf("=");
+  if (eqIndex === -1) return null;
+  const name = firstPart.slice(0, eqIndex);
+  const value = firstPart.slice(eqIndex + 1);
+  if (!name.startsWith(nameStartsWith)) return null;
+  return value || null;
+}
+
 export function getAppwritePublicConfig(): AppwritePublicConfig {
   const endpoint = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT;
   const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID;
@@ -58,6 +71,52 @@ export function createPublicAppwriteClient() {
   };
 }
 
+/**
+ * Create an email/password session and return the **Appwrite session cookie value**.
+ *
+ * Why this exists:
+ * - Appwrite's `/account/sessions/email` sets a session cookie via `Set-Cookie`.
+ * - The response body does NOT include the cookie value.
+ * - The Node SDK's `Client.setSession(...)` expects the same cookie value.
+ */
+export async function createEmailPasswordSessionToken(email: string, password: string): Promise<string> {
+  const cfg = getAppwritePublicConfig();
+
+  const res = await fetch(`${cfg.endpoint}/account/sessions/email`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "X-Appwrite-Project": cfg.projectId,
+      "X-Appwrite-Response-Format": "1.6.0"
+    },
+    body: JSON.stringify({ email, password })
+  });
+
+  const data = (await res.json().catch(() => null)) as any;
+  if (!res.ok) {
+    const message = data?.message || `Login failed (${res.status})`;
+    // Match node-appwrite's error shape enough for existing handlers.
+    const err: any = new Error(message);
+    err.code = res.status;
+    err.type = data?.type;
+    err.response = data;
+    throw err;
+  }
+
+  // Node/undici supports getSetCookie(); Next route handlers run on Node runtime.
+  const setCookies: string[] =
+    (res.headers as any).getSetCookie?.() ??
+    (res.headers.get("set-cookie") ? [res.headers.get("set-cookie") as string] : []);
+
+  // Appwrite uses a cookie that starts with "a_session".
+  for (const sc of setCookies) {
+    const value = extractCookieValue(sc, "a_session");
+    if (value) return value;
+  }
+
+  throw new Error("Appwrite did not return a session cookie. Check Appwrite CORS/platform settings.");
+}
+
 export function createAdminAppwriteClient() {
   const cfg = getAppwriteServerConfig();
   const client = new Client().setEndpoint(cfg.endpoint).setProject(cfg.projectId).setKey(cfg.apiKey);
@@ -78,8 +137,8 @@ export function createSessionAppwriteClient(sessionSecret?: string) {
 
   const client = new Client().setEndpoint(cfg.endpoint).setProject(cfg.projectId).setSession(secret);
 
-  // Note: `setSession` expects the user session ID.
-  // We store the Appwrite session `$id` in our cookie.
+  // `setSession` expects the **Appwrite session cookie value** (a_session_* value).
+  // We store that value in our custom HttpOnly cookie.
 
   return {
     client,
