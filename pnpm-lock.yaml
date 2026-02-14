@@ -67,8 +67,8 @@ importers:
         specifier: ^16.4.7
         version: 16.6.1
       node-appwrite:
-        specifier: ^22.0.0
-        version: 22.0.0
+        specifier: 17.1.0
+        version: 17.1.0
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -1558,8 +1558,8 @@ packages:
       sass:
         optional: true
 
-  node-appwrite@22.0.0:
-    resolution: {integrity: sha512-Oelqm44JUhHN1A7FfJMFXspVc1lUE+gDrGda98BNjkNkBqp3H/jM79nbjYqVx/gbW3zgSiUPPvPfAANY3Wlzeg==}
+  node-appwrite@17.1.0:
+    resolution: {integrity: sha512-cZEpAbDdJcY3zcHOHfOdbH0Sj7prnGcpAvAb/6/MSQMdgmhReFLDR7yfJ67StyfDY7QOvA+H82tqN1NKg1wj5w==}
 
   node-fetch-native-with-agent@1.7.2:
     resolution: {integrity: sha512-5MaOOCuJEvcckoz7/tjdx1M6OusOY6Xc5f459IaruGStWnKzlI1qpNgaAwmn4LmFYcsSlj+jBMk84wmmRxfk5g==}
@@ -3489,9 +3489,8 @@ snapshots:
       - '@babel/core'
       - babel-plugin-macros
 
-  node-appwrite@22.0.0:
+  node-appwrite@17.1.0:
     dependencies:
-      json-bigint: 1.0.0
       node-fetch-native-with-agent: 1.7.2
 
   node-fetch-native-with-agent@1.7.2: {}
