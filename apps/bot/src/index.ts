@@ -30,6 +30,63 @@ if (!envResult.success) {
 }
 const env = envResult.data;
 
+function sanitizeEnvValue(value: string): string {
+  let v = String(value).trim();
+  if (
+    (v.startsWith("\"") && v.endsWith("\"") && v.length >= 2) ||
+    (v.startsWith("'") && v.endsWith("'") && v.length >= 2)
+  ) {
+    v = v.slice(1, -1).trim();
+  }
+  return v;
+}
+
+function normalizeAppwriteEndpoint(endpoint: string): string {
+  // Normalize to ".../v1" regardless of what Coolify/cloudflared service URLs look like.
+  // Common bad values we want to fix:
+  // - https://appwrite.example (missing /v1)
+  // - https://appwrite.example/v1/ (trailing slash)
+  // - https://appwrite.example/v1/realtime (path too deep)
+  const raw = sanitizeEnvValue(endpoint);
+  const u = new URL(raw);
+  const host = u.hostname.toLowerCase();
+  const isLocal =
+    host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
+
+  // In production behind Cloudflare tunnels, users often paste `http://...` service URLs.
+  // The public Appwrite endpoint should be HTTPS, so default to upgrading unless local.
+  const proto = u.protocol === "http:" && !isLocal ? "https:" : u.protocol;
+
+  return `${proto}//${u.host}/v1`;
+}
+
+async function appwritePing(endpoint: string): Promise<void> {
+  const url = `${endpoint}/ping`;
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        // Helps Appwrite route the request even if the endpoint has an upstream proxy.
+        "X-Appwrite-Project": env.APPWRITE_PROJECT_ID
+      }
+    });
+    const text = await res.text().catch(() => "");
+    // eslint-disable-next-line no-console
+    console.log("Appwrite ping:", {
+      ok: res.ok,
+      status: res.status,
+      url,
+      snippet: text.slice(0, 120)
+    });
+  } catch (err: any) {
+    // eslint-disable-next-line no-console
+    console.error("Appwrite ping failed:", {
+      url,
+      message: err?.message ?? String(err)
+    });
+  }
+}
+
 /**
  * MVP placeholder bot:
  * - Connects to Discord
@@ -47,8 +104,9 @@ const discord = new Client({
   partials: [Partials.Channel]
 });
 
+const appwriteEndpoint = normalizeAppwriteEndpoint(env.APPWRITE_ENDPOINT);
 const appwrite = new sdk.Client()
-  .setEndpoint(env.APPWRITE_ENDPOINT)
+  .setEndpoint(appwriteEndpoint)
   .setProject(env.APPWRITE_PROJECT_ID)
   .setKey(env.APPWRITE_API_KEY);
 
@@ -122,6 +180,14 @@ async function discordApi(
 }
 
 async function main() {
+  // eslint-disable-next-line no-console
+  console.log("Appwrite config:", {
+    endpoint: appwriteEndpoint,
+    projectId: env.APPWRITE_PROJECT_ID,
+    databaseId: env.APPWRITE_DATABASE_ID
+  });
+  await appwritePing(appwriteEndpoint);
+
   discord.once("ready", () => {
     // eslint-disable-next-line no-console
     console.log(`Bot ready as ${discord.user?.tag}`);
