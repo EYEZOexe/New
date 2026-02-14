@@ -25,12 +25,15 @@ test("createAppwriteAdminRestClient sends required auth headers", async () => {
   assert.equal((calls[0]!.init.headers as any)["X-Appwrite-Key"], "key");
 });
 
-test("upsertDocumentPut uses PUT and JSON body", async () => {
+test("upsertDocumentPut uses PATCH for existing docs and sends JSON body", async () => {
   const calls: Array<{ url: string; init: RequestInit }> = [];
 
   const fetchImpl: typeof fetch = (async (url: any, init: any) => {
     calls.push({ url: String(url), init });
-    return { ok: true, status: 201, text: async () => JSON.stringify({ $id: "doc" }) } as any;
+    if (String(init?.method).toUpperCase() === "PATCH") {
+      return { ok: true, status: 200, text: async () => JSON.stringify({ $id: "doc" }) } as any;
+    }
+    return { ok: false, status: 500, text: async () => JSON.stringify({ message: "unexpected" }) } as any;
   }) as any;
 
   const aw = createAppwriteAdminRestClient({
@@ -48,7 +51,7 @@ test("upsertDocumentPut uses PUT and JSON body", async () => {
   });
 
   assert.equal(calls.length, 1);
-  assert.equal(calls[0]!.init.method, "PUT");
+  assert.equal(calls[0]!.init.method, "PATCH");
   assert.ok(String(calls[0]!.init.body).includes("\"discordUserId\""));
 });
 

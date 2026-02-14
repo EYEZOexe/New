@@ -98,12 +98,31 @@ export function createAppwriteAdminRestClient(params: AdminClientParams) {
       documentId: string;
       data: Record<string, unknown>;
     }) {
-      return await requestJson<any>(
-        `/databases/${encodeURIComponent(opts.databaseId)}/collections/${encodeURIComponent(
-          opts.collectionId
-        )}/documents/${encodeURIComponent(opts.documentId)}`,
-        { method: "PUT", jsonBody: { data: opts.data } }
-      );
+      // Appwrite 1.7.x can crash when using PUT without explicit permissions (server bug),
+      // so do an explicit "upsert": PATCH if exists, else POST create with empty permissions.
+      try {
+        return await requestJson<any>(
+          `/databases/${encodeURIComponent(opts.databaseId)}/collections/${encodeURIComponent(
+            opts.collectionId
+          )}/documents/${encodeURIComponent(opts.documentId)}`,
+          { method: "PATCH", jsonBody: { data: opts.data } }
+        );
+      } catch (err: any) {
+        if (err?.code !== 404) throw err;
+        return await requestJson<any>(
+          `/databases/${encodeURIComponent(opts.databaseId)}/collections/${encodeURIComponent(
+            opts.collectionId
+          )}/documents`,
+          {
+            method: "POST",
+            jsonBody: {
+              documentId: opts.documentId,
+              data: opts.data,
+              permissions: []
+            }
+          }
+        );
+      }
     }
   };
 }
