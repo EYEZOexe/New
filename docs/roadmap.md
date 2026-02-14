@@ -99,6 +99,7 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
 | Date | Decision | Link |
 |---|---|---|
 | 2026-02-14 | Pivot backend to Convex and hard-reset docs/roadmap | `docs/plans/2026-02-14-convex-adoption-design.md` |
+| 2026-02-14 | Hard cutover auth to Convex Auth (email+password), start fresh (no Appwrite migration) | `docs/plans/2026-02-14-convex-auth-hard-cutover-design.md` |
 
 ## Links
 
