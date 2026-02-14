@@ -4,6 +4,16 @@ import { cookies, headers } from "next/headers";
 import { createSessionAppwriteClient, getAppwritePublicConfig } from "../../../../lib/appwrite-server";
 import { getExternalOriginFromHeaders } from "../../../../lib/external-request";
 
+function listCookieNames(cookieHeader: string | null): string[] {
+  if (!cookieHeader) return [];
+  return cookieHeader
+    .split(";")
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => p.split("=")[0]!.trim())
+    .filter(Boolean);
+}
+
 // Debug endpoint to help diagnose cookie issues in environments.
 // Do not expose in production long-term.
 export async function GET() {
@@ -48,7 +58,8 @@ export async function GET() {
         origin: ext.origin,
         warnings: ext.warnings
       },
-      cookieHeader: h.get("cookie")
+      cookieHeaderPresent: Boolean(h.get("cookie")),
+      cookieNames: listCookieNames(h.get("cookie"))
     },
     cookie: {
       name: cfg.sessionCookieName,
