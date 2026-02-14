@@ -41,8 +41,9 @@ Goal: payments reliably grant/revoke access even if the website is down.
 - [x] End-to-end webhook test (revoke paid team) (2026-02-14)
   Exit criteria: dispute/refund (or simulated) removes user from `paid` team.
   Link: `docs/plans/2026-02-14-sellapp-webhook-pure-rest-design.md`, `docs/plans/2026-02-14-sellapp-webhook-pure-rest-plan.md`
-- [ ] Observability + failure capture for webhook processing
+- [x] Observability + failure capture for webhook processing (2026-02-14)
   Exit criteria: failures are recorded (e.g., `webhook_failures`) with enough context to retry.
+  Link: `docs/plans/2026-02-14-webhook-failures-design.md`, `docs/plans/2026-02-14-webhook-failures-plan.md`
 
 ### Phase 2: Discord Linking (customer identity + roles)
 
