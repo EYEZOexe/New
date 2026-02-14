@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { getAuthContext } from "../../lib/auth";
 import { DashboardClient } from "./DashboardClient";
+import { DiscordLinkClient } from "./DiscordLinkClient";
 
 // This page depends on request cookies + server-side Appwrite calls, so it must not be
 // statically prerendered at build time.
@@ -46,6 +47,8 @@ export default async function DashboardHome() {
       <p>
         Next steps: signal feed, alerts, Discord linking.
       </p>
+
+      <DiscordLinkClient />
 
       <DashboardClient />
     </main>
