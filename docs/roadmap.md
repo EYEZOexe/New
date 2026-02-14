@@ -99,6 +99,8 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
   Exit criteria: logged-in user can hit `/api/appwrite/ping` from dashboard and see status/latency.
 - [x] Bot: normalize Appwrite endpoint + log `/v1/ping` on startup (2026-02-14)
   Exit criteria: bot logs show resolved endpoint and ping status/snippet to debug 404/HTTP issues quickly.
+- [x] Add script to upsert a test subscription doc by user email (2026-02-14)
+  Exit criteria: we can create an `active` subscription with a given `plan` for testing role sync without waiting on Sell.app.
 
 ## Decision Log
 
