@@ -35,10 +35,12 @@ Goal: payments reliably grant/revoke access even if the website is down.
 
 - [ ] Ensure webhook has a stable public HTTPS URL (Function domain or proxy)
   Exit criteria: Sell.app can deliver to a URL that returns 2xx and runs the handler.
-- [ ] End-to-end webhook test (grant paid team)
+- [x] End-to-end webhook test (grant paid team) (2026-02-14)
   Exit criteria: a purchase results in user added to `paid` team and subscription record upserted.
-- [ ] End-to-end webhook test (revoke paid team)
+  Link: `docs/plans/2026-02-14-sellapp-webhook-pure-rest-design.md`, `docs/plans/2026-02-14-sellapp-webhook-pure-rest-plan.md`
+- [x] End-to-end webhook test (revoke paid team) (2026-02-14)
   Exit criteria: dispute/refund (or simulated) removes user from `paid` team.
+  Link: `docs/plans/2026-02-14-sellapp-webhook-pure-rest-design.md`, `docs/plans/2026-02-14-sellapp-webhook-pure-rest-plan.md`
 - [ ] Observability + failure capture for webhook processing
   Exit criteria: failures are recorded (e.g., `webhook_failures`) with enough context to retry.
 
@@ -103,6 +105,7 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
 - Current state/progress: `memory-bank/activeContext.md`, `memory-bank/progress.md`
 - Appwrite ops: `docs/appwrite-mcp-ops.md`
 - Appwrite ops design/plan: `docs/plans/2026-02-14-appwrite-mcp-ops-design.md`, `docs/plans/2026-02-14-appwrite-mcp-ops-plan.md`
+- Sell.app webhook REST design/plan: `docs/plans/2026-02-14-sellapp-webhook-pure-rest-design.md`, `docs/plans/2026-02-14-sellapp-webhook-pure-rest-plan.md`
 
 ## How To Update This Roadmap
 
