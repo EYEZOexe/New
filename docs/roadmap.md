@@ -95,6 +95,8 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
 
 - [ ] Guard or remove temporary debug endpoints (e.g. `/api/auth/debug`)
   Exit criteria: debug endpoints are not reachable in production builds.
+- [x] Add Appwrite connectivity ping button on dashboard (2026-02-14)
+  Exit criteria: logged-in user can hit `/api/appwrite/ping` from dashboard and see status/latency.
 
 ## Decision Log
 
