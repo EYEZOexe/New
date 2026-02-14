@@ -27,8 +27,13 @@ export default async function DashboardHome() {
           to the <code>paid</code> team.
         </p>
         <p>
+          You can still link Discord now. Roles will be granted once your subscription is active.
+        </p>
+        <p>
           <Link href="/">Back to home</Link>
         </p>
+
+        <DiscordLinkClient />
 
         <DashboardClient />
       </main>
