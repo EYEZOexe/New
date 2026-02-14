@@ -30,6 +30,12 @@ type SessionClientParams = {
 export function createAppwriteSessionRestClient(params: SessionClientParams) {
   const fetchImpl = params.fetchImpl ?? fetch;
 
+  function safeStringSnippet(text: string, maxLen = 300) {
+    const t = String(text ?? "").replace(/\s+/g, " ").trim();
+    if (!t) return null;
+    return t.length <= maxLen ? t : `${t.slice(0, maxLen)}...`;
+  }
+
   async function requestJson<T>(
     path: string,
     init: RequestInit & { jsonBody?: unknown } = {}
@@ -104,6 +110,7 @@ export function createAppwriteSessionRestClient(params: SessionClientParams) {
     // Some Appwrite versions may respond 200 with JSON instead of a redirect.
     const text = await res.text().catch(() => "");
     const data = text ? safeJsonParse(text) : null;
+    const textSnippet = data ? null : safeStringSnippet(text);
 
     // If this wasn't a redirect response, and Appwrite says it's an error, surface that error.
     const isRedirectStatus = res.status >= 300 && res.status < 400;
@@ -113,6 +120,7 @@ export function createAppwriteSessionRestClient(params: SessionClientParams) {
       err.code = res.status;
       err.type = (data as any)?.type;
       err.response = data;
+      if (textSnippet) err.responseTextSnippet = textSnippet;
       throw err;
     }
 
@@ -122,6 +130,7 @@ export function createAppwriteSessionRestClient(params: SessionClientParams) {
     const err: any = new Error("Appwrite did not return a redirect Location header for OAuth start");
     err.code = res.status;
     err.response = data;
+    if (textSnippet) err.responseTextSnippet = textSnippet;
     throw err;
   }
 
@@ -133,8 +142,12 @@ export function createAppwriteSessionRestClient(params: SessionClientParams) {
       // Newer versions also support token endpoints. We try session first, then token as fallback.
       try {
         return await requestRedirectLocation(`/account/sessions/oauth2/discord?${qs.toString()}`);
-      } catch {
-        return await requestRedirectLocation(`/account/tokens/oauth2/discord?${qs.toString()}`);
+      } catch (err: any) {
+        // Only fall back if sessions endpoint truly doesn't exist on this server.
+        if (err?.code === 404) {
+          return await requestRedirectLocation(`/account/tokens/oauth2/discord?${qs.toString()}`);
+        }
+        throw err;
       }
     },
 

@@ -7,13 +7,14 @@ import { createAppwriteAdminRestClient } from "../../../../../lib/appwrite-admin
 import { createAppwriteSessionRestClient, createTokenSessionCookieValue } from "../../../../../lib/appwrite-session-rest";
 import { pickDiscordIdentity, validateDiscordOAuthComplete } from "../../../../../lib/discord-oauth";
 import { buildRoleSyncJobDoc } from "../../../../../lib/role-sync-jobs";
+import { getExternalOriginFromHeaders } from "../../../../../lib/external-request";
 
 const STATE_COOKIE = "discord_oauth_state";
 
-function redirectToDashboard(params: Record<string, string> = {}) {
+function redirectToDashboard(origin: string, params: Record<string, string> = {}) {
   const qs = new URLSearchParams(params);
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
-  return NextResponse.redirect(`/dashboard${suffix}`);
+  return NextResponse.redirect(new URL(`/dashboard${suffix}`, origin));
 }
 
 export async function GET(req: Request) {
@@ -21,6 +22,9 @@ export async function GET(req: Request) {
   const state = url.searchParams.get("state");
   const tokenUserId = url.searchParams.get("userId");
   const secret = url.searchParams.get("secret");
+
+  const h = await headers();
+  const ext = getExternalOriginFromHeaders(h as any, process.env.NODE_ENV);
 
   const cookieStore = await cookies();
   const expectedState = cookieStore.get(STATE_COOKIE)?.value ?? null;
@@ -30,13 +34,13 @@ export async function GET(req: Request) {
 
   const auth = await getAuthContext();
   if (!auth) {
-    const res = redirectToDashboard({ discord: "unauthorized" });
+    const res = redirectToDashboard(ext.origin, { discord: "unauthorized" });
     if (clearStateCookie) res.cookies.delete(STATE_COOKIE);
     return res;
   }
 
   if (!tokenUserId || !secret) {
-    const res = redirectToDashboard({ discord: "missing_token" });
+    const res = redirectToDashboard(ext.origin, { discord: "missing_token" });
     if (clearStateCookie) res.cookies.delete(STATE_COOKIE);
     return res;
   }
@@ -48,7 +52,7 @@ export async function GET(req: Request) {
     tokenUserId
   });
   if (!validation.ok) {
-    const res = redirectToDashboard({ discord: validation.error });
+    const res = redirectToDashboard(ext.origin, { discord: validation.error });
     if (clearStateCookie) res.cookies.delete(STATE_COOKIE);
     return res;
   }
@@ -66,13 +70,12 @@ export async function GET(req: Request) {
       secret
     });
   } catch {
-    const res = redirectToDashboard({ discord: "token_exchange_failed" });
+    const res = redirectToDashboard(ext.origin, { discord: "token_exchange_failed" });
     if (clearStateCookie) res.cookies.delete(STATE_COOKIE);
     return res;
   }
 
   // Compute cookie domain the same way login/signup do.
-  const h = await headers();
   const hostHeader = h.get("host") ?? "";
   const host = hostHeader.startsWith("[") ? hostHeader : hostHeader.split(":")[0];
   const cookieDomain =
@@ -96,7 +99,7 @@ export async function GET(req: Request) {
   }
 
   if (!discordUserId) {
-    const res = redirectToDashboard({ discord: "identity_missing" });
+    const res = redirectToDashboard(ext.origin, { discord: "identity_missing" });
     if (clearStateCookie) res.cookies.delete(STATE_COOKIE);
     return res;
   }
@@ -175,7 +178,7 @@ export async function GET(req: Request) {
     // ignore
   }
 
-  const res = redirectToDashboard({ discord: "linked" });
+  const res = redirectToDashboard(ext.origin, { discord: "linked" });
   res.cookies.set(publicCfg.sessionCookieName, newSessionToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

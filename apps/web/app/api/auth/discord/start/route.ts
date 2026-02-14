@@ -10,10 +10,10 @@ import { getExternalOriginFromHeaders } from "../../../../../lib/external-reques
 const STATE_COOKIE = "discord_oauth_state";
 const STATE_COOKIE_MAX_AGE_S = 10 * 60;
 
-function redirectToDashboard(params: Record<string, string> = {}) {
+function redirectToDashboard(origin: string, params: Record<string, string> = {}) {
   const qs = new URLSearchParams(params);
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
-  return NextResponse.redirect(`/dashboard${suffix}`);
+  return NextResponse.redirect(new URL(`/dashboard${suffix}`, origin));
 }
 
 async function handler(req: Request) {
@@ -76,7 +76,7 @@ async function handler(req: Request) {
       );
     }
 
-    const res = redirectToDashboard({ discord: "link_failed" });
+    const res = redirectToDashboard(ext.origin, { discord: "link_failed" });
     res.headers.set("cache-control", "no-store");
     return res;
   }
