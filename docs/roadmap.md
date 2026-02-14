@@ -14,7 +14,8 @@ Backend is Convex.
 ## Current Status
 
 **Now**
-- Establish Convex data model and auth strategy for `apps/web`.
+- Stand up self-hosted Convex deployment and configure Convex Auth env (CONVEX_SITE_URL, JWT keys/JWKS, NEXT_PUBLIC_CONVEX_URL) so signup/login works end-to-end.
+- Establish Convex data model and auth strategy for `apps/web` and `apps/admin`.
 - Define migration steps and stop adding new backend features to legacy code paths.
 - Define and enforce realtime signal delivery targets (p95 < 100ms) across web, admin, and bot.
 
@@ -25,6 +26,7 @@ Backend is Convex.
 **Blockers / Risks**
 - Data migration. We need a clear plan to migrate users/subscriptions/signals into Convex without downtime.
 - Auth and identity mapping. We need one stable user identifier across web, bot, and webhook processing.
+- Convex Auth configuration. Self-hosted Convex must be configured with signing keys/JWKS and correct site URL, otherwise auth flows will fail at runtime.
 - Webhook idempotency and retries. We need to guarantee "at least once" delivery does not create duplicate state.
 - Performance. Sub-100ms p95 delivery requires careful schema/indexing and realtime subscriptions; polling is not acceptable on the critical path.
 
@@ -34,6 +36,8 @@ Backend is Convex.
 
 - [ ] Convex project initialized for this repo
   Exit criteria: `apps/web` and backend functions can read/write Convex in dev.
+- [x] Cut over web/admin auth to Convex Auth (2026-02-14)
+  Exit criteria: `apps/web` and `apps/admin` build and use Convex Auth (email + password); legacy Appwrite auth is removed.
 - [ ] Schema defined for core entities (users, subscriptions, signals, discord linkage)
   Exit criteria: schema exists with indexes needed for critical queries.
 
