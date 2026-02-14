@@ -38,6 +38,7 @@ const DEFAULTS = {
     profiles: "profiles",
     subscriptions: "subscriptions",
     webhookEvents: "webhook_events",
+    webhookFailures: "webhook_failures",
     channelMappings: "channel_mappings"
   }
 };
@@ -130,6 +131,10 @@ const subscriptionsCollectionId = optionalEnv(
 const webhookEventsCollectionId = optionalEnv(
   "APPWRITE_WEBHOOK_EVENTS_COLLECTION_ID",
   DEFAULTS.collections.webhookEvents
+);
+const webhookFailuresCollectionId = optionalEnv(
+  "APPWRITE_WEBHOOK_FAILURES_COLLECTION_ID",
+  DEFAULTS.collections.webhookFailures
 );
 const channelMappingsCollectionId = optionalEnv(
   "APPWRITE_CHANNEL_MAPPINGS_COLLECTION_ID",
@@ -310,8 +315,35 @@ async function ensureStringAttribute({ collectionId, key, size, required = false
   );
 }
 
-// NOTE: Appwrite self-hosted versions differ in which attribute formats are available.
-// We intentionally keep to the widely supported `string` attribute.
+async function ensureLongTextAttribute({ collectionId, key, required = false, array = false }) {
+  // POST /databases/{databaseId}/collections/{collectionId}/attributes/longtext
+  return ensure(`attr:longtext:${collectionId}.${key}`, () =>
+    appwriteFetch(
+      "POST",
+      `/databases/${databaseId}/collections/${collectionId}/attributes/longtext`,
+      { key, required, array }
+    )
+  );
+}
+
+async function ensureIntegerAttribute({ collectionId, key, required = false, array = false, min, max, defaultValue }) {
+  // POST /databases/{databaseId}/collections/{collectionId}/attributes/integer
+  return ensure(`attr:integer:${collectionId}.${key}`, () =>
+    appwriteFetch(
+      "POST",
+      `/databases/${databaseId}/collections/${collectionId}/attributes/integer`,
+      {
+        key,
+        required,
+        array,
+        ...(min === undefined ? {} : { min }),
+        ...(max === undefined ? {} : { max }),
+        // Appwrite 1.7.x does not allow defaults on required attributes.
+        ...(required || defaultValue === undefined ? {} : { default: defaultValue })
+      }
+    )
+  );
+}
 
 async function ensureBooleanAttribute({ collectionId, key, required = false, array = false, defaultValue }) {
   return ensure(`attr:boolean:${collectionId}.${key}`, () =>
@@ -455,6 +487,13 @@ async function main() {
   await ensureCollection({
     collectionId: webhookEventsCollectionId,
     name: "Webhook Events",
+    documentSecurity: false,
+    permissions: permsAdminOnly
+  });
+
+  await ensureCollection({
+    collectionId: webhookFailuresCollectionId,
+    name: "Webhook Failures",
     documentSecurity: false,
     permissions: permsAdminOnly
   });
@@ -630,6 +669,78 @@ async function main() {
     required: false
   });
 
+  // Attributes: webhook_failures
+  await ensureStringAttribute({
+    collectionId: webhookFailuresCollectionId,
+    key: "provider",
+    size: 32,
+    required: true
+  });
+  await ensureStringAttribute({
+    collectionId: webhookFailuresCollectionId,
+    key: "event",
+    size: 64,
+    required: true
+  });
+  await ensureStringAttribute({
+    collectionId: webhookFailuresCollectionId,
+    key: "eventId",
+    size: 256,
+    required: true
+  });
+  await ensureStringAttribute({
+    collectionId: webhookFailuresCollectionId,
+    key: "orderId",
+    size: 128,
+    required: false
+  });
+  await ensureStringAttribute({
+    collectionId: webhookFailuresCollectionId,
+    key: "store",
+    size: 128,
+    required: false
+  });
+  await ensureStringAttribute({
+    collectionId: webhookFailuresCollectionId,
+    key: "email",
+    size: 256,
+    required: false
+  });
+  await ensureStringAttribute({
+    collectionId: webhookFailuresCollectionId,
+    key: "payloadHash",
+    size: 128,
+    required: false
+  });
+  await ensureLongTextAttribute({
+    collectionId: webhookFailuresCollectionId,
+    key: "bodyText",
+    required: true
+  });
+  await ensureStringAttribute({
+    collectionId: webhookFailuresCollectionId,
+    key: "errorCode",
+    size: 64,
+    required: true
+  });
+  await ensureStringAttribute({
+    collectionId: webhookFailuresCollectionId,
+    key: "errorMessage",
+    size: 1024,
+    required: false
+  });
+  await ensureIntegerAttribute({
+    collectionId: webhookFailuresCollectionId,
+    key: "errorStatus",
+    required: false
+  });
+  await ensureStringAttribute({
+    collectionId: webhookFailuresCollectionId,
+    key: "errorType",
+    size: 128,
+    required: false
+  });
+
   // Attributes: channel_mappings
   await ensureStringAttribute({
     collectionId: channelMappingsCollectionId,
@@ -688,6 +799,18 @@ async function main() {
     attributes: ["eventId"]
   });
   await ensureIndex({
+    collectionId: webhookFailuresCollectionId,
+    key: "idx_eventId",
+    type: "key",
+    attributes: ["eventId"]
+  });
+  await ensureIndex({
+    collectionId: webhookFailuresCollectionId,
+    key: "idx_errorCode",
+    type: "key",
+    attributes: ["errorCode"]
+  });
+  await ensureIndex({
     collectionId: channelMappingsCollectionId,
     key: "idx_sourceChannelId",
     type: "key",
@@ -702,6 +825,7 @@ async function main() {
   console.log(`APPWRITE_PROFILES_COLLECTION_ID=${profilesCollectionId}`);
   console.log(`APPWRITE_SUBSCRIPTIONS_COLLECTION_ID=${subscriptionsCollectionId}`);
   console.log(`APPWRITE_WEBHOOK_EVENTS_COLLECTION_ID=${webhookEventsCollectionId}`);
+  console.log(`APPWRITE_WEBHOOK_FAILURES_COLLECTION_ID=${webhookFailuresCollectionId}`);
   console.log(`APPWRITE_CHANNEL_MAPPINGS_COLLECTION_ID=${channelMappingsCollectionId}`);
   console.log(`APPWRITE_SIGNAL_ASSETS_BUCKET_ID=${signalAssetsBucketId}`);
   console.log(`APPWRITE_TEAM_ADMINS_ID=${teamAdminsId}`);
