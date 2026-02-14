@@ -33,9 +33,6 @@ importers:
       '@convex-dev/auth':
         specifier: ^0.0.90
         version: 0.0.90(@auth/core@0.37.4)(convex@1.31.7(react@19.2.4))(react@19.2.4)
-      '@g3netic/appwrite':
-        specifier: workspace:*
-        version: link:../../packages/appwrite
       '@g3netic/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -104,9 +101,6 @@ importers:
       '@convex-dev/auth':
         specifier: ^0.0.90
         version: 0.0.90(@auth/core@0.37.4)(convex@1.31.7(react@19.2.4))(react@19.2.4)
-      '@g3netic/appwrite':
-        specifier: workspace:*
-        version: link:../../packages/appwrite
       '@g3netic/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -141,16 +135,6 @@ importers:
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
-      typescript:
-        specifier: ^5.7.3
-        version: 5.9.3
-
-  packages/appwrite:
-    dependencies:
-      appwrite:
-        specifier: ^22.1.0
-        version: 22.1.0
-    devDependencies:
       typescript:
         specifier: ^5.7.3
         version: 5.9.3
@@ -1065,9 +1049,6 @@ packages:
     resolution: {integrity: sha512-zbB9rCJAT1rbjiVDb2hqKFHNYLxgtk8NURxZ3IZwD3F6NtxbXZQCnnSi1Lkx+IDohdPlFp222wVALIheZJQSEg==}
     engines: {node: '>=8'}
 
-  appwrite@22.1.0:
-    resolution: {integrity: sha512-DP57u6VosDcqTwFniM7EO5csXK9fwSa0NIORJZO37JnwJqmiF+JPZaUMEkskmQ7XXI7UZiru/DH1oZwdC7uo9Q==}
-
   argparse@2.0.1:
     resolution: {integrity: sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q==}
 
@@ -1128,9 +1109,6 @@ packages:
 
   balanced-match@1.0.2:
     resolution: {integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==}
-
-  bignumber.js@9.0.0:
-    resolution: {integrity: sha512-t/OYhhJ2SD+YGBQcjY8GzzDHEk9f3nerxjtfa6tlMXfe7frs/WozhvCNoGvpM0P3bNf3Gq5ZRMlGr5f3r4/N8A==}
 
   brace-expansion@1.1.12:
     resolution: {integrity: sha512-9T9UjW3r0UW5c1Q7GTwllptXwhvYmEzFhzMfZ9H7FQWt+uZePjZPjBP/W1ZEyZ1twGWom5/56TF4lPcqjnDHcg==}
@@ -1715,9 +1693,6 @@ packages:
   js-yaml@4.1.1:
     resolution: {integrity: sha512-qQKT4zQxXl8lLwBtHMWwaTcGfFOZviOJet3Oy/xmGk2gZH677CJM9EvtfdSkgWcATZhj/55JZ0rmy3myCT5lsA==}
     hasBin: true
-
-  json-bigint@1.0.0:
-    resolution: {integrity: sha512-SiPv/8VpZuWbvLSMtTDU8hEfrZWg/mH/nV/b4o0CYbSxu1UIQPLdwKOCIyLQX+VIPO5vrLX3i8qtqFyhdPSUSQ==}
 
   json-buffer@3.0.1:
     resolution: {integrity: sha512-4bV5BfR2mqfQTJm+V5tPPdf+ZpuhiIvTuAB5g8kcrXOZpTT/QwwVRWBywX1ozr6lEuPdbHxwaJlm9G6mI2sfSQ==}
@@ -3007,11 +2982,6 @@ snapshots:
     dependencies:
       color-convert: 2.0.1
 
-  appwrite@22.1.0:
-    dependencies:
-      bignumber.js: 9.0.0
-      json-bigint: 1.0.0
-
   argparse@2.0.1: {}
 
   aria-query@5.3.2: {}
@@ -3096,8 +3066,6 @@ snapshots:
   axobject-query@4.1.0: {}
 
   balanced-match@1.0.2: {}
-
-  bignumber.js@9.0.0: {}
 
   brace-expansion@1.1.12:
     dependencies:
@@ -3884,10 +3852,6 @@ snapshots:
   js-yaml@4.1.1:
     dependencies:
       argparse: 2.0.1
-
-  json-bigint@1.0.0:
-    dependencies:
-      bignumber.js: 9.0.0
 
   json-buffer@3.0.1: {}
 
