@@ -1,60 +1,59 @@
-# Reliability ideas (beyond “webhooks as functions”)
+# Reliability
 
-This document captures operational ideas that keep the SaaS working when one component is down.
+Operational ideas to keep the SaaS working when one component is down.
 
-## 1) Webhooks as Appwrite Functions (done)
+## Webhook Ingestion + Idempotency
 
-Payments should be processed independently of the web app uptime.
+Goals:
 
-- Implementation: `functions/sellapp-webhook`
-- Idempotency: `webhook_events.eventId` unique index
-- Outcome: update `subscriptions` + manage `paid` team
+- A webhook can be delivered more than once without duplicating state.
+- Failures are captured with enough context to safely retry.
 
-## 2) Scheduled reconciliation (recommended next)
+Approach:
 
-Create a **scheduled Appwrite Function** that runs every N hours and:
+- Write an immutable webhook event record keyed by provider event ID.
+- Derive subscription state from events (or upsert the subscription doc with deterministic logic).
+- Keep all webhook handlers "at least once" safe.
 
-- Fetches orders/subscriptions from Sell.app API (if available)
-- Recomputes desired state for each user:
-  - subscription status
-  - paid team membership
-- Fixes drift if a webhook was missed
+## Failure Capture (Dead-Letter Queue)
 
-Why it helps:
-- Handles provider downtime, temporary network failures, misconfigured webhooks
-- Gives you a “self-healing” billing state
+When webhook processing fails (missing user, validation error, outage), write a failure record:
 
-## 3) Dead-letter queue + alerting
+- event key
+- error code/message
+- payload hash
+- retry count
+- createdAt / lastAttemptAt
 
-When a webhook fails processing (e.g. missing user email, user not found, Appwrite outage), write a record to:
+This is the operational inbox to replay failures with a controlled tool.
 
-- `webhook_failures` collection (eventId, error, payloadHash, createdAt)
+## Scheduled Reconciliation
 
-Then:
-- notify admins (Discord channel via bot, email, etc.)
+Run a scheduled job that:
 
-Why it helps:
-- prevents silent revenue leakage
-- gives you a clear operational “inbox” to action
+- fetches current billing state from the payment provider (if available)
+- recomputes desired subscription/access state
+- fixes drift if a webhook was missed
 
-## 4) Outbox pattern for Discord actions
+## Outbox Pattern for Discord Actions
 
-Instead of having the webhook directly call Discord APIs:
+Do not perform Discord API side effects inline with webhook processing.
 
-- write a `role_sync_jobs` document (userId, action, status)
-- bot processes jobs and marks complete
+Instead:
 
-Why it helps:
-- isolates Discord rate limits and transient failures
-- retries become simple
+- write a "role sync job" record
+- bot processes jobs and marks them done or failed
 
-## 5) Read model caching for dashboard
+Benefits:
 
-If the dashboard relies on multiple Appwrite queries:
+- isolates rate limits and transient Discord failures
+- retries become simple and auditable
 
-- maintain a denormalized `dashboard_feed` collection
-- update via bot/collector when new signals arrive
+## Observability Basics
 
-Why it helps:
-- reduces query complexity
-- improves perceived speed and stability
+Minimum:
+
+- structured logs for each webhook and job execution
+- metrics for success/failure rate, latency, retry counts
+- alerts on sustained failure rates or growing DLQ size
+
