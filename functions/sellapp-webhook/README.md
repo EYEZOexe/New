@@ -8,6 +8,7 @@ This Appwrite Function processes Sell.app webhooks **even if the website is down
 - Writes an idempotency record into `webhook_events`.
 - Upserts a `subscriptions` document (by `userId`).
 - Adds/removes the user from the `paid` Appwrite team.
+- Uses Appwrite **REST** APIs (no `node-appwrite` SDK inside the Function).
 
 ## Required env vars (Function variables)
 
@@ -19,6 +20,7 @@ This Appwrite Function processes Sell.app webhooks **even if the website is down
 - `APPWRITE_SUBSCRIPTIONS_COLLECTION_ID=subscriptions`
 - `APPWRITE_WEBHOOK_EVENTS_COLLECTION_ID=webhook_events`
 - `APPWRITE_TEAM_PAID_ID=paid` (optional but recommended)
+- `APP_BASE_URL=https://yourdomain.com` (optional; used as the team invite redirect URL when adding membership)
 
 ## Deploy (high level)
 
@@ -30,7 +32,16 @@ This Appwrite Function processes Sell.app webhooks **even if the website is down
 
 ## Test / replay locally
 
-You can validate the signature logic with a simple curl.
+You can validate the signature logic with a simple curl, and you can run unit tests locally.
+
+### Unit tests
+
+```bash
+cd functions/sellapp-webhook
+npm test
+```
+
+### Curl replay
 
 1) Create a JSON payload:
 
