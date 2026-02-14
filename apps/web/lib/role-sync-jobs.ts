@@ -19,15 +19,17 @@ export function buildRoleSyncJobDoc(opts: {
         })
       : [];
 
-  return {
+  const doc: Record<string, unknown> = {
     userId: opts.userId,
-    discordUserId: opts.discordUserId,
     guildId: opts.guildId,
     desiredRoleIdsJson: JSON.stringify(desiredRoleIds),
     status: "pending",
-    attempts: 0,
-    lastError: null,
-    lastAttemptAt: null
+    attempts: 0
   };
+
+  // Avoid writing explicit nulls; Appwrite versions differ on nullable behavior.
+  if (opts.discordUserId) doc.discordUserId = opts.discordUserId;
+
+  return doc;
 }
 

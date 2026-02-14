@@ -76,13 +76,27 @@ export function createAppwriteSessionRestClient(params: SessionClientParams) {
 
     const location = (res.headers as any)?.get?.("location") ?? (res.headers as any)?.get?.("Location");
     if (typeof location === "string" && location.length) return location;
-    throw new Error("Appwrite did not return a redirect Location header for OAuth token start");
+
+    // Some Appwrite versions may respond 200 with JSON instead of a redirect.
+    const text = await res.text().catch(() => "");
+    const data = text ? safeJsonParse(text) : null;
+    const url = (data as any)?.url ?? (data as any)?.uri ?? (data as any)?.location;
+    if (typeof url === "string" && url.length) return url;
+
+    throw new Error("Appwrite did not return a redirect Location header for OAuth start");
   }
 
   return {
     async startDiscordOAuthToken(opts: { success: string; failure: string }) {
       const qs = new URLSearchParams({ success: opts.success, failure: opts.failure });
-      return await requestRedirectLocation(`/account/tokens/oauth2/discord?${qs.toString()}`);
+
+      // Appwrite 1.7.x uses the session OAuth endpoint (redirect-based).
+      // Newer versions also support token endpoints. We try session first, then token as fallback.
+      try {
+        return await requestRedirectLocation(`/account/sessions/oauth2/discord?${qs.toString()}`);
+      } catch {
+        return await requestRedirectLocation(`/account/tokens/oauth2/discord?${qs.toString()}`);
+      }
     },
 
     async listIdentities() {

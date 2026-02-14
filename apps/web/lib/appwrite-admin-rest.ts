@@ -64,6 +64,15 @@ export function createAppwriteAdminRestClient(params: AdminClientParams) {
       );
     },
 
+    async deleteDocument(opts: { databaseId: string; collectionId: string; documentId: string }) {
+      await requestJson<any>(
+        `/databases/${encodeURIComponent(opts.databaseId)}/collections/${encodeURIComponent(
+          opts.collectionId
+        )}/documents/${encodeURIComponent(opts.documentId)}`,
+        { method: "DELETE" }
+      );
+    },
+
     async listDocuments(opts: {
       databaseId: string;
       collectionId: string;

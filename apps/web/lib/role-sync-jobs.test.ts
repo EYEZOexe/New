@@ -31,5 +31,6 @@ test("buildRoleSyncJobDoc yields empty desiredRoleIdsJson when discordUserId mis
   });
 
   assert.equal(doc.desiredRoleIdsJson, "[]");
+  assert.equal(Object.prototype.hasOwnProperty.call(doc, "discordUserId"), false);
 });
 

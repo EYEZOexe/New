@@ -37,6 +37,9 @@ test("startDiscordOAuthToken uses session cookies and returns redirect location"
   const cookieHeader = (calls[0]!.init.headers as any)?.Cookie;
   assert.ok(String(cookieHeader).includes("a_session_proj=SESSION"));
   assert.ok(String(cookieHeader).includes("a_session_proj_legacy=SESSION"));
+
+  // Should hit the session oauth endpoint first (Appwrite 1.7.x compatible).
+  assert.ok(calls[0]!.url.includes("/account/sessions/oauth2/discord"));
 });
 
 test("createTokenSessionCookieValue extracts a_session cookie from Set-Cookie headers", async () => {

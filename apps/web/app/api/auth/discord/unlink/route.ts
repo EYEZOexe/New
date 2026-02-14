@@ -5,7 +5,6 @@ import { getAuthContext } from "../../../../../lib/auth";
 import { getAppwritePublicConfig, getAppwriteServerConfig } from "../../../../../lib/appwrite-server";
 import { createAppwriteAdminRestClient } from "../../../../../lib/appwrite-admin-rest";
 import { createAppwriteSessionRestClient } from "../../../../../lib/appwrite-session-rest";
-import { buildRoleSyncJobDoc } from "../../../../../lib/role-sync-jobs";
 
 export async function POST() {
   const auth = await getAuthContext();
@@ -24,10 +23,15 @@ export async function POST() {
     sessionToken
   });
 
+  let discordUserIdForRemoval: string | null = null;
   try {
     const identities = await session.listIdentities();
     const discord = identities.find((i: any) => i?.provider === "discord");
     if (discord?.$id) {
+      // Capture provider UID so we can remove roles even after unlinking identity.
+      if (typeof discord?.providerUid === "string" && discord.providerUid.length) {
+        discordUserIdForRemoval = discord.providerUid;
+      }
       await session.deleteIdentity(String(discord.$id));
     }
   } catch {
@@ -43,58 +47,31 @@ export async function POST() {
     apiKey: serverCfg.apiKey
   });
 
+  // Clear profile linkage. Avoid writing explicit nulls (Appwrite versions differ on nullable handling).
+  try {
+    await adminDb.deleteDocument({ databaseId, collectionId: profilesCollectionId, documentId: auth.userId });
+  } catch {
+    // ignore (404 etc.)
+  }
   await adminDb.upsertDocumentPut({
     databaseId,
     collectionId: profilesCollectionId,
     documentId: auth.userId,
-    data: {
-      userId: auth.userId,
-      discordUserId: null,
-      discordLinkedAt: null
-    }
+    data: { userId: auth.userId }
   });
 
   // Enqueue role removal job (best-effort).
   try {
-    const subscriptionsCollectionId = process.env.APPWRITE_SUBSCRIPTIONS_COLLECTION_ID ?? "subscriptions";
-    const roleMappingsCollectionId =
-      process.env.APPWRITE_DISCORD_ROLE_MAPPINGS_COLLECTION_ID ?? "discord_role_mappings";
     const roleSyncJobsCollectionId = process.env.APPWRITE_ROLE_SYNC_JOBS_COLLECTION_ID ?? "role_sync_jobs";
     const customerGuildId = process.env.CUSTOMER_GUILD_ID ?? "";
-
-    let subscriptionStatus: string | null = null;
-    let plan: string | null = null;
-    try {
-      const sub = await adminDb.getDocument({
-        databaseId,
-        collectionId: subscriptionsCollectionId,
-        documentId: auth.userId
-      });
-      subscriptionStatus = typeof sub?.status === "string" ? sub.status : null;
-      plan = typeof sub?.plan === "string" ? sub.plan : null;
-    } catch {
-      subscriptionStatus = null;
-      plan = null;
-    }
-
-    const mappingsRes = await adminDb.listDocuments({
-      databaseId,
-      collectionId: roleMappingsCollectionId,
-      limit: 100
-    });
-    const mappingDocs = Array.isArray(mappingsRes?.documents) ? mappingsRes.documents : [];
-    const filteredMappings = customerGuildId
-      ? mappingDocs.filter((d: any) => d?.guildId === customerGuildId)
-      : mappingDocs;
-
-    const jobDoc = buildRoleSyncJobDoc({
+    const jobDoc: Record<string, unknown> = {
       userId: auth.userId,
-      discordUserId: null,
       guildId: customerGuildId,
-      subscriptionStatus,
-      plan,
-      mappingDocs: filteredMappings
-    });
+      desiredRoleIdsJson: "[]",
+      status: "pending",
+      attempts: 0
+    };
+    if (discordUserIdForRemoval) jobDoc.discordUserId = discordUserIdForRemoval;
 
     await adminDb.upsertDocumentPut({
       databaseId,

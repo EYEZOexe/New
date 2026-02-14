@@ -52,3 +52,24 @@ test("upsertDocumentPut uses PUT and JSON body", async () => {
   assert.ok(String(calls[0]!.init.body).includes("\"discordUserId\""));
 });
 
+test("deleteDocument uses DELETE", async () => {
+  const calls: Array<{ url: string; init: RequestInit }> = [];
+
+  const fetchImpl: typeof fetch = (async (url: any, init: any) => {
+    calls.push({ url: String(url), init });
+    return { ok: true, status: 204, text: async () => "" } as any;
+  }) as any;
+
+  const aw = createAppwriteAdminRestClient({
+    endpoint: "https://appwrite.example/v1",
+    projectId: "proj",
+    apiKey: "key",
+    fetchImpl
+  });
+
+  await aw.deleteDocument({ databaseId: "crypto", collectionId: "profiles", documentId: "u1" });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]!.init.method, "DELETE");
+});
+
