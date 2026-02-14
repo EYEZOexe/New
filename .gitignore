@@ -1,3 +1,7 @@
 .tmp/
 .turbo/
 **/tsconfig.tsbuildinfo
+**/*.tsbuildinfo
+**/.next/
+**/dist/
+node_modules
