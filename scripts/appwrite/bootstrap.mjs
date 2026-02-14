@@ -315,24 +315,6 @@ async function ensureStringAttribute({ collectionId, key, size, required = false
   );
 }
 
-async function ensureTextAttribute({ collectionId, key, required = false, array = false, defaultValue }) {
-  // POST /databases/{databaseId}/collections/{collectionId}/attributes/text
-  // NOTE: On Appwrite 1.7.4 self-hosted, `text` is available but `longtext` may not be.
-  return ensure(`attr:text:${collectionId}.${key}`, () =>
-    appwriteFetch(
-      "POST",
-      `/databases/${databaseId}/collections/${collectionId}/attributes/text`,
-      {
-        key,
-        required,
-        array,
-        // Appwrite 1.7.x does not allow defaults on required attributes.
-        ...(required || defaultValue === undefined ? {} : { default: defaultValue })
-      }
-    )
-  );
-}
-
 async function ensureIntegerAttribute({ collectionId, key, required = false, array = false, min, max, defaultValue }) {
   // POST /databases/{databaseId}/collections/{collectionId}/attributes/integer
   return ensure(`attr:integer:${collectionId}.${key}`, () =>
@@ -719,9 +701,12 @@ async function main() {
     size: 128,
     required: false
   });
-  await ensureTextAttribute({
+  // Appwrite 1.7.4 self-hosted: `text`/`longtext` endpoints may not exist.
+  // Use a large `string` attribute and keep payloads under this bound.
+  await ensureStringAttribute({
     collectionId: webhookFailuresCollectionId,
     key: "bodyText",
+    size: 16381,
     required: true
   });
   await ensureStringAttribute({
