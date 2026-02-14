@@ -3,6 +3,7 @@
  *
  * Usage:
  *   node scripts/appwrite/upsert-subscription.mjs --email test@gmail.com --status active --plan "god tier"
+ *   node scripts/appwrite/upsert-subscription.mjs --user-id <uuid> --status active --plan "god tier"
  *
  * Env:
  *   APPWRITE_ENDPOINT=https://appwrite.example/v1
@@ -20,11 +21,16 @@
 import fs from "node:fs";
 
 function parseArgs(argv) {
-  const args = { email: "", status: "active", plan: "" };
+  const args = { email: "", userId: "", status: "active", plan: "" };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--email") {
       args.email = argv[i + 1] || "";
+      i++;
+      continue;
+    }
+    if (a === "--user-id") {
+      args.userId = argv[i + 1] || "";
       i++;
       continue;
     }
@@ -102,7 +108,7 @@ async function main() {
   if (process.env.APPWRITE_ENV_FILE) loadEnvFile(process.env.APPWRITE_ENV_FILE);
 
   const args = parseArgs(process.argv.slice(2));
-  if (!args.email) throw new Error("Missing required arg: --email");
+  if (!args.email && !args.userId) throw new Error("Missing required arg: --email or --user-id");
   if (!args.plan) throw new Error("Missing required arg: --plan");
 
   const endpoint = requiredEnv("APPWRITE_ENDPOINT").replace(/\/$/, "");
@@ -121,18 +127,20 @@ async function main() {
     }
   };
 
-  // Find userId by email (exact match)
-  const usersRes = await appwriteFetch(
-    client,
-    "GET",
-    `/users?search=${encodeURIComponent(args.email)}`,
-    undefined
-  );
-  const users = Array.isArray(usersRes?.users) ? usersRes.users : [];
-  const user = users.find((u) => String(u?.email || "").toLowerCase() === args.email.toLowerCase());
-  if (!user?.$id) throw new Error(`No Appwrite user found with email: ${args.email}`);
-
-  const userId = user.$id;
+  let userId = args.userId;
+  if (!userId) {
+    // Find userId by email (exact match)
+    const usersRes = await appwriteFetch(
+      client,
+      "GET",
+      `/users?search=${encodeURIComponent(args.email)}`,
+      undefined
+    );
+    const users = Array.isArray(usersRes?.users) ? usersRes.users : [];
+    const user = users.find((u) => String(u?.email || "").toLowerCase() === args.email.toLowerCase());
+    if (!user?.$id) throw new Error(`No Appwrite user found with email: ${args.email}`);
+    userId = user.$id;
+  }
 
   const permissions = [
     `read(\"user:${userId}\")`,
@@ -144,7 +152,9 @@ async function main() {
   const data = {
     userId,
     status: args.status,
-    plan: args.plan
+    plan: args.plan,
+    // Optional helper for audits/tests. Safe to leave blank in prod.
+    sellappOrderId: `manual_${new Date().toISOString().replace(/[:.TZ-]/g, \"\").slice(0, 14)}`
   };
 
   try {
@@ -182,4 +192,3 @@ main().catch((err) => {
   console.error(err?.response || err?.message || err);
   process.exit(1);
 });
-
