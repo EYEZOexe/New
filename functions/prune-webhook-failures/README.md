@@ -1,16 +1,12 @@
-# prune-webhook-failures
+# prune-webhook-failures (Legacy)
 
-Scheduled Appwrite Function that deletes `webhook_failures` documents older than 7 days.
+Legacy scheduled job that pruned old webhook failure records for the previous backend.
 
-## Required env vars
+As part of the Convex pivot, webhook failures should be stored in Convex and pruned via a Convex
+scheduled function (or a periodic job) instead.
 
-- `APPWRITE_ENDPOINT`
-- `APPWRITE_PROJECT_ID`
-- `APPWRITE_API_KEY`
+Plan of record: `docs/plans/2026-02-14-convex-adoption-plan.md`
 
-## Optional env vars (stable defaults)
+## Status
 
-- `APPWRITE_DATABASE_ID=crypto`
-- `APPWRITE_WEBHOOK_FAILURES_COLLECTION_ID=webhook_failures`
-- `WEBHOOK_FAILURE_RETENTION_DAYS=7`
-
+Do not extend this code path. Replace it with a Convex-native job and then remove it.

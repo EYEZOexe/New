@@ -1,36 +1,24 @@
-# sell.app webhook (Appwrite Function)
+# sell.app webhook (Legacy)
 
-This Appwrite Function processes Sell.app webhooks **even if the website is down**.
+This folder contains a legacy webhook handler that was previously deployed as an external function.
+
+The backend is now pivoting to Convex. This legacy handler is expected to be replaced by a Convex
+HTTP endpoint (or an equivalent Convex ingestion path) and then removed.
+
+Plan of record: `docs/plans/2026-02-14-convex-adoption-plan.md`
 
 ## What it does
 
 - Validates Sell.app `signature` header (HMAC-SHA256 of raw body).
-- Writes an idempotency record into `webhook_events`.
-- Upserts a `subscriptions` document (by `userId`).
-- Adds/removes the user from the `paid` Appwrite team.
-- Uses Appwrite **REST** APIs (no `node-appwrite` SDK inside the Function).
+- Writes an idempotency record.
+- Upserts subscription state.
+- (Legacy) Performs access gating side effects that will move into Convex.
 
-## Required env vars (Function variables)
+## Status
 
-- `SELLAPP_WEBHOOK_SECRET`
-- `APPWRITE_ENDPOINT`
-- `APPWRITE_PROJECT_ID`
-- `APPWRITE_API_KEY` (server key with Users/Teams/Databases permissions)
-- `APPWRITE_DATABASE_ID=crypto`
-- `APPWRITE_SUBSCRIPTIONS_COLLECTION_ID=subscriptions`
-- `APPWRITE_WEBHOOK_EVENTS_COLLECTION_ID=webhook_events`
-- `APPWRITE_TEAM_PAID_ID=paid` (optional but recommended)
-- `APP_BASE_URL=https://yourdomain.com` (optional; used as the team invite redirect URL when adding membership)
+Do not extend this code path. Use it only as a reference during the Convex migration.
 
-## Deploy (high level)
-
-1) Create a Function in Appwrite Console using a Node runtime.
-2) Set **Execute access = Any**.
-3) Upload this folder as deployment (or connect VCS).
-4) Set the env vars above.
-5) Use the Function HTTP domain URL as the Sell.app webhook target.
-
-## Test / replay locally
+## Test / Replay Locally
 
 You can validate the signature logic with a simple curl, and you can run unit tests locally.
 
