@@ -4,7 +4,6 @@ import { cookies } from "next/headers";
 import { getAuthContext } from "../../../../../lib/auth";
 import { getAppwritePublicConfig, getAppwriteServerConfig } from "../../../../../lib/appwrite-server";
 import { createAppwriteAdminRestClient } from "../../../../../lib/appwrite-admin-rest";
-import { createAppwriteSessionRestClient } from "../../../../../lib/appwrite-session-rest";
 
 export async function POST() {
   const auth = await getAuthContext();
@@ -17,27 +16,6 @@ export async function POST() {
   const sessionToken = cookieStore.get(publicCfg.sessionCookieName)?.value;
   if (!sessionToken) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const session = createAppwriteSessionRestClient({
-    endpoint: publicCfg.endpoint,
-    projectId: publicCfg.projectId,
-    sessionToken
-  });
-
-  let discordUserIdForRemoval: string | null = null;
-  try {
-    const identities = await session.listIdentities();
-    const discord = identities.find((i: any) => i?.provider === "discord");
-    if (discord?.$id) {
-      // Capture provider UID so we can remove roles even after unlinking identity.
-      if (typeof discord?.providerUid === "string" && discord.providerUid.length) {
-        discordUserIdForRemoval = discord.providerUid;
-      }
-      await session.deleteIdentity(String(discord.$id));
-    }
-  } catch {
-    // ignore; unlink is best-effort
-  }
-
   const databaseId = process.env.APPWRITE_DATABASE_ID ?? "crypto";
   const profilesCollectionId = process.env.APPWRITE_PROFILES_COLLECTION_ID ?? "profiles";
 
@@ -46,6 +24,21 @@ export async function POST() {
     projectId: serverCfg.projectId,
     apiKey: serverCfg.apiKey
   });
+
+  // Read current linkage so we can enqueue role removal even after clearing the profile.
+  let discordUserIdForRemoval: string | null = null;
+  try {
+    const profile = await adminDb.getDocument({
+      databaseId,
+      collectionId: profilesCollectionId,
+      documentId: auth.userId
+    });
+    if (typeof profile?.discordUserId === "string" && profile.discordUserId.length) {
+      discordUserIdForRemoval = profile.discordUserId;
+    }
+  } catch {
+    // ignore
+  }
 
   // Clear profile linkage. Avoid writing explicit nulls (Appwrite versions differ on nullable handling).
   try {
