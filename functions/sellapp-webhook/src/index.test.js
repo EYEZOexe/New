@@ -23,7 +23,7 @@ test("index handler returns the processSellappWebhook result via res.json", asyn
     if (url.endsWith("/users?search=customer%40example.com") && init.method === "GET") {
       return jsonResponse(200, { total: 1, users: [{ $id: "u1", email: "customer@example.com", name: "Cust" }] });
     }
-    if (url.includes("/collections/subscriptions/documents/u1") && init.method === "PUT") {
+    if (url.includes("/collections/subscriptions/documents") && init.method === "POST") {
       return jsonResponse(201, { $id: "u1" });
     }
     if (url.includes("/teams/paid/memberships") && init.method === "GET") {
@@ -72,4 +72,3 @@ test("index handler returns the processSellappWebhook result via res.json", asyn
   assert.deepEqual(jsonOut, { ok: true });
   assert.ok(calls.length > 0);
 });
-

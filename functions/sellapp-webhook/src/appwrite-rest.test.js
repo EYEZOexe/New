@@ -28,7 +28,7 @@ test("createAppwriteRestClient sends required auth headers", async () => {
   assert.equal(calls[0].init.headers["X-Appwrite-Key"], "key");
 });
 
-test("upsertDocumentPut uses PUT and JSON body", async () => {
+test("updateDocument uses PATCH and JSON body", async () => {
   const calls = [];
   const fetchImpl = async (url, init) => {
     calls.push({ url, init });
@@ -46,7 +46,7 @@ test("upsertDocumentPut uses PUT and JSON body", async () => {
     fetchImpl
   });
 
-  await aw.upsertDocumentPut({
+  await aw.updateDocument({
     databaseId: "crypto",
     collectionId: "subscriptions",
     documentId: "user123",
@@ -54,7 +54,6 @@ test("upsertDocumentPut uses PUT and JSON body", async () => {
   });
 
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].init.method, "PUT");
+  assert.equal(calls[0].init.method, "PATCH");
   assert.ok(String(calls[0].init.body).includes("\"status\""));
 });
-

@@ -99,8 +99,8 @@ test("order.completed upserts subscription and grants paid membership", async ()
     }
 
     if (
-      url.includes("/collections/subscriptions/documents/u1") &&
-      init.method === "PUT"
+      url.includes("/collections/subscriptions/documents") &&
+      init.method === "POST"
     ) {
       return jsonResponse(201, { $id: "u1" });
     }
@@ -145,8 +145,7 @@ test("order.completed upserts subscription and grants paid membership", async ()
   const joined = calls.map((c) => `${c.init.method} ${c.url}`);
   assert.ok(joined.some((s) => s.includes("POST https://example.com/v1/databases/crypto/collections/webhook_events/documents")));
   assert.ok(joined.some((s) => s === "GET https://example.com/v1/users?search=customer%40example.com"));
-  assert.ok(joined.some((s) => s.includes("PUT https://example.com/v1/databases/crypto/collections/subscriptions/documents/u1")));
+  assert.ok(joined.some((s) => s.includes("POST https://example.com/v1/databases/crypto/collections/subscriptions/documents")));
   assert.ok(joined.some((s) => s === "GET https://example.com/v1/teams/paid/memberships"));
   assert.ok(joined.some((s) => s === "POST https://example.com/v1/teams/paid/memberships"));
 });
-

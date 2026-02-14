@@ -80,12 +80,11 @@ export function createAppwriteRestClient({ endpoint, projectId, apiKey, fetchImp
         body: { documentId, data }
       }),
 
-    upsertDocumentPut: ({ databaseId, collectionId, documentId, data }) =>
+    updateDocument: ({ databaseId, collectionId, documentId, data }) =>
       requestJson({
-        method: "PUT",
+        method: "PATCH",
         path: `/databases/${databaseId}/collections/${collectionId}/documents/${documentId}`,
         body: { data }
       })
   };
 }
-

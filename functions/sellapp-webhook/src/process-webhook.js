@@ -67,18 +67,32 @@ async function upsertSubscription({
   sellappOrderId,
   currentPeriodEnd
 }) {
-  return await appwrite.upsertDocumentPut({
-    databaseId,
-    collectionId: subscriptionsCollectionId,
-    documentId: userId,
-    data: {
-      userId,
-      status,
-      plan: plan ?? null,
-      sellappOrderId: sellappOrderId ?? null,
-      currentPeriodEnd: currentPeriodEnd ?? null
-    }
-  });
+  const data = {
+    userId,
+    status,
+    plan: plan ?? null,
+    sellappOrderId: sellappOrderId ?? null,
+    currentPeriodEnd: currentPeriodEnd ?? null
+  };
+
+  try {
+    await appwrite.createDocument({
+      databaseId,
+      collectionId: subscriptionsCollectionId,
+      documentId: userId,
+      data
+    });
+    return { created: true };
+  } catch (err) {
+    if (err?.status !== 409) throw err;
+    await appwrite.updateDocument({
+      databaseId,
+      collectionId: subscriptionsCollectionId,
+      documentId: userId,
+      data
+    });
+    return { created: false };
+  }
 }
 
 async function ensurePaidTeamMembership({ appwrite, teamPaidId, user, action, appBaseUrl }) {
@@ -187,4 +201,3 @@ export async function processSellappWebhook({ req, env, fetchImpl }) {
 
   return { ok: true };
 }
-
