@@ -244,6 +244,20 @@ async function main() {
   await upsertVariableRest({ endpoint, projectId, apiKey, functionId, key: "APPWRITE_WEBHOOK_EVENTS_COLLECTION_ID", value: webhookEventsCollectionId, secret: false });
   await upsertVariableRest({ endpoint, projectId, apiKey, functionId, key: "APPWRITE_TEAM_PAID_ID", value: teamPaidId, secret: false });
 
+  // Optional: used as `url` when creating team memberships (some Appwrite versions/platform settings
+  // may still validate this even with API keys).
+  if (process.env.APP_BASE_URL) {
+    await upsertVariableRest({
+      endpoint,
+      projectId,
+      apiKey,
+      functionId,
+      key: "APP_BASE_URL",
+      value: process.env.APP_BASE_URL,
+      secret: false
+    });
+  }
+
   // Wait for build to be ready
   let status = "";
   for (let i = 0; i < 60; i++) {
