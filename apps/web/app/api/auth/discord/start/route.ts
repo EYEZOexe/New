@@ -10,6 +10,32 @@ import { getExternalOriginFromHeaders } from "../../../../../lib/external-reques
 const STATE_COOKIE = "discord_oauth_state";
 const STATE_COOKIE_MAX_AGE_S = 10 * 60;
 
+function forceHttpsRedirectUri(location: string, appwriteHost: string): string {
+  // Appwrite may generate an http:// callback URL when behind a proxy that reports http.
+  // Discord requires https redirect URIs (except localhost), so we rewrite only when safe.
+  try {
+    const u = new URL(location);
+    const redirectUri = u.searchParams.get("redirect_uri");
+    if (!redirectUri) return location;
+
+    let ru: URL;
+    try {
+      ru = new URL(redirectUri);
+    } catch {
+      return location;
+    }
+
+    if (ru.protocol !== "http:") return location;
+    if (ru.hostname !== appwriteHost) return location;
+
+    ru.protocol = "https:";
+    u.searchParams.set("redirect_uri", ru.toString());
+    return u.toString();
+  } catch {
+    return location;
+  }
+}
+
 function redirectToDashboard(origin: string, params: Record<string, string> = {}) {
   const qs = new URLSearchParams(params);
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
@@ -86,6 +112,10 @@ async function handler(req: Request) {
     res.headers.set("cache-control", "no-store");
     return res;
   }
+
+  // Workaround for reverse proxies that report http to Appwrite (Cloudflare "Flexible", etc).
+  // Preferred fix is to make Appwrite see x-forwarded-proto=https; this is a pragmatic safety net.
+  location = forceHttpsRedirectUri(location, new URL(cfg.endpoint).hostname);
 
   const res = NextResponse.redirect(location);
   res.cookies.set(STATE_COOKIE, state, {
