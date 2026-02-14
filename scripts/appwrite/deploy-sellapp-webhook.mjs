@@ -273,9 +273,10 @@ async function main() {
   console.log(`- deploymentId: ${deploymentId}`);
   console.log(`- status:       ${status}`);
 
-  console.log(
-    "\nNext: In Appwrite Console → Functions → sellapp-webhook → Domains, copy the Function domain URL and paste it into Sell.app webhook settings."
-  );
+  const recommendedWebhookUrl = process.env.SELLAPP_WEBHOOK_URL || "https://webhooks.g3netic.com/sell/webhook";
+  console.log("\nNext:");
+  console.log(`- Set Sell.app webhook URL to: ${recommendedWebhookUrl}`);
+  console.log("- No Appwrite Function Domains required when using a Cloudflare Worker proxy URL.");
 }
 
 main().catch((err) => {
