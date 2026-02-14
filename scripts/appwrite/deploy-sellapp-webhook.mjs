@@ -1,4 +1,7 @@
 /**
+ * DEPRECATED: Prefer running Appwrite operational workflows via MCP.
+ * See `docs/appwrite-mcp-ops.md`.
+ *
  * Deploy the sell.app webhook Appwrite Function using **Appwrite REST**.
  *
  * This avoids:

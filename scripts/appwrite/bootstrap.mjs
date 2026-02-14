@@ -1,4 +1,7 @@
 /**
+ * DEPRECATED: Prefer running Appwrite operational workflows via MCP.
+ * See `docs/appwrite-mcp-ops.md`.
+ *
  * Appwrite bootstrap script (idempotent-ish).
  *
  * Creates:
