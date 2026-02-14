@@ -13,13 +13,13 @@ Backend is self-hosted Appwrite (`appwrite.g3netic.com`).
 ## Current Status
 
 **Now**
-- Make Sell.app webhooks work end-to-end with a stable public HTTPS URL.
-
-**Next**
 - Discord OAuth linking + customer guild role assignment.
 
+**Next**
+- Observability + failure capture for webhook processing.
+
 **Blockers / Risks**
-- Appwrite Function domains: Appwrite Console shows "No domains available" for Functions (see `memory-bank/activeContext.md`).
+- Appwrite Function domains: Appwrite Console shows "No domains available" for Functions (see `memory-bank/activeContext.md`). Not blocking Sell.app webhooks because we use a Cloudflare Worker proxy URL (`webhooks.g3netic.com`).
 
 ## Milestones (Phases)
 
@@ -33,7 +33,7 @@ Backend is self-hosted Appwrite (`appwrite.g3netic.com`).
 
 Goal: payments reliably grant/revoke access even if the website is down.
 
-- [ ] Ensure webhook has a stable public HTTPS URL (Function domain or proxy)
+- [x] Ensure webhook has a stable public HTTPS URL (Function domain or proxy) (2026-02-14)
   Exit criteria: Sell.app can deliver to a URL that returns 2xx and runs the handler.
 - [x] End-to-end webhook test (grant paid team) (2026-02-14)
   Exit criteria: a purchase results in user added to `paid` team and subscription record upserted.
