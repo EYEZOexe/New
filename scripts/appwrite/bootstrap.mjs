@@ -706,7 +706,7 @@ async function main() {
   await ensureStringAttribute({
     collectionId: webhookFailuresCollectionId,
     key: "bodyText",
-    size: 16381,
+    size: 4096,
     required: true
   });
   await ensureStringAttribute({
