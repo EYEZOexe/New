@@ -37,6 +37,7 @@ async function recordWebhookFailureSafe({
 }) {
   if (!webhookFailuresCollectionId) return;
   try {
+    const bodyForStore = typeof bodyText === "string" ? bodyText.slice(0, 4096) : "";
     await appwrite.createDocument({
       databaseId,
       collectionId: webhookFailuresCollectionId,
@@ -49,7 +50,7 @@ async function recordWebhookFailureSafe({
         store: store ?? null,
         email: email ?? null,
         payloadHash: payloadHash ?? null,
-        bodyText: bodyText ?? "",
+        bodyText: bodyForStore,
         errorCode,
         errorMessage: error?.message ?? null,
         errorStatus: typeof error?.status === "number" ? error.status : null,
