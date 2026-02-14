@@ -155,6 +155,8 @@ async function main() {
     process.env.APPWRITE_SUBSCRIPTIONS_COLLECTION_ID || "subscriptions";
   const webhookEventsCollectionId =
     process.env.APPWRITE_WEBHOOK_EVENTS_COLLECTION_ID || "webhook_events";
+  const webhookFailuresCollectionId =
+    process.env.APPWRITE_WEBHOOK_FAILURES_COLLECTION_ID || "webhook_failures";
   const teamPaidId = process.env.APPWRITE_TEAM_PAID_ID || "paid";
 
   const functionId = process.env.APPWRITE_SELLAPP_WEBHOOK_FUNCTION_ID || "sellapp-webhook";
@@ -242,6 +244,7 @@ async function main() {
   await upsertVariableRest({ endpoint, projectId, apiKey, functionId, key: "APPWRITE_DATABASE_ID", value: databaseId, secret: false });
   await upsertVariableRest({ endpoint, projectId, apiKey, functionId, key: "APPWRITE_SUBSCRIPTIONS_COLLECTION_ID", value: subscriptionsCollectionId, secret: false });
   await upsertVariableRest({ endpoint, projectId, apiKey, functionId, key: "APPWRITE_WEBHOOK_EVENTS_COLLECTION_ID", value: webhookEventsCollectionId, secret: false });
+  await upsertVariableRest({ endpoint, projectId, apiKey, functionId, key: "APPWRITE_WEBHOOK_FAILURES_COLLECTION_ID", value: webhookFailuresCollectionId, secret: false });
   await upsertVariableRest({ endpoint, projectId, apiKey, functionId, key: "APPWRITE_TEAM_PAID_ID", value: teamPaidId, secret: false });
 
   // Optional: used as `url` when creating team memberships (some Appwrite versions/platform settings

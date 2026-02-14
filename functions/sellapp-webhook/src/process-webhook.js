@@ -20,6 +20,47 @@ function normalizeHeader(headers, name) {
   return headers?.[key] ?? headers?.[name] ?? null;
 }
 
+async function recordWebhookFailureSafe({
+  appwrite,
+  databaseId,
+  webhookFailuresCollectionId,
+  provider,
+  event,
+  eventId,
+  orderId,
+  store,
+  email,
+  payloadHash,
+  bodyText,
+  errorCode,
+  error
+}) {
+  if (!webhookFailuresCollectionId) return;
+  try {
+    await appwrite.createDocument({
+      databaseId,
+      collectionId: webhookFailuresCollectionId,
+      documentId: "unique()",
+      data: {
+        provider,
+        event,
+        eventId,
+        orderId: orderId ?? null,
+        store: store ?? null,
+        email: email ?? null,
+        payloadHash: payloadHash ?? null,
+        bodyText: bodyText ?? "",
+        errorCode,
+        errorMessage: error?.message ?? null,
+        errorStatus: typeof error?.status === "number" ? error.status : null,
+        errorType: error?.response?.type ?? null
+      }
+    });
+  } catch {
+    // Best-effort only: never fail webhook processing because failure logging failed.
+  }
+}
+
 async function ensureWebhookEventOnce({
   appwrite,
   databaseId,
@@ -138,7 +179,36 @@ export async function processSellappWebhook({ req, env, fetchImpl }) {
   if (!okSig) return { ok: false, error: "invalid_signature" };
 
   const payload = (req?.bodyJson && typeof req.bodyJson === "object" ? req.bodyJson : null) ?? safeJsonParse(bodyText);
-  if (!payload) return { ok: false, error: "invalid_json" };
+  if (!payload) {
+    // Signature is valid, so this is a genuine provider failure or a deployment bug.
+    // Record and return a stable error shape.
+    try {
+      const endpoint = requiredEnv(env, "APPWRITE_ENDPOINT");
+      const projectId = requiredEnv(env, "APPWRITE_PROJECT_ID");
+      const apiKey = requiredEnv(env, "APPWRITE_API_KEY");
+      const databaseId = requiredEnv(env, "APPWRITE_DATABASE_ID");
+      const webhookFailuresCollectionId = env?.APPWRITE_WEBHOOK_FAILURES_COLLECTION_ID || "webhook_failures";
+      const appwrite = createAppwriteRestClient({ endpoint, projectId, apiKey, fetchImpl });
+      await recordWebhookFailureSafe({
+        appwrite,
+        databaseId,
+        webhookFailuresCollectionId,
+        provider: "sellapp",
+        event: "unknown",
+        eventId: "unknown:no-order:no-store",
+        orderId: null,
+        store: null,
+        email: null,
+        payloadHash: sha256Hex(bodyText),
+        bodyText,
+        errorCode: "invalid_json",
+        error: null
+      });
+    } catch {
+      // ignore
+    }
+    return { ok: false, error: "invalid_json" };
+  }
 
   const endpoint = requiredEnv(env, "APPWRITE_ENDPOINT");
   const projectId = requiredEnv(env, "APPWRITE_PROJECT_ID");
@@ -147,6 +217,7 @@ export async function processSellappWebhook({ req, env, fetchImpl }) {
   const databaseId = requiredEnv(env, "APPWRITE_DATABASE_ID");
   const subscriptionsCollectionId = requiredEnv(env, "APPWRITE_SUBSCRIPTIONS_COLLECTION_ID");
   const webhookEventsCollectionId = requiredEnv(env, "APPWRITE_WEBHOOK_EVENTS_COLLECTION_ID");
+  const webhookFailuresCollectionId = env?.APPWRITE_WEBHOOK_FAILURES_COLLECTION_ID || "webhook_failures";
   const teamPaidId = env?.APPWRITE_TEAM_PAID_ID || null;
   const appBaseUrl = env?.APP_BASE_URL || null;
 
@@ -158,46 +229,140 @@ export async function processSellappWebhook({ req, env, fetchImpl }) {
   const eventId = `${event}:${orderId ?? "no-order"}:${store}`;
   const payloadHash = sha256Hex(bodyText);
 
-  const idempotency = await ensureWebhookEventOnce({
-    appwrite,
-    databaseId,
-    webhookEventsCollectionId,
-    eventId,
-    provider: "sellapp",
-    orderId: orderId ? String(orderId) : null,
-    payloadHash,
-    processedAt: new Date().toISOString()
-  });
+  let idempotency;
+  try {
+    idempotency = await ensureWebhookEventOnce({
+      appwrite,
+      databaseId,
+      webhookEventsCollectionId,
+      eventId,
+      provider: "sellapp",
+      orderId: orderId ? String(orderId) : null,
+      payloadHash,
+      processedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    await recordWebhookFailureSafe({
+      appwrite,
+      databaseId,
+      webhookFailuresCollectionId,
+      provider: "sellapp",
+      event,
+      eventId,
+      orderId: orderId ? String(orderId) : null,
+      store: store ? String(store) : null,
+      email: pickEmail(payload),
+      payloadHash,
+      bodyText,
+      errorCode: "appwrite_error",
+      error: err
+    });
+    return { ok: false, error: "appwrite_error" };
+  }
 
   if (!idempotency.firstTime) return { ok: true, duplicate: true };
 
   const email = pickEmail(payload);
-  if (!email) return { ok: true, warning: "no_email_in_payload" };
+  if (!email) {
+    await recordWebhookFailureSafe({
+      appwrite,
+      databaseId,
+      webhookFailuresCollectionId,
+      provider: "sellapp",
+      event,
+      eventId,
+      orderId: orderId ? String(orderId) : null,
+      store: store ? String(store) : null,
+      email: null,
+      payloadHash,
+      bodyText,
+      errorCode: "no_email_in_payload",
+      error: null
+    });
+    return { ok: true, warning: "no_email_in_payload" };
+  }
 
-  const user = await getUserByEmail({ appwrite, email });
-  if (!user) return { ok: true, warning: "user_not_found" };
+  let user;
+  try {
+    user = await getUserByEmail({ appwrite, email });
+  } catch (err) {
+    await recordWebhookFailureSafe({
+      appwrite,
+      databaseId,
+      webhookFailuresCollectionId,
+      provider: "sellapp",
+      event,
+      eventId,
+      orderId: orderId ? String(orderId) : null,
+      store: store ? String(store) : null,
+      email,
+      payloadHash,
+      bodyText,
+      errorCode: "appwrite_error",
+      error: err
+    });
+    return { ok: false, error: "appwrite_error" };
+  }
+
+  if (!user) {
+    await recordWebhookFailureSafe({
+      appwrite,
+      databaseId,
+      webhookFailuresCollectionId,
+      provider: "sellapp",
+      event,
+      eventId,
+      orderId: orderId ? String(orderId) : null,
+      store: store ? String(store) : null,
+      email,
+      payloadHash,
+      bodyText,
+      errorCode: "user_not_found",
+      error: null
+    });
+    return { ok: true, warning: "user_not_found" };
+  }
 
   const mapped = mapSellappEventToAction(event);
   if (!mapped.subscriptionStatus) return { ok: true, recorded: true, unhandledEvent: event };
 
-  await upsertSubscription({
-    appwrite,
-    databaseId,
-    subscriptionsCollectionId,
-    userId: user.$id,
-    status: mapped.subscriptionStatus,
-    plan: payload?.data?.plan ?? payload?.data?.product ?? null,
-    sellappOrderId: orderId ? String(orderId) : null,
-    currentPeriodEnd: payload?.data?.currentPeriodEnd ?? payload?.data?.current_period_end ?? null
-  });
+  try {
+    await upsertSubscription({
+      appwrite,
+      databaseId,
+      subscriptionsCollectionId,
+      userId: user.$id,
+      status: mapped.subscriptionStatus,
+      plan: payload?.data?.plan ?? payload?.data?.product ?? null,
+      sellappOrderId: orderId ? String(orderId) : null,
+      currentPeriodEnd: payload?.data?.currentPeriodEnd ?? payload?.data?.current_period_end ?? null
+    });
 
-  await ensurePaidTeamMembership({
-    appwrite,
-    teamPaidId,
-    user,
-    action: mapped.teamAction,
-    appBaseUrl
-  });
+    await ensurePaidTeamMembership({
+      appwrite,
+      teamPaidId,
+      user,
+      action: mapped.teamAction,
+      appBaseUrl
+    });
+  } catch (err) {
+    await recordWebhookFailureSafe({
+      appwrite,
+      databaseId,
+      webhookFailuresCollectionId,
+      provider: "sellapp",
+      event,
+      eventId,
+      orderId: orderId ? String(orderId) : null,
+      store: store ? String(store) : null,
+      email,
+      payloadHash,
+      bodyText,
+      errorCode: "appwrite_error",
+      error: err
+    });
+    return { ok: false, error: "appwrite_error" };
+  }
 
   return { ok: true };
 }
