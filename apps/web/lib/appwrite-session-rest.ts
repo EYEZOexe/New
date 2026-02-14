@@ -65,14 +65,38 @@ export function createAppwriteSessionRestClient(params: SessionClientParams) {
   }
 
   async function requestRedirectLocation(path: string): Promise<string> {
-    const res = await fetchImpl(joinPath(params.endpoint, path), {
-      method: "GET",
-      redirect: "manual",
-      headers: {
-        "X-Appwrite-Project": params.projectId,
-        Cookie: buildSessionCookieHeader(params.projectId, params.sessionToken)
+    const timeoutMsRaw = process.env.APPWRITE_OAUTH_START_TIMEOUT_MS;
+    const timeoutMs =
+      typeof timeoutMsRaw === "string" && /^\d+$/.test(timeoutMsRaw)
+        ? Number(timeoutMsRaw)
+        : 15_000;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
+
+    let res: Response;
+    try {
+      res = await fetchImpl(joinPath(params.endpoint, path), {
+        method: "GET",
+        redirect: "manual",
+        signal: controller.signal,
+        headers: {
+          "X-Appwrite-Project": params.projectId,
+          Cookie: buildSessionCookieHeader(params.projectId, params.sessionToken)
+        }
+      });
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        const e: any = new Error(`Appwrite OAuth start timed out after ${timeoutMs}ms`);
+        e.code = "timeout";
+        throw e;
       }
-    });
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+    }
 
     const location = (res.headers as any)?.get?.("location") ?? (res.headers as any)?.get?.("Location");
     if (typeof location === "string" && location.length) return location;
