@@ -54,6 +54,11 @@ async function handler(req: Request) {
       message: err?.message ?? String(err),
       code: err?.code ?? null,
       type: err?.type ?? null,
+      appwrite: {
+        // Safe: Appwrite errors only. No cookies/tokens.
+        response: err?.response ?? null,
+        responseTextSnippet: err?.responseTextSnippet ?? null
+      },
       request: {
         host: ext.raw.host,
         forwardedHost: ext.raw.forwardedHost,
@@ -70,9 +75,10 @@ async function handler(req: Request) {
     const url = new URL(req.url);
     const debug = url.searchParams.get("debug") === "1" || process.env.NODE_ENV !== "production";
     if (debug) {
+      // Cloudflare often replaces 5xx bodies with its own HTML. Return 200 so we can see JSON.
       return NextResponse.json(
         { error: "Discord OAuth start failed", details },
-        { status: 502, headers: { "cache-control": "no-store" } }
+        { status: 200, headers: { "cache-control": "no-store" } }
       );
     }
 
