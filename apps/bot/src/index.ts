@@ -310,6 +310,16 @@ async function main() {
           const desired = Array.from(desiredRoleIds);
           const { toAdd, toRemove } = diffRoles({ desired, current: currentManaged });
 
+          // eslint-disable-next-line no-console
+          console.log("Role sync job diff:", {
+            jobId,
+            discordUserId,
+            managedRoleCount: managedRoleIds.size,
+            desiredCount: desired.length,
+            toAdd,
+            toRemove
+          });
+
           for (const roleId of toAdd) {
             const r = await discordApi(
               env.DISCORD_BOT_TOKEN,
