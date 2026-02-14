@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import crypto from "node:crypto";
 
 import { extractCookieValue } from "./appwrite-cookies";
+import { sanitizeEnvValue } from "./env";
 
 export type AppwriteServerConfig = {
   endpoint: string;
@@ -86,11 +87,20 @@ async function appwriteFetchJson<T>(
 }
 
 export function getAppwritePublicConfig(): AppwritePublicConfig {
-  const endpoint = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT;
-  const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID;
+  const endpointRaw = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT;
+  const projectIdRaw = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID;
 
-  if (!endpoint) throw new Error("Missing env: NEXT_PUBLIC_APPWRITE_ENDPOINT");
-  if (!projectId) throw new Error("Missing env: NEXT_PUBLIC_APPWRITE_PROJECT_ID");
+  if (!endpointRaw) throw new Error("Missing env: NEXT_PUBLIC_APPWRITE_ENDPOINT");
+  if (!projectIdRaw) throw new Error("Missing env: NEXT_PUBLIC_APPWRITE_PROJECT_ID");
+
+  const endpoint = sanitizeEnvValue(endpointRaw);
+  const projectId = sanitizeEnvValue(projectIdRaw);
+
+  if (!endpoint) throw new Error("Invalid env: NEXT_PUBLIC_APPWRITE_ENDPOINT");
+  if (!projectId) throw new Error("Invalid env: NEXT_PUBLIC_APPWRITE_PROJECT_ID");
+  if (!/^https?:\/\//i.test(endpoint)) {
+    throw new Error("Invalid env: NEXT_PUBLIC_APPWRITE_ENDPOINT must start with http(s)://");
+  }
 
   return {
     endpoint,
