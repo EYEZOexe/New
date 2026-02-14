@@ -1,59 +1,62 @@
+"use client";
+
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { useQuery } from "convex/react";
+import { makeFunctionReference } from "convex/server";
 
-import { getAuthContext } from "../../lib/auth";
 import { DashboardClient } from "./DashboardClient";
-import { DiscordLinkClient } from "./DiscordLinkClient";
 
-// This page depends on request cookies + server-side Appwrite calls, so it must not be
-// statically prerendered at build time.
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export default function DashboardHome() {
+  const viewer = useQuery(makeFunctionReference<"query">("users:viewer"));
 
-export default async function DashboardHome() {
-  const auth = await getAuthContext();
-  if (!auth) redirect("/login");
+  if (viewer === undefined) {
+    return (
+      <main style={{ padding: 24 }}>
+        <h1>Dashboard</h1>
+        <p>Loading...</p>
+      </main>
+    );
+  }
 
-  // NOTE: paid membership will be managed by sell.app webhook function.
-  if (!auth.paid) {
+  if (!viewer) {
     return (
       <main style={{ padding: 24 }}>
         <h1>Dashboard</h1>
         <p>
-          Logged in as <strong>{auth.email}</strong>
+          You're not signed in. <Link href="/login">Login</Link>
         </p>
         <p>
-          Your account is not active yet. After purchase, the webhook will add you
-          to the <code>paid</code> team.
-        </p>
-        <p>
-          You can still link Discord now. Roles will be granted once your subscription is active.
+          Or <Link href="/signup">create an account</Link>.
         </p>
         <p>
           <Link href="/">Back to home</Link>
         </p>
-
-        <DiscordLinkClient />
-
-        <DashboardClient />
       </main>
     );
   }
+
+  const isPaid = viewer.subscription?.status === "active";
 
   return (
     <main style={{ padding: 24 }}>
       <h1>Dashboard</h1>
       <p>
-        Welcome, <strong>{auth.name || auth.email}</strong>
+        Logged in as <strong>{viewer.email ?? "unknown"}</strong>
       </p>
-
-      <p>Paid access: ✅</p>
 
       <p>
-        Next steps: signal feed, alerts, Discord linking.
+        Paid access: {isPaid ? "✅" : "❌"} {!isPaid ? "(Sell.app webhook not migrated yet)" : null}
       </p>
 
-      <DiscordLinkClient />
+      {!isPaid ? (
+        <p>
+          Once payments are migrated to Convex, your subscription will be marked active automatically.
+        </p>
+      ) : null}
+
+      <p>
+        Discord linking: <em>coming soon</em>
+      </p>
 
       <DashboardClient />
     </main>

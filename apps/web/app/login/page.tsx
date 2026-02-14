@@ -3,9 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
+import { useAuthActions } from "@convex-dev/auth/react";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { signIn } = useAuthActions();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -17,17 +19,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email, password })
-      });
-
-      if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as any;
-        throw new Error(data?.error ?? `Login failed (${res.status})`);
-      }
+      await signIn("password", { email, password, flow: "signIn" });
 
       router.push("/dashboard");
       router.refresh();

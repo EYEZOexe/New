@@ -3,10 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
+import { useAuthActions } from "@convex-dev/auth/react";
 
 export default function SignupPage() {
   const router = useRouter();
-  const [name, setName] = useState("");
+  const { signIn } = useAuthActions();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -18,17 +19,7 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ name, email, password })
-      });
-
-      if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as any;
-        throw new Error(data?.error ?? `Signup failed (${res.status})`);
-      }
+      await signIn("password", { email, password, flow: "signUp" });
 
       router.push("/dashboard");
       router.refresh();
@@ -47,15 +38,6 @@ export default function SignupPage() {
       </p>
 
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 12 }}>
-        <label style={{ display: "grid", gap: 6 }}>
-          <span>Name</span>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            autoComplete="name"
-          />
-        </label>
-
         <label style={{ display: "grid", gap: 6 }}>
           <span>Email</span>
           <input
