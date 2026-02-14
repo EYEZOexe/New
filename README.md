@@ -66,6 +66,12 @@ Set **Base Directory / Build Context** to the **repository root**, and select ei
 
 This repo includes an idempotent-ish bootstrap script that creates the required Appwrite database, teams, collections, attributes, and indexes.
 
+## Appwrite ops via MCP (recommended)
+
+Operational/admin workflows should be run via an Appwrite MCP server. See `docs/appwrite-mcp-ops.md`.
+
+Local scripts in `scripts/appwrite/` still exist as a deprecated fallback when MCP is unavailable.
+
 1) Export env vars (do **not** commit your API key):
 
 ```bash
