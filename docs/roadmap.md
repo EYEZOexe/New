@@ -51,8 +51,10 @@ Goal: customers can link Discord and get the right role(s) in the customer guild
 
 - [ ] Discord OAuth linking flow in web app
   Exit criteria: user can link/unlink a Discord account; stored in Appwrite.
+-  Link: `docs/plans/2026-02-14-discord-linking-appwrite-oauth-design.md`, `docs/plans/2026-02-14-discord-linking-appwrite-oauth-plan.md`
 - [ ] Customer guild role assignment automation
   Exit criteria: paid users get correct role; revoked users lose role.
+-  Link: `docs/plans/2026-02-14-discord-linking-appwrite-oauth-design.md`, `docs/plans/2026-02-14-discord-linking-appwrite-oauth-plan.md`
 - [ ] Admin visibility / support workflow
   Exit criteria: admin can look up a user and see Discord linkage + access status.
 

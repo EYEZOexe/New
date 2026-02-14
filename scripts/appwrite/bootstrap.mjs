@@ -39,7 +39,9 @@ const DEFAULTS = {
     subscriptions: "subscriptions",
     webhookEvents: "webhook_events",
     webhookFailures: "webhook_failures",
-    channelMappings: "channel_mappings"
+    channelMappings: "channel_mappings",
+    discordRoleMappings: "discord_role_mappings",
+    roleSyncJobs: "role_sync_jobs"
   }
 };
 
@@ -139,6 +141,14 @@ const webhookFailuresCollectionId = optionalEnv(
 const channelMappingsCollectionId = optionalEnv(
   "APPWRITE_CHANNEL_MAPPINGS_COLLECTION_ID",
   DEFAULTS.collections.channelMappings
+);
+const discordRoleMappingsCollectionId = optionalEnv(
+  "APPWRITE_DISCORD_ROLE_MAPPINGS_COLLECTION_ID",
+  DEFAULTS.collections.discordRoleMappings
+);
+const roleSyncJobsCollectionId = optionalEnv(
+  "APPWRITE_ROLE_SYNC_JOBS_COLLECTION_ID",
+  DEFAULTS.collections.roleSyncJobs
 );
 
 const signalAssetsBucketId = optionalEnv(
@@ -494,6 +504,20 @@ async function main() {
     permissions: permsAdminOnly
   });
 
+  await ensureCollection({
+    collectionId: discordRoleMappingsCollectionId,
+    name: "Discord Role Mappings",
+    documentSecurity: false,
+    permissions: permsAdminOnly
+  });
+
+  await ensureCollection({
+    collectionId: roleSyncJobsCollectionId,
+    name: "Role Sync Jobs",
+    documentSecurity: false,
+    permissions: permsAdminOnly
+  });
+
   // Attributes: signals
   await ensureStringAttribute({
     collectionId: signalsCollectionId,
@@ -752,6 +776,76 @@ async function main() {
     size: 64,
     required: true
   });
+
+  // Attributes: discord_role_mappings
+  await ensureStringAttribute({
+    collectionId: discordRoleMappingsCollectionId,
+    key: "plan",
+    size: 64,
+    required: true
+  });
+  await ensureStringAttribute({
+    collectionId: discordRoleMappingsCollectionId,
+    key: "guildId",
+    size: 64,
+    required: true
+  });
+  await ensureStringAttribute({
+    collectionId: discordRoleMappingsCollectionId,
+    key: "roleIdsJson",
+    size: 2048,
+    required: true
+  });
+
+  // Attributes: role_sync_jobs
+  await ensureStringAttribute({
+    collectionId: roleSyncJobsCollectionId,
+    key: "userId",
+    size: 64,
+    required: true
+  });
+  await ensureStringAttribute({
+    collectionId: roleSyncJobsCollectionId,
+    key: "discordUserId",
+    size: 64,
+    required: false
+  });
+  await ensureStringAttribute({
+    collectionId: roleSyncJobsCollectionId,
+    key: "guildId",
+    size: 64,
+    required: true
+  });
+  await ensureStringAttribute({
+    collectionId: roleSyncJobsCollectionId,
+    key: "desiredRoleIdsJson",
+    size: 2048,
+    required: true
+  });
+  await ensureEnumAttribute({
+    collectionId: roleSyncJobsCollectionId,
+    key: "status",
+    elements: ["pending", "processing", "done", "failed"],
+    required: true
+  });
+  await ensureIntegerAttribute({
+    collectionId: roleSyncJobsCollectionId,
+    key: "attempts",
+    required: false,
+    min: 0,
+    max: 1000
+  });
+  await ensureStringAttribute({
+    collectionId: roleSyncJobsCollectionId,
+    key: "lastError",
+    size: 2048,
+    required: false
+  });
+  await ensureDatetimeAttribute({
+    collectionId: roleSyncJobsCollectionId,
+    key: "lastAttemptAt",
+    required: false
+  });
   await ensureBooleanAttribute({
     collectionId: channelMappingsCollectionId,
     key: "enabled",
@@ -808,6 +902,24 @@ async function main() {
     type: "key",
     attributes: ["sourceChannelId"]
   });
+  await ensureIndex({
+    collectionId: discordRoleMappingsCollectionId,
+    key: "idx_plan_guildId",
+    type: "unique",
+    attributes: ["plan", "guildId"]
+  });
+  await ensureIndex({
+    collectionId: roleSyncJobsCollectionId,
+    key: "idx_status",
+    type: "key",
+    attributes: ["status"]
+  });
+  await ensureIndex({
+    collectionId: roleSyncJobsCollectionId,
+    key: "idx_userId",
+    type: "key",
+    attributes: ["userId"]
+  });
 
   console.log("\nBootstrap complete.");
   console.log("Use these IDs in env vars:");
@@ -819,6 +931,8 @@ async function main() {
   console.log(`APPWRITE_WEBHOOK_EVENTS_COLLECTION_ID=${webhookEventsCollectionId}`);
   console.log(`APPWRITE_WEBHOOK_FAILURES_COLLECTION_ID=${webhookFailuresCollectionId}`);
   console.log(`APPWRITE_CHANNEL_MAPPINGS_COLLECTION_ID=${channelMappingsCollectionId}`);
+  console.log(`APPWRITE_DISCORD_ROLE_MAPPINGS_COLLECTION_ID=${discordRoleMappingsCollectionId}`);
+  console.log(`APPWRITE_ROLE_SYNC_JOBS_COLLECTION_ID=${roleSyncJobsCollectionId}`);
   console.log(`APPWRITE_SIGNAL_ASSETS_BUCKET_ID=${signalAssetsBucketId}`);
   console.log(`APPWRITE_TEAM_ADMINS_ID=${teamAdminsId}`);
   console.log(`APPWRITE_TEAM_PAID_ID=${teamPaidId}`);
