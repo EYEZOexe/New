@@ -14,6 +14,21 @@ describe the previous backend as the intended architecture.
 - Make Convex the single source of truth for backend state and server functions.
 - Stop creating new backend features on legacy code paths.
 - Provide a migration plan that is explicit about risks, verification, and rollback.
+- Prioritize speed. Signals should be delivered to the website, admin panel, and Discord bot using realtime features.
+
+## Performance / Realtime Targets
+
+We will treat delivery latency as a first-class product requirement:
+
+- **Signal fanout target:** p95 end-to-end delivery under **100ms** from ingestion to:
+- `apps/web` dashboard feed
+- `apps/admin` views that surface signal state
+- `apps/bot` mirror pipeline input
+
+Notes:
+
+- This target assumes reasonable network conditions and region alignment. We still optimize aggressively for the fastest path and measure the real p95 in production.
+- Realtime subscriptions should be the default for "new signals" and "signal updates" rather than polling.
 
 ## Non-Goals
 
@@ -44,4 +59,4 @@ Delete old backend-specific docs and replace them with a Convex-first baseline:
 - Identity mapping across web, bot, and webhook processing.
 - Consistent idempotency semantics for payment webhooks.
 - Data migration and cutover order to avoid downtime.
-
+- Hitting sub-100ms p95 consistently may require careful schema/index design, minimizing server work on the hot path, and using realtime subscriptions over polling.

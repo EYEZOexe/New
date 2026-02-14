@@ -10,6 +10,23 @@
 
 ---
 
+## Performance / Realtime Requirement (Non-Negotiable)
+
+Signal delivery speed is a core product requirement. We optimize for realtime fanout so customers see signals essentially immediately.
+
+Targets:
+
+- **p95 end-to-end signal delivery < 100ms** from ingestion to:
+- `apps/web` dashboard feed
+- `apps/admin` admin visibility views
+- `apps/bot` mirror pipeline input
+
+Implementation constraints:
+
+- Prefer realtime subscriptions over polling wherever possible.
+- Keep ingestion and derived write-paths minimal. No expensive fanout loops in the hot path.
+- Design tables and indexes for the critical queries first, then measure and iterate.
+
 ### Task 1: Create a Convex baseline in-repo
 
 **Files:**
@@ -310,3 +327,60 @@ git rm -r packages/appwrite scripts/appwrite
 git commit -m "chore: remove legacy backend package and scripts"
 ```
 
+### Task 6: Realtime signal delivery for web, admin, and bot
+
+**Files:**
+- Create: `convex/signals.ts`
+- Modify: `apps/web/app/dashboard/DashboardClient.tsx`
+- Modify: `apps/admin/app/page.tsx`
+- Modify: `apps/bot/src/index.ts`
+
+**Step 1: Define realtime-friendly queries**
+
+Create `convex/signals.ts` with:
+
+- a query to fetch the latest N signals for a customer
+- a query/mutation pattern for edits/deletes that keeps ordering stable
+
+**Step 2: Web dashboard subscribes to new signals**
+
+In `apps/web/app/dashboard/DashboardClient.tsx`, replace any polling with a Convex realtime subscription for:
+
+- new signals
+- updates/deletes (if required)
+
+**Step 3: Admin panel uses realtime for operational views**
+
+In `apps/admin/app/page.tsx`, add a Convex query subscription that shows:
+
+- latest signals
+- basic operational health (counts, last-ingested timestamp)
+
+**Step 4: Bot consumes signals from Convex with minimal latency**
+
+In `apps/bot/src/index.ts`, replace the legacy polling for new signals with a Convex subscription or the lowest-latency Convex-supported pattern. Avoid long polling intervals.
+
+**Step 5: Add a latency measurement harness**
+
+Add timestamps at ingestion and at each consumer, and log/emit:
+
+- end-to-end latency per signal
+- rolling p50/p95 in logs (or a simple periodic summary)
+
+**Step 6: Verify**
+
+Run:
+
+```bash
+pnpm -w typecheck
+pnpm -w build
+```
+
+Expected: PASS.
+
+**Step 7: Commit**
+
+```bash
+git add convex/signals.ts apps/web/app/dashboard/DashboardClient.tsx apps/admin/app/page.tsx apps/bot/src/index.ts
+git commit -m "feat: realtime signal delivery with latency instrumentation"
+```

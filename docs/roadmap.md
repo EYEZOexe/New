@@ -16,6 +16,7 @@ Backend is Convex.
 **Now**
 - Establish Convex data model and auth strategy for `apps/web`.
 - Define migration steps and stop adding new backend features to legacy code paths.
+- Define and enforce realtime signal delivery targets (p95 < 100ms) across web, admin, and bot.
 
 **Next**
 - Move payments and access gating to Convex as the source of truth.
@@ -25,6 +26,7 @@ Backend is Convex.
 - Data migration. We need a clear plan to migrate users/subscriptions/signals into Convex without downtime.
 - Auth and identity mapping. We need one stable user identifier across web, bot, and webhook processing.
 - Webhook idempotency and retries. We need to guarantee "at least once" delivery does not create duplicate state.
+- Performance. Sub-100ms p95 delivery requires careful schema/indexing and realtime subscriptions; polling is not acceptable on the critical path.
 
 ## Milestones (Phases)
 
@@ -61,7 +63,7 @@ Goal: signals show up in the dashboard quickly and consistently.
 - [ ] Collector ingestion writes normalized signal docs to Convex
   Exit criteria: new messages appear in Convex and are queryable by customer.
 - [ ] Dashboard feed reads signals and updates near realtime
-  Exit criteria: paid user sees new signals with acceptable latency.
+  Exit criteria: paid user sees new signals with p95 end-to-end delivery < 100ms.
 - [ ] Idempotency + edit/delete semantics defined
   Exit criteria: edits/deletes converge correctly across dashboard + bot.
 
@@ -70,7 +72,7 @@ Goal: signals show up in the dashboard quickly and consistently.
 Goal: signals are mirrored to the customer guild with mapping for updates/deletes.
 
 - [ ] Bot posts new signals into mapped channels
-  Exit criteria: new signal results in one mirrored message.
+  Exit criteria: new signal results in one mirrored message with p95 ingestion -> bot receive < 100ms.
 - [ ] Bot handles edits/deletes
   Exit criteria: mirrored messages update/delete consistently.
 - [ ] Rate-limit handling and retry strategy
@@ -102,4 +104,3 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
 
 - Convex adoption design: `docs/plans/2026-02-14-convex-adoption-design.md`
 - Convex adoption plan: `docs/plans/2026-02-14-convex-adoption-plan.md`
-
