@@ -80,10 +80,25 @@ export function createAppwriteSessionRestClient(params: SessionClientParams) {
     // Some Appwrite versions may respond 200 with JSON instead of a redirect.
     const text = await res.text().catch(() => "");
     const data = text ? safeJsonParse(text) : null;
+
+    // If this wasn't a redirect response, and Appwrite says it's an error, surface that error.
+    const isRedirectStatus = res.status >= 300 && res.status < 400;
+    if (!isRedirectStatus && !res.ok) {
+      const message = (data as any)?.message || `Appwrite error ${res.status} on GET ${path}`;
+      const err: any = new Error(message);
+      err.code = res.status;
+      err.type = (data as any)?.type;
+      err.response = data;
+      throw err;
+    }
+
     const url = (data as any)?.url ?? (data as any)?.uri ?? (data as any)?.location;
     if (typeof url === "string" && url.length) return url;
 
-    throw new Error("Appwrite did not return a redirect Location header for OAuth start");
+    const err: any = new Error("Appwrite did not return a redirect Location header for OAuth start");
+    err.code = res.status;
+    err.response = data;
+    throw err;
   }
 
   return {
