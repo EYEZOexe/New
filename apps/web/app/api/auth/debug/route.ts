@@ -15,8 +15,8 @@ export async function GET() {
   let accountGetError: string | null = null;
   if (token) {
     try {
-      const { account } = createSessionAppwriteClient(token);
-      await account.get();
+      const session = createSessionAppwriteClient(token);
+      await session.getAccount();
       accountGetOk = true;
     } catch (err: any) {
       accountGetOk = false;
@@ -46,3 +46,4 @@ export async function GET() {
     }
   });
 }
+

@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 
-import { ID } from "node-appwrite";
-import { createAdminAppwriteClient, createEmailPasswordSessionToken, getAppwritePublicConfig } from "../../../../lib/appwrite-server";
+import {
+  appwriteUniqueId,
+  createAdminAppwriteClient,
+  createEmailPasswordSessionToken,
+  getAppwritePublicConfig
+} from "../../../../lib/appwrite-server";
 
 type SignupBody = {
   email: string;
@@ -28,9 +32,13 @@ export async function POST(req: Request) {
         : undefined;
 
     // Create user (admin scope)
-    const { users } = createAdminAppwriteClient();
-    // Important: don't pass empty string for `phone` (Appwrite validates phone format).
-    await users.create(ID.unique(), body.email, undefined, body.password, body.name);
+    const admin = createAdminAppwriteClient();
+    await admin.createUser({
+      userId: appwriteUniqueId(),
+      email: body.email,
+      password: body.password,
+      name: body.name
+    });
 
     // Create session token (Appwrite session cookie value)
     const sessionToken = await createEmailPasswordSessionToken(body.email, body.password);

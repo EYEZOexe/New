@@ -41,7 +41,7 @@ export async function POST(req: Request) {
 
     return res;
   } catch (err: any) {
-    // node-appwrite throws AppwriteException with `code` and `message`
+    // Our REST wrapper throws an Error with `code` similar to Appwrite SDK errors.
     const status = typeof err?.code === "number" ? err.code : 500;
     const message =
       status === 429

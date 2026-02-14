@@ -22,18 +22,16 @@ export async function getAuthContext(): Promise<AuthContext | null> {
   // Get the logged-in user using the session secret.
   let user;
   try {
-    const { account } = createSessionAppwriteClient(sessionToken);
-    user = await account.get();
+    const session = createSessionAppwriteClient(sessionToken);
+    user = await session.getAccount();
   } catch {
     return null;
   }
 
   // List team memberships using API key (admin) so we can reliably check gates.
-  const { users } = createAdminAppwriteClient();
-  const memberships = await users.listMemberships(user.$id);
-  const confirmedTeamIds = new Set(
-    memberships.memberships.filter((m) => m.confirm).map((m) => m.teamId)
-  );
+  const admin = createAdminAppwriteClient();
+  const memberships = await admin.listUserMemberships(user.$id);
+  const confirmedTeamIds = new Set(memberships.filter((m) => m.confirm).map((m) => m.teamId));
 
   const paidTeamId = process.env.APPWRITE_TEAM_PAID_ID ?? "paid";
   const adminsTeamId = process.env.APPWRITE_TEAM_ADMINS_ID ?? "admins";

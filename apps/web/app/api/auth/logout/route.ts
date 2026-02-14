@@ -14,8 +14,8 @@ export async function POST() {
 
   if (sessionSecret) {
     try {
-      const { account } = createSessionAppwriteClient(sessionSecret);
-      await account.deleteSession("current");
+      const session = createSessionAppwriteClient(sessionSecret);
+      await session.deleteCurrentSession();
     } catch {
       // ignore; cookie already deleted
     }

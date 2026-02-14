@@ -1,7 +1,7 @@
 import "server-only";
 
-import { Account, Client, Teams, Users } from "node-appwrite";
 import { cookies } from "next/headers";
+import crypto from "node:crypto";
 
 export type AppwriteServerConfig = {
   endpoint: string;
@@ -17,6 +17,71 @@ export type AppwritePublicConfig = {
   sessionCookieName: string;
   cookieDomain?: string;
 };
+
+type AppwriteRestError = Error & {
+  code?: number;
+  type?: string;
+  response?: unknown;
+};
+
+function makeError(message: string, extras?: Partial<AppwriteRestError>): AppwriteRestError {
+  const err: AppwriteRestError = new Error(message);
+  Object.assign(err, extras);
+  return err;
+}
+
+function safeJsonParse(text: string) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+async function appwriteFetchJson<T>(
+  cfg: { endpoint: string; projectId: string; apiKey?: string; sessionToken?: string },
+  path: string,
+  init: RequestInit & { jsonBody?: unknown } = {}
+): Promise<T> {
+  const url = `${cfg.endpoint.replace(/\/$/, "")}${path}`;
+
+  // When using sessions, Appwrite expects cookies named:
+  //   a_session_<projectId>
+  //   a_session_<projectId>_legacy
+  // We store ONLY the cookie VALUE in our own cookie, so we reconstruct both.
+  const sessionCookieHeader = cfg.sessionToken
+    ? `a_session_${cfg.projectId}=${cfg.sessionToken}; a_session_${cfg.projectId}_legacy=${cfg.sessionToken}`
+    : undefined;
+
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      ...(init.jsonBody !== undefined ? { "content-type": "application/json" } : {}),
+      "X-Appwrite-Project": cfg.projectId,
+      ...(cfg.apiKey ? { "X-Appwrite-Key": cfg.apiKey } : {}),
+      ...(sessionCookieHeader ? { Cookie: sessionCookieHeader } : {}),
+      ...(init.headers ?? {})
+    },
+    body:
+      init.jsonBody === undefined
+        ? init.body
+        : typeof init.jsonBody === "string"
+          ? (init.jsonBody as string)
+          : JSON.stringify(init.jsonBody)
+  });
+
+  const text = await res.text();
+  const data = text ? safeJsonParse(text) : null;
+
+  if (res.ok) return data as T;
+
+  // Match Appwrite SDK's error shape enough for existing handlers.
+  throw makeError(data?.message || `Appwrite error ${res.status} on ${init.method || "GET"} ${path}`, {
+    code: res.status,
+    type: data?.type,
+    response: data
+  });
+}
 
 function extractCookieValue(setCookieHeader: string, nameStartsWith: string): string | null {
   // A single Set-Cookie header value looks like:
@@ -61,14 +126,9 @@ export function getAppwriteServerConfig(): AppwriteServerConfig {
   };
 }
 
-export function createPublicAppwriteClient() {
-  const cfg = getAppwritePublicConfig();
-  const client = new Client().setEndpoint(cfg.endpoint).setProject(cfg.projectId);
-
-  return {
-    client,
-    account: new Account(client)
-  };
+export function appwriteUniqueId(): string {
+  // Appwrite ID constraints: max length 36; UUID is 36.
+  return crypto.randomUUID();
 }
 
 /**
@@ -77,16 +137,17 @@ export function createPublicAppwriteClient() {
  * Why this exists:
  * - Appwrite's `/account/sessions/email` sets a session cookie via `Set-Cookie`.
  * - The response body does NOT include the cookie value.
- * - The Node SDK's `Client.setSession(...)` expects the same cookie value.
+ * - We store the cookie value in our own HttpOnly cookie for SSR/session usage.
  */
 export async function createEmailPasswordSessionToken(email: string, password: string): Promise<string> {
   const cfg = getAppwritePublicConfig();
 
-  const res = await fetch(`${cfg.endpoint}/account/sessions/email`, {
+  const res = await fetch(`${cfg.endpoint.replace(/\/$/, "")}/account/sessions/email`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       "X-Appwrite-Project": cfg.projectId,
+      // Keep response format stable for cookie/session behavior across versions.
       "X-Appwrite-Response-Format": "1.6.0"
     },
     body: JSON.stringify({ email, password })
@@ -95,7 +156,6 @@ export async function createEmailPasswordSessionToken(email: string, password: s
   const data = (await res.json().catch(() => null)) as any;
   if (!res.ok) {
     const message = data?.message || `Login failed (${res.status})`;
-    // Match node-appwrite's error shape enough for existing handlers.
     const err: any = new Error(message);
     err.code = res.status;
     err.type = data?.type;
@@ -119,31 +179,54 @@ export async function createEmailPasswordSessionToken(email: string, password: s
 
 export function createAdminAppwriteClient() {
   const cfg = getAppwriteServerConfig();
-  const client = new Client().setEndpoint(cfg.endpoint).setProject(cfg.projectId).setKey(cfg.apiKey);
 
   return {
-    client,
-    account: new Account(client),
-    teams: new Teams(client),
-    users: new Users(client)
+    async createUser(params: { userId: string; email: string; password: string; name?: string }) {
+      await appwriteFetchJson(cfg, `/users`, {
+        method: "POST",
+        jsonBody: {
+          userId: params.userId,
+          email: params.email,
+          password: params.password,
+          name: params.name
+        }
+      });
+    },
+    async listUserMemberships(userId: string) {
+      const res = await appwriteFetchJson<{ memberships: Array<{ teamId: string; confirm: boolean }> }>(
+        cfg,
+        `/users/${userId}/memberships`,
+        { method: "GET" }
+      );
+      return res.memberships;
+    }
   };
 }
 
 export function createSessionAppwriteClient(sessionSecret?: string) {
-  const cfg = getAppwritePublicConfig();
+  const publicCfg = getAppwritePublicConfig();
 
   const secret = sessionSecret ?? "";
   if (!secret) throw new Error("No session");
 
-  const client = new Client().setEndpoint(cfg.endpoint).setProject(cfg.projectId).setSession(secret);
-
-  // `setSession` expects the **Appwrite session cookie value** (a_session_* value).
-  // We store that value in our custom HttpOnly cookie.
+  const cfg = {
+    endpoint: publicCfg.endpoint,
+    projectId: publicCfg.projectId,
+    sessionToken: secret
+  };
 
   return {
-    client,
-    account: new Account(client),
-    teams: new Teams(client)
+    async getAccount() {
+      return await appwriteFetchJson<any>(cfg, `/account`, { method: "GET" });
+    },
+    async deleteCurrentSession() {
+      // Returns 204 on success (no body). Our JSON helper treats empty body as null.
+      await appwriteFetchJson<any>(cfg, `/account/sessions/current`, { method: "DELETE" });
+    },
+    async listTeams() {
+      const res = await appwriteFetchJson<{ teams: any[] }>(cfg, `/teams`, { method: "GET" });
+      return res.teams;
+    }
   };
 }
 
@@ -154,8 +237,8 @@ export async function getLoggedInUser() {
     const secret = cookieStore.get(cfg.sessionCookieName)?.value;
     if (!secret) return null;
 
-    const { account } = createSessionAppwriteClient(secret);
-    return await account.get();
+    const session = createSessionAppwriteClient(secret);
+    return await session.getAccount();
   } catch {
     return null;
   }
@@ -167,7 +250,7 @@ export async function listCurrentUserTeams() {
   const secret = cookieStore.get(cfg.sessionCookieName)?.value;
   if (!secret) throw new Error("No session");
 
-  const { teams } = createSessionAppwriteClient(secret);
-  const res = await teams.list();
-  return res.teams;
+  const session = createSessionAppwriteClient(secret);
+  return await session.listTeams();
 }
+
