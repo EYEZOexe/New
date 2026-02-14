@@ -18,7 +18,13 @@ RUN pnpm --filter @g3netic/bot build
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=builder /app/apps/bot/dist ./dist
+# Keep the workspace layout so Node resolves deps from `apps/bot/node_modules`.
+COPY --from=builder /app/apps/bot/dist ./apps/bot/dist
+
+# pnpm creates package-level node_modules that symlink into the root .pnpm store,
+# so we need BOTH the root `node_modules` and the package `apps/bot/node_modules`.
 COPY --from=deps /app/node_modules ./node_modules
-COPY apps/bot/package.json ./package.json
-CMD ["node", "dist/index.js"]
+COPY --from=deps /app/apps/bot/node_modules ./apps/bot/node_modules
+
+COPY apps/bot/package.json ./apps/bot/package.json
+CMD ["node", "apps/bot/dist/index.js"]
