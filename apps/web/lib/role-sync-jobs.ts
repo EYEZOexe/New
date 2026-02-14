@@ -9,6 +9,8 @@ export function buildRoleSyncJobDoc(opts: {
   subscriptionStatus: string | null;
   plan: string | null;
   mappingDocs: RoleMappingDoc[];
+  statusOverride?: "pending" | "processing" | "done" | "failed";
+  lastError?: string | null;
 }) {
   const desiredRoleIds =
     opts.discordUserId && opts.guildId
@@ -23,12 +25,13 @@ export function buildRoleSyncJobDoc(opts: {
     userId: opts.userId,
     guildId: opts.guildId,
     desiredRoleIdsJson: JSON.stringify(desiredRoleIds),
-    status: "pending",
+    status: opts.statusOverride ?? "pending",
     attempts: 0
   };
 
   // Avoid writing explicit nulls; Appwrite versions differ on nullable behavior.
   if (opts.discordUserId) doc.discordUserId = opts.discordUserId;
+  if (opts.lastError) doc.lastError = opts.lastError;
 
   return doc;
 }

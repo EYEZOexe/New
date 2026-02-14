@@ -132,13 +132,20 @@ export async function GET(req: Request) {
       ? mappingDocs.filter((d: any) => d?.guildId === customerGuildId)
       : mappingDocs;
 
+    const missingGuildId = !customerGuildId;
     const jobDoc = buildRoleSyncJobDoc({
       userId: auth.userId,
       discordUserId,
       guildId: customerGuildId,
       subscriptionStatus,
       plan,
-      mappingDocs: filteredMappings
+      mappingDocs: filteredMappings,
+      ...(missingGuildId
+        ? {
+            statusOverride: "failed" as const,
+            lastError: "missing_customer_guild_id"
+          }
+        : {})
     });
 
     await adminDb.upsertDocumentPut({
@@ -156,4 +163,3 @@ export async function GET(req: Request) {
   res.headers.set("cache-control", "no-store");
   return res;
 }
-
