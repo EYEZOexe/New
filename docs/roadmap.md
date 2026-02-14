@@ -97,6 +97,8 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
   Exit criteria: debug endpoints are not reachable in production builds.
 - [x] Add Appwrite connectivity ping button on dashboard (2026-02-14)
   Exit criteria: logged-in user can hit `/api/appwrite/ping` from dashboard and see status/latency.
+- [x] Bot: normalize Appwrite endpoint + log `/v1/ping` on startup (2026-02-14)
+  Exit criteria: bot logs show resolved endpoint and ping status/snippet to debug 404/HTTP issues quickly.
 
 ## Decision Log
 
