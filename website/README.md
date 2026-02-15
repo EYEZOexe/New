@@ -1,8 +1,41 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is a [Next.js](https://nextjs.org) app with Convex Auth email/password login and signup.
+
+## Environment
+
+Create `.env.local` from `.env.example` and set:
+
+```bash
+# Convex Cloud origin (backend/data API)
+NEXT_PUBLIC_CONVEX_URL=https://convex-backend.g3netic.com
+CONVEX_SELF_HOSTED_URL=https://convex-backend.g3netic.com
+CONVEX_SELF_HOSTED_ADMIN_KEY=__SET_ME__
+# Convex Site origin (dashboard/UI origin)
+CONVEX_SITE_URL=https://convex.g3netic.com
+```
+
+Domain mapping in this project:
+- `https://convex-backend.g3netic.com` = Convex Cloud/backend origin
+- `https://convex.g3netic.com` = Convex Site/dashboard origin
+
+## Convex Backend
+
+This app includes Convex backend code in `website/convex`.
+
+To push schema/functions to your self-hosted Convex instance:
+
+```bash
+bunx convex dev --once
+```
+
+For self-hosted deployments, Convex CLI requires both:
+- `CONVEX_SELF_HOSTED_URL`
+- `CONVEX_SELF_HOSTED_ADMIN_KEY`
+
+For production, set `CONVEX_SITE_URL` in your Convex deployment environment.
 
 ## Getting Started
 
-First, run the development server:
+Then run the development server:
 
 ```bash
 npm run dev

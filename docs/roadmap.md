@@ -14,8 +14,9 @@ Backend is Convex.
 ## Current Status
 
 **Now**
-- Stand up self-hosted Convex deployment and configure Convex Auth env (CONVEX_SITE_URL, JWT keys/JWKS, NEXT_PUBLIC_CONVEX_URL) so signup/login works end-to-end.
-- Establish Convex data model and auth strategy for `apps/web` and `apps/admin`.
+- Validate website signup/login end-to-end against self-hosted Convex (`https://convex-backend.g3netic.com`) with production env values (`CONVEX_SITE_URL`, JWT keys/JWKS, `NEXT_PUBLIC_CONVEX_URL`), using domain mapping:
+  `convex-backend.g3netic.com` = backend origin and `convex.g3netic.com` = site/dashboard origin.
+- Establish Convex data model and auth strategy for `website`; `admin` does not require customer signup/login.
 - Define migration steps and stop adding new backend features to legacy code paths.
 - Define and enforce realtime signal delivery targets (p95 < 100ms) across web, admin, and bot.
 
@@ -27,6 +28,7 @@ Backend is Convex.
 - Data migration. We need a clear plan to migrate users/subscriptions/signals into Convex without downtime.
 - Auth and identity mapping. We need one stable user identifier across web, bot, and webhook processing.
 - Convex Auth configuration. Self-hosted Convex must be configured with signing keys/JWKS and correct site URL, otherwise auth flows will fail at runtime.
+- Convex deployment credentials. We need `CONVEX_SELF_HOSTED_ADMIN_KEY` available in CI/deploy to push schema/functions to self-hosted Convex.
 - Bun migration consistency. Build and CI/deploy tooling must stay aligned with Bun lockfiles/workspaces or deployments will fail before app startup.
 - Webhook idempotency and retries. We need to guarantee "at least once" delivery does not create duplicate state.
 - Performance. Sub-100ms p95 delivery requires careful schema/indexing and realtime subscriptions; polling is not acceptable on the critical path.
@@ -37,10 +39,10 @@ Backend is Convex.
 
 - [ ] Convex project initialized for this repo
   Exit criteria: `apps/web` and backend functions can read/write Convex in dev.
-- [x] Cut over web/admin auth to Convex Auth (2026-02-14)
-  Exit criteria: `apps/web` and `apps/admin` build and use Convex Auth (email + password); legacy Appwrite auth is removed.
-- [ ] Schema defined for core entities (users, subscriptions, signals, discord linkage)
-  Exit criteria: schema exists with indexes needed for critical queries.
+- [x] Cut over website auth to Convex Auth (email + password) (2026-02-15)
+  Exit criteria: `website` build includes Convex Auth login/signup and uses `NEXT_PUBLIC_CONVEX_URL`; admin is explicitly out of scope for signup/login.
+- [x] Schema defined for core entities (users, subscriptions, signals, discord linkage) (2026-02-15)
+  Exit criteria: schema exists with indexes needed for critical queries (`website/convex/schema.ts`).
 
 ### Phase 1: Payments + Access (Sell.app webhook)
 
@@ -102,6 +104,12 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
   Exit criteria: Docker builds copy `bun.lock` and use Bun install/build commands instead of pnpm artifacts.
 - [x] Add per-service Coolify Dockerfiles for `admin` and `website` (2026-02-15)
   Exit criteria: each Next.js app can build and run independently via Bun in Docker using standalone output.
+- [x] Scope auth to website only (no signup/login requirement for admin) (2026-02-15)
+  Exit criteria: website provides Convex Auth login/signup flow; admin has no signup/login dependency.
+- [x] Add initial Convex backend scaffold for website auth + core tables (2026-02-15)
+  Exit criteria: `website/convex` includes auth config, auth/http functions, and base schema/query files deployable to self-hosted Convex.
+- [x] Clarify Convex env domain mapping in docs/env examples (2026-02-15)
+  Exit criteria: docs explicitly map backend origin vs site/dashboard origin for Convex URLs.
 
 ## Decision Log
 
@@ -109,6 +117,8 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
 |---|---|---|
 | 2026-02-14 | Pivot backend to Convex and hard-reset docs/roadmap | `docs/plans/2026-02-14-convex-adoption-design.md` |
 | 2026-02-14 | Hard cutover auth to Convex Auth (email+password), start fresh (no Appwrite migration) | `docs/plans/2026-02-14-convex-auth-hard-cutover-design.md` |
+| 2026-02-15 | Limit signup/login scope to website only; admin auth requirement removed | N/A |
+| 2026-02-15 | Use `convex-backend.g3netic.com` as backend origin and `convex.g3netic.com` as site/dashboard origin in env docs | N/A |
 
 ## Links
 
