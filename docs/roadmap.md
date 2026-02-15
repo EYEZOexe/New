@@ -27,6 +27,7 @@ Backend is Convex.
 - Data migration. We need a clear plan to migrate users/subscriptions/signals into Convex without downtime.
 - Auth and identity mapping. We need one stable user identifier across web, bot, and webhook processing.
 - Convex Auth configuration. Self-hosted Convex must be configured with signing keys/JWKS and correct site URL, otherwise auth flows will fail at runtime.
+- Bun migration consistency. Build and CI/deploy tooling must stay aligned with Bun lockfiles/workspaces or deployments will fail before app startup.
 - Webhook idempotency and retries. We need to guarantee "at least once" delivery does not create duplicate state.
 - Performance. Sub-100ms p95 delivery requires careful schema/indexing and realtime subscriptions; polling is not acceptable on the critical path.
 
@@ -97,6 +98,8 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
 
 - [x] Reset docs and roadmap for Convex migration (2026-02-14)
   Exit criteria: docs no longer describe the legacy backend as the plan of record.
+- [x] Align Docker build files with Bun lockfile/workspace setup (2026-02-15)
+  Exit criteria: Docker builds copy `bun.lock` and use Bun install/build commands instead of pnpm artifacts.
 
 ## Decision Log
 
