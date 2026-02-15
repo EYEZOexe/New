@@ -20,7 +20,7 @@ export default function LoginPage() {
 
     try {
       await signIn("password", { email, password, flow: "signIn" });
-      router.push("/");
+      router.push("/dashboard");
     } catch (submitError) {
       const message =
         submitError instanceof Error ? submitError.message : "Login failed";

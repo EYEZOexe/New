@@ -28,6 +28,7 @@ Backend is Convex.
 - Data migration. We need a clear plan to migrate users/subscriptions/signals into Convex without downtime.
 - Auth and identity mapping. We need one stable user identifier across web, bot, and webhook processing.
 - Convex Auth configuration. Self-hosted Convex must be configured with signing keys/JWKS and correct site URL, otherwise auth flows will fail at runtime.
+- Convex Auth built-in site URL. Current self-hosted built-in `CONVEX_SITE_URL` resolves to `http://convex.g3netic.com` instead of `https://convex-backend.g3netic.com/http`, which causes sign-in success but authenticated queries to fail until infrastructure config is corrected.
 - Convex deployment credentials. We need `CONVEX_SELF_HOSTED_ADMIN_KEY` available in CI/deploy to push schema/functions to self-hosted Convex.
 - Bun migration consistency. Build and CI/deploy tooling must stay aligned with Bun lockfiles/workspaces or deployments will fail before app startup.
 - Webhook idempotency and retries. We need to guarantee "at least once" delivery does not create duplicate state.

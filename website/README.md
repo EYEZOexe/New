@@ -37,6 +37,19 @@ For self-hosted deployments, Convex CLI requires both:
 - `CONVEX_SELF_HOSTED_URL`
 - `CONVEX_SELF_HOSTED_ADMIN_KEY`
 
+If auth signs in but the app immediately shows signed out, verify issuer/jwks:
+
+```bash
+curl https://convex-backend.g3netic.com/http/.well-known/openid-configuration
+```
+
+Expected `issuer`:
+- `https://convex-backend.g3netic.com/http`
+
+If issuer is wrong, fix your self-hosted Convex service-level site origin so the
+built-in `CONVEX_SITE_URL` resolves to backend `/http`, then redeploy/restart
+the Convex backend service.
+
 After updating env vars, verify auth endpoints:
 
 ```bash

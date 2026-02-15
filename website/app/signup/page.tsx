@@ -20,7 +20,7 @@ export default function SignupPage() {
 
     try {
       await signIn("password", { email, password, flow: "signUp" });
-      router.push("/");
+      router.push("/dashboard");
     } catch (submitError) {
       const message =
         submitError instanceof Error ? submitError.message : "Signup failed";

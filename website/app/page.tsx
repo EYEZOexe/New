@@ -41,13 +41,21 @@ export default function Home() {
               </Link>
             </>
           ) : (
-            <button
-              type="button"
-              onClick={() => signOut()}
-              className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-900"
-            >
-              Log out
-            </button>
+            <>
+              <Link
+                href="/dashboard"
+                className="rounded-md bg-zinc-900 px-4 py-2 text-center text-sm font-medium text-white"
+              >
+                Go to dashboard
+              </Link>
+              <button
+                type="button"
+                onClick={() => signOut()}
+                className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-900"
+              >
+                Log out
+              </button>
+            </>
           )}
         </div>
       </section>
