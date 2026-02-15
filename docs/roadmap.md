@@ -15,7 +15,7 @@ Backend is Convex.
 
 **Now**
 - Validate website signup/login end-to-end against self-hosted Convex (`https://convex-backend.g3netic.com`) with production env values (`CONVEX_SITE_URL`, JWT keys/JWKS, `NEXT_PUBLIC_CONVEX_URL`), using domain mapping:
-  `convex-backend.g3netic.com` = backend origin and `convex.g3netic.com` = site/dashboard origin.
+  `convex-backend.g3netic.com` = backend origin, `convex-backend.g3netic.com/http` = auth/OIDC routes, and `convex.g3netic.com` = dashboard origin.
 - Establish Convex data model and auth strategy for `website`; `admin` does not require customer signup/login.
 - Define migration steps and stop adding new backend features to legacy code paths.
 - Define and enforce realtime signal delivery targets (p95 < 100ms) across web, admin, and bot.
@@ -110,6 +110,8 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
   Exit criteria: `website/convex` includes auth config, auth/http functions, and base schema/query files deployable to self-hosted Convex.
 - [x] Clarify Convex env domain mapping in docs/env examples (2026-02-15)
   Exit criteria: docs explicitly map backend origin vs site/dashboard origin for Convex URLs.
+- [x] Clarify self-hosted Convex `/http` auth route prefix in env/docs (2026-02-16)
+  Exit criteria: `CONVEX_SITE_URL` examples point to backend `/http` origin where `/.well-known/*` endpoints are reachable.
 
 ## Decision Log
 
@@ -119,6 +121,7 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
 | 2026-02-14 | Hard cutover auth to Convex Auth (email+password), start fresh (no Appwrite migration) | `docs/plans/2026-02-14-convex-auth-hard-cutover-design.md` |
 | 2026-02-15 | Limit signup/login scope to website only; admin auth requirement removed | N/A |
 | 2026-02-15 | Use `convex-backend.g3netic.com` as backend origin and `convex.g3netic.com` as site/dashboard origin in env docs | N/A |
+| 2026-02-16 | Self-hosted Convex auth routes are served under `/http`; `CONVEX_SITE_URL` must use backend `/http` origin | N/A |
 
 ## Links
 

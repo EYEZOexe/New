@@ -9,13 +9,15 @@ Create `.env.local` from `.env.example` and set:
 NEXT_PUBLIC_CONVEX_URL=https://convex-backend.g3netic.com
 CONVEX_SELF_HOSTED_URL=https://convex-backend.g3netic.com
 CONVEX_SELF_HOSTED_ADMIN_KEY=__SET_ME__
-# Convex Site origin (dashboard/UI origin)
-CONVEX_SITE_URL=https://convex.g3netic.com
+# Convex Auth/OIDC origin for self-hosted HTTP actions (note the /http prefix)
+CONVEX_SITE_URL=https://convex-backend.g3netic.com/http
+NEXT_PUBLIC_CONVEX_SITE_URL=https://convex-backend.g3netic.com/http
 ```
 
 Domain mapping in this project:
 - `https://convex-backend.g3netic.com` = Convex Cloud/backend origin
-- `https://convex.g3netic.com` = Convex Site/dashboard origin
+- `https://convex-backend.g3netic.com/http` = Convex Auth/OIDC HTTP routes
+- `https://convex.g3netic.com` = Convex dashboard UI
 
 ## Convex Backend
 
@@ -31,7 +33,12 @@ For self-hosted deployments, Convex CLI requires both:
 - `CONVEX_SELF_HOSTED_URL`
 - `CONVEX_SELF_HOSTED_ADMIN_KEY`
 
-For production, set `CONVEX_SITE_URL` in your Convex deployment environment.
+After updating env vars, verify auth endpoints:
+
+```bash
+curl https://convex-backend.g3netic.com/http/.well-known/openid-configuration
+curl https://convex-backend.g3netic.com/http/.well-known/jwks.json
+```
 
 ## Getting Started
 
