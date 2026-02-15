@@ -7,6 +7,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/convex/_generated/api";
 
+function decodeJwtSegment(segment: string): unknown {
+  const base64 = segment.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+  const json = atob(padded);
+  return JSON.parse(json) as unknown;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const { signOut } = useAuthActions();
@@ -28,6 +35,34 @@ export default function DashboardPage() {
     if (!token) return null;
     // Avoid printing the whole token in the UI.
     return `${token.slice(0, 12)}...${token.slice(-8)}`;
+  }, [token]);
+
+  const tokenClaims = useMemo(() => {
+    if (!token) return null;
+    try {
+      const [headerSeg, payloadSeg] = token.split(".");
+      if (!headerSeg || !payloadSeg) return { error: "malformed" } as const;
+      const header = decodeJwtSegment(headerSeg) as Record<string, unknown>;
+      const payload = decodeJwtSegment(payloadSeg) as Record<string, unknown>;
+      return {
+        header: {
+          alg: header.alg,
+          kid: header.kid,
+          typ: header.typ,
+        },
+        payload: {
+          iss: payload.iss,
+          aud: payload.aud,
+          sub: typeof payload.sub === "string" ? payload.sub : null,
+          iat: payload.iat,
+          exp: payload.exp,
+        },
+      };
+    } catch (e) {
+      return {
+        error: e instanceof Error ? e.message : "decode failed",
+      } as const;
+    }
   }, [token]);
 
   async function onLogout() {
@@ -105,6 +140,15 @@ export default function DashboardPage() {
             <span className="font-mono text-xs">
               {JSON.stringify(connectionState)}
             </span>
+          </div>
+          <div className="mt-3">
+            <div className="flex items-center justify-between gap-4">
+              <span>JWT claims (decoded)</span>
+              <span className="font-mono text-xs">iss/aud/sub/kid</span>
+            </div>
+            <pre className="mt-2 max-h-48 overflow-auto rounded-md border border-zinc-200 bg-white p-2 font-mono text-[11px] leading-snug text-zinc-800">
+              {JSON.stringify(tokenClaims, null, 2)}
+            </pre>
           </div>
         </div>
 
