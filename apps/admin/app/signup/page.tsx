@@ -1,11 +1,11 @@
 "use client";
 
+import { useAuthActions } from "@convex-dev/auth/react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import Link from "next/link";
-import { useAuthActions } from "@convex-dev/auth/react";
 
-export default function LoginPage() {
+export default function SignupPage() {
   const router = useRouter();
   const { signIn } = useAuthActions();
   const [email, setEmail] = useState("");
@@ -19,12 +19,11 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await signIn("password", { email, password, flow: "signIn" });
-
-      router.push("/dashboard");
+      await signIn("password", { email, password, flow: "signUp" });
+      router.push("/");
       router.refresh();
     } catch (err: any) {
-      setError(err?.message ?? "Login failed");
+      setError(err?.message ?? "Signup failed");
     } finally {
       setLoading(false);
     }
@@ -32,9 +31,9 @@ export default function LoginPage() {
 
   return (
     <main style={{ padding: 24, maxWidth: 420 }}>
-      <h1>Login</h1>
+      <h1>Create admin account</h1>
       <p>
-        Don&apos;t have an account? <Link href="/signup">Sign up</Link>
+        Already have an account? <Link href="/login">Login</Link>
       </p>
 
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 12 }}>
@@ -55,13 +54,14 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             type="password"
-            autoComplete="current-password"
+            autoComplete="new-password"
             required
+            minLength={8}
           />
         </label>
 
         <button disabled={loading} type="submit">
-          {loading ? "Logging in..." : "Login"}
+          {loading ? "Creating..." : "Sign up"}
         </button>
       </form>
 
@@ -73,3 +73,4 @@ export default function LoginPage() {
     </main>
   );
 }
+

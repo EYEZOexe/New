@@ -10,13 +10,16 @@
     "build": "turbo build --concurrency=1",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
-    "format": "prettier -w .",
-    "appwrite:bootstrap": "node scripts/appwrite/bootstrap.mjs",
-    "appwrite:deploy:sellapp-webhook": "node scripts/appwrite/deploy-sellapp-webhook.mjs --env-file .env.appwrite"
+    "format": "prettier -w ."
   },
   "devDependencies": {
     "prettier": "^3.3.3",
     "turbo": "^2.3.3",
     "typescript": "^5.7.3"
+  },
+  "dependencies": {
+    "@auth/core": "0.37.0",
+    "@convex-dev/auth": "^0.0.90",
+    "convex": "^1.31.7"
   }
 }

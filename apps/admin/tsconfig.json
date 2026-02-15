@@ -10,9 +10,6 @@
     "paths": {
       "@g3netic/shared": [
         "../../packages/shared/src"
-      ],
-      "@g3netic/appwrite": [
-        "../../packages/appwrite/src"
       ]
     },
     "allowJs": true,

@@ -1,9 +1,9 @@
 "use client";
 
+import { useAuthActions } from "@convex-dev/auth/react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import Link from "next/link";
-import { useAuthActions } from "@convex-dev/auth/react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -20,8 +20,7 @@ export default function LoginPage() {
 
     try {
       await signIn("password", { email, password, flow: "signIn" });
-
-      router.push("/dashboard");
+      router.push("/");
       router.refresh();
     } catch (err: any) {
       setError(err?.message ?? "Login failed");
@@ -32,9 +31,9 @@ export default function LoginPage() {
 
   return (
     <main style={{ padding: 24, maxWidth: 420 }}>
-      <h1>Login</h1>
+      <h1>Admin Login</h1>
       <p>
-        Don&apos;t have an account? <Link href="/signup">Sign up</Link>
+        Need an account? <Link href="/signup">Sign up</Link>
       </p>
 
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 12 }}>
@@ -73,3 +72,4 @@ export default function LoginPage() {
     </main>
   );
 }
+
