@@ -112,6 +112,8 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
   Exit criteria: docs explicitly map backend origin vs site/dashboard origin for Convex URLs.
 - [x] Clarify self-hosted Convex `/http` auth route prefix in env/docs (2026-02-16)
   Exit criteria: `CONVEX_SITE_URL` examples point to backend `/http` origin where `/.well-known/*` endpoints are reachable.
+- [x] Clarify Convex client URL vs auth URL to prevent websocket 404s (2026-02-16)
+  Exit criteria: docs explicitly require `NEXT_PUBLIC_CONVEX_URL` without `/http` and `CONVEX_SITE_URL` with `/http` for self-hosted auth routes.
 
 ## Decision Log
 
@@ -122,6 +124,7 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
 | 2026-02-15 | Limit signup/login scope to website only; admin auth requirement removed | N/A |
 | 2026-02-15 | Use `convex-backend.g3netic.com` as backend origin and `convex.g3netic.com` as site/dashboard origin in env docs | N/A |
 | 2026-02-16 | Self-hosted Convex auth routes are served under `/http`; `CONVEX_SITE_URL` must use backend `/http` origin | N/A |
+| 2026-02-16 | `NEXT_PUBLIC_CONVEX_URL` must not include `/http` to avoid websocket sync 404s (`/http/api/*`) | N/A |
 
 ## Links
 

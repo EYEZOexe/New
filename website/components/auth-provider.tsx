@@ -10,7 +10,18 @@ if (!convexUrl) {
   throw new Error("Missing NEXT_PUBLIC_CONVEX_URL");
 }
 
-const convex = new ConvexReactClient(convexUrl);
+function normalizeConvexDeploymentUrl(rawUrl: string) {
+  const url = new URL(rawUrl);
+  const pathname = url.pathname.replace(/\/+$/, "");
+  // Self-hosted docs often reference /http for HTTP actions, but ConvexReactClient
+  // must target the deployment origin (no /http) for websocket sync.
+  if (pathname === "/http") {
+    url.pathname = "/";
+  }
+  return url.toString().replace(/\/$/, "");
+}
+
+const convex = new ConvexReactClient(normalizeConvexDeploymentUrl(convexUrl));
 
 type AuthProviderProps = {
   children: ReactNode;

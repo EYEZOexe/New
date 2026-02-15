@@ -19,6 +19,10 @@ Domain mapping in this project:
 - `https://convex-backend.g3netic.com/http` = Convex Auth/OIDC HTTP routes
 - `https://convex.g3netic.com` = Convex dashboard UI
 
+Important:
+- `NEXT_PUBLIC_CONVEX_URL` must be backend origin without `/http`.
+- `CONVEX_SITE_URL` should use backend `/http` origin for self-hosted auth routes.
+
 ## Convex Backend
 
 This app includes Convex backend code in `website/convex`.
