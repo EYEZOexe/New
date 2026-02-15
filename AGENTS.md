@@ -13,8 +13,8 @@ This file defines project-specific rules for Codex/agents working in this repo.
 - TypeScript hygiene: validate untrusted input (API routes, webhooks) and fail with clear errors.
 - Error handling: use early returns, avoid deep nesting.
 - Error handling: return consistent error shapes from API routes.
-- Changes should include verification: run the most relevant `pnpm` script(s) (at minimum `pnpm -w typecheck`).
-- Changes should include verification: if you claim "build works", run `pnpm -w build`.
+- Changes should include verification: run the most relevant `bun` script(s) (at minimum `bun run typecheck`).
+- Changes should include verification: if you claim "build works", run `bun run build`.
 
 ## Living Roadmap Is The Source Of Truth
 

@@ -19,19 +19,19 @@ This repository contains the monorepo for a single-seller "signals" SaaS:
 
 ## Local Setup (Dev)
 
-Prereqs: Node 20+, pnpm
+Prereqs: Bun (repo uses Bun for installs and runtime)
 
 ```bash
-pnpm install
-pnpm dev
+bun install
+bun run dev
 ```
 
 ### Per-app dev
 
 ```bash
-pnpm --filter @g3netic/web dev
-pnpm --filter @g3netic/admin dev
-pnpm --filter @g3netic/bot dev
+bun run --bun --filter @g3netic/web dev
+bun run --bun --filter @g3netic/admin dev
+bun run --bun --filter @g3netic/bot dev
 ```
 
 ## Environment Variables
