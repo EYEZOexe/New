@@ -1,23 +1,28 @@
 "use client";
 
 import { useAuthActions, useAuthToken } from "@convex-dev/auth/react";
-import { useConvexAuth } from "convex/react";
+import { useConvexAuth, useConvexConnectionState, useQuery } from "convex/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { api } from "@/convex/_generated/api";
 
 export default function DashboardPage() {
   const router = useRouter();
   const { signOut } = useAuthActions();
   const token = useAuthToken();
   const { isAuthenticated, isLoading } = useConvexAuth();
+  const connectionState = useConvexConnectionState();
+  const backendIsAuthenticated = useQuery(api.auth.isAuthenticated);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.replace("/login");
+    // Only redirect if we truly have no auth token at all. If there's a token
+    // but Convex doesn't consider the client authenticated, render debug info.
+    if (!isLoading && !isAuthenticated && token == null) {
+      router.replace("/login?redirectTo=/dashboard");
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, isLoading, router, token]);
 
   const tokenPreview = useMemo(() => {
     if (!token) return null;
@@ -47,8 +52,8 @@ export default function DashboardPage() {
     );
   }
 
-  // While redirecting to /login.
-  if (!isAuthenticated) {
+  // While redirecting to /login (token is null).
+  if (!isAuthenticated && token == null) {
     return null;
   }
 
@@ -59,8 +64,8 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-2xl font-semibold text-zinc-900">Dashboard</h1>
             <p className="mt-2 text-sm text-zinc-600">
-              If you can see this page, `useConvexAuth()` believes you are signed
-              in.
+              This page shows client auth state, backend auth state, and
+              connection state.
             </p>
           </div>
 
@@ -76,12 +81,30 @@ export default function DashboardPage() {
 
         <div className="mt-6 rounded-md border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-700">
           <div className="flex items-center justify-between gap-4">
-            <span>Auth state</span>
-            <span className="font-medium">signed in</span>
+            <span>Auth state (useConvexAuth)</span>
+            <span className="font-medium">
+              {isAuthenticated ? "signed in" : "signed out"}
+            </span>
           </div>
           <div className="mt-3 flex items-center justify-between gap-4">
             <span>JWT present (provider)</span>
             <span className="font-mono text-xs">{tokenPreview ?? "null"}</span>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-4">
+            <span>Backend `auth:isAuthenticated`</span>
+            <span className="font-medium">
+              {backendIsAuthenticated === undefined
+                ? "loading"
+                : backendIsAuthenticated
+                  ? "true"
+                  : "false"}
+            </span>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-4">
+            <span>Connection</span>
+            <span className="font-mono text-xs">
+              {JSON.stringify(connectionState)}
+            </span>
           </div>
         </div>
 
@@ -94,4 +117,3 @@ export default function DashboardPage() {
     </main>
   );
 }
-
