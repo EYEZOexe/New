@@ -1,8 +1,0 @@
-{
-  "name": "@g3netic/function-sellapp-webhook",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "test": "node --test"
-  }
-}

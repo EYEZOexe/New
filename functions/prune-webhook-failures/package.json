@@ -1,9 +1,0 @@
-{
-  "name": "@g3netic/function-prune-webhook-failures",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "test": "node --test"
-  }
-}
-

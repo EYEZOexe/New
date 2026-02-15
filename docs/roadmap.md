@@ -100,6 +100,8 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
   Exit criteria: docs no longer describe the legacy backend as the plan of record.
 - [x] Align Docker build files with Bun lockfile/workspace setup (2026-02-15)
   Exit criteria: Docker builds copy `bun.lock` and use Bun install/build commands instead of pnpm artifacts.
+- [x] Add per-service Coolify Dockerfiles for `admin` and `website` (2026-02-15)
+  Exit criteria: each Next.js app can build and run independently via Bun in Docker using standalone output.
 
 ## Decision Log
 
