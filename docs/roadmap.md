@@ -19,6 +19,7 @@ Backend is Convex.
 - Establish Convex data model and auth strategy for `website`; `admin` does not require customer signup/login.
 - Define migration steps and stop adding new backend features to legacy code paths.
 - Define and enforce realtime signal delivery targets (p95 < 100ms) across web, admin, and bot.
+- Connector discovery bootstrap improved: plugin now sends accessible guild/channel metadata (IDs + names) even before source mappings exist, and admin config filters source channels by selected guild. (2026-02-16)
 
 **Next**
 - Move payments and access gating to Convex as the source of truth.
@@ -117,6 +118,10 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
   Exit criteria: docs explicitly require `NEXT_PUBLIC_CONVEX_URL` without `/http` and `CONVEX_SITE_URL` with `/http` for self-hosted auth routes.
 - [x] Fix Convex Auth JWT header compatibility (`kid`/`typ`) for self-hosted Convex (2026-02-16)
   Exit criteria: website auth results in `useConvexAuth() === signed in` and backend `auth:isAuthenticated === true` after sign-in.
+- [x] Bootstrap connector discovery metadata without preconfigured sources (2026-02-16)
+  Exit criteria: discovery sync populates guild/channel selectors with names + IDs for a fresh connector.
+- [x] Improve admin connector selection UX with guild-scoped channel filtering (2026-02-16)
+  Exit criteria: source channel picker only shows channels from the selected guild; mapping/source tables show readable names with IDs.
 
 ## Decision Log
 

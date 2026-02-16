@@ -251,16 +251,60 @@ function listAccessibleChannelsForGuild(guildId: string) {
     return out;
 }
 
+function listAccessibleGuilds() {
+    const store: any = GuildStore as any;
+    const fromStore =
+        (typeof store.getGuilds === "function" ? store.getGuilds() : null) ??
+        (typeof store.getFlattenedGuilds === "function" ? store.getFlattenedGuilds() : null) ??
+        null;
+
+    const byId = new Map<string, { discord_guild_id: string; name: string }>();
+
+    const push = (value: any) => {
+        const guildLike = value?.guild ?? value;
+        const id = String(guildLike?.id ?? "").trim();
+        if (!id) return;
+        const name = String(guildLike?.name ?? "").trim() || id;
+        byId.set(id, { discord_guild_id: id, name });
+    };
+
+    if (fromStore) {
+        if (Array.isArray(fromStore)) {
+            for (const guild of fromStore) push(guild);
+        } else if (typeof fromStore === "object") {
+            for (const value of Object.values(fromStore)) {
+                push(value);
+            }
+        }
+    }
+
+    if (byId.size === 0 && typeof store.getGuild === "function") {
+        for (const guildId of monitoredGuildIds) {
+            const guild = store.getGuild(guildId);
+            push(guild ?? { id: guildId, name: guildId });
+        }
+    }
+
+    return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 async function syncGuildChannelSnapshot() {
     const transport = getTransportConfig();
     if (!hasTransportConfig(transport)) return;
-    if (monitoredGuildIds.size === 0) return;
 
     const guilds: IngestChannelGuildSync["guilds"] = [];
     const channels: IngestChannelGuildSync["channels"] = [];
+    const accessibleGuilds = listAccessibleGuilds();
+    const guildNameById = new Map(accessibleGuilds.map((guild) => [guild.discord_guild_id, guild.name]));
+    const discoveryGuildIds = accessibleGuilds.length > 0
+        ? accessibleGuilds.map((guild) => guild.discord_guild_id)
+        : Array.from(monitoredGuildIds);
 
-    for (const guildId of monitoredGuildIds) {
-        guilds.push({ discord_guild_id: guildId, name: getGuildName(guildId) });
+    for (const guildId of discoveryGuildIds) {
+        guilds.push({
+            discord_guild_id: guildId,
+            name: guildNameById.get(guildId) ?? getGuildName(guildId),
+        });
         const rows = listAccessibleChannelsForGuild(guildId);
         for (const row of rows) {
             channels.push({

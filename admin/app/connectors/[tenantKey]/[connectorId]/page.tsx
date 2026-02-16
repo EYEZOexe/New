@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 
@@ -170,13 +170,25 @@ export default function ConnectorDetailPage() {
   const guilds = useQuery(listGuilds, connectorArgs) ?? [];
 
   const [guildIdFilter, setGuildIdFilter] = useState<string>("");
-  const channelsArgs = !hasRouteParams
+  const [newSourceGuildId, setNewSourceGuildId] = useState("");
+  const [newSourceChannelId, setNewSourceChannelId] = useState("");
+  const [newSourceThreadMode, setNewSourceThreadMode] = useState("");
+  const [newSourceEnabled, setNewSourceEnabled] = useState(true);
+
+  const sourceChannelsArgs = !hasRouteParams
+    ? "skip"
+    : newSourceGuildId
+      ? { tenantKey, connectorId, guildId: newSourceGuildId }
+      : { tenantKey, connectorId };
+  const sourceChannels = useQuery(listChannels, sourceChannelsArgs) ?? [];
+
+  const mappingChannelsArgs = !hasRouteParams
     ? "skip"
     : guildIdFilter
       ? { tenantKey, connectorId, guildId: guildIdFilter }
       : { tenantKey, connectorId };
-  const channels =
-    useQuery(listChannels, channelsArgs) ?? [];
+  const mappingChannels = useQuery(listChannels, mappingChannelsArgs) ?? [];
+  const allChannels = useQuery(listChannels, connectorArgs) ?? [];
 
   const doRotate = useMutation(rotateConnectorToken);
   const doSetStatus = useMutation(setStatus);
@@ -188,14 +200,42 @@ export default function ConnectorDetailPage() {
   const [lastToken, setLastToken] = useState<string | null>(null);
   const [isRotating, setIsRotating] = useState(false);
 
-  const [newSourceGuildId, setNewSourceGuildId] = useState("");
-  const [newSourceChannelId, setNewSourceChannelId] = useState("");
-  const [newSourceThreadMode, setNewSourceThreadMode] = useState("");
-  const [newSourceEnabled, setNewSourceEnabled] = useState(true);
-
   const [newMappingSource, setNewMappingSource] = useState("");
   const [newMappingTarget, setNewMappingTarget] = useState("");
   const [newMappingPriority, setNewMappingPriority] = useState<string>("");
+
+  useEffect(() => {
+    if (!newSourceGuildId || !newSourceChannelId) return;
+    if (!sourceChannels.some((channel) => channel.channelId === newSourceChannelId)) {
+      setNewSourceChannelId("");
+    }
+  }, [newSourceGuildId, newSourceChannelId, sourceChannels]);
+
+  useEffect(() => {
+    if (newMappingSource && !mappingChannels.some((channel) => channel.channelId === newMappingSource)) {
+      setNewMappingSource("");
+    }
+    if (newMappingTarget && !mappingChannels.some((channel) => channel.channelId === newMappingTarget)) {
+      setNewMappingTarget("");
+    }
+  }, [mappingChannels, newMappingSource, newMappingTarget]);
+
+  const guildNameById = useMemo(
+    () => new Map(guilds.map((guild) => [guild.guildId, guild.name])),
+    [guilds],
+  );
+  const channelNameById = useMemo(
+    () => new Map(allChannels.map((channel) => [channel.channelId, channel.name])),
+    [allChannels],
+  );
+
+  function renderGuildLabel(guildId: string) {
+    return `${guildNameById.get(guildId) ?? "Unknown guild"} (${guildId})`;
+  }
+
+  function renderChannelLabel(channelId: string) {
+    return `${channelNameById.get(channelId) ?? "Unknown channel"} (${channelId})`;
+  }
 
   async function onRotate() {
     if (!hasRouteParams) return;
@@ -344,15 +384,11 @@ export default function ConnectorDetailPage() {
                     onChange={(e) => setNewSourceChannelId(e.target.value)}
                   >
                     <option value="">Select channel</option>
-                    {channels
-                      .filter((c) =>
-                        newSourceGuildId ? c.guildId === newSourceGuildId : true,
-                      )
-                      .map((c) => (
-                        <option key={c._id} value={c.channelId}>
-                          {c.name} ({c.channelId})
-                        </option>
-                      ))}
+                    {sourceChannels.map((channel) => (
+                      <option key={channel._id} value={channel.channelId}>
+                        {channel.name} ({channel.channelId})
+                      </option>
+                    ))}
                   </select>
                 </label>
               </div>
@@ -403,8 +439,8 @@ export default function ConnectorDetailPage() {
                 <tbody>
                   {sources.map((s) => (
                     <tr key={s._id} className="border-t border-zinc-200">
-                      <td className="px-3 py-2">{s.guildId}</td>
-                      <td className="px-3 py-2">{s.channelId}</td>
+                      <td className="px-3 py-2">{renderGuildLabel(s.guildId)}</td>
+                      <td className="px-3 py-2">{renderChannelLabel(s.channelId)}</td>
                       <td className="px-3 py-2">{s.threadMode ?? "-"}</td>
                       <td className="px-3 py-2">{s.isEnabled ? "yes" : "no"}</td>
                       <td className="px-3 py-2">
@@ -468,9 +504,9 @@ export default function ConnectorDetailPage() {
                     onChange={(e) => setNewMappingSource(e.target.value)}
                   >
                     <option value="">Select source</option>
-                    {channels.map((c) => (
-                      <option key={c._id} value={c.channelId}>
-                        {c.name} ({c.channelId})
+                    {mappingChannels.map((channel) => (
+                      <option key={channel._id} value={channel.channelId}>
+                        {channel.name} ({channel.channelId})
                       </option>
                     ))}
                   </select>
@@ -483,9 +519,9 @@ export default function ConnectorDetailPage() {
                     onChange={(e) => setNewMappingTarget(e.target.value)}
                   >
                     <option value="">Select target</option>
-                    {channels.map((c) => (
-                      <option key={c._id} value={c.channelId}>
-                        {c.name} ({c.channelId})
+                    {mappingChannels.map((channel) => (
+                      <option key={channel._id} value={channel.channelId}>
+                        {channel.name} ({channel.channelId})
                       </option>
                     ))}
                   </select>
@@ -525,8 +561,8 @@ export default function ConnectorDetailPage() {
                 <tbody>
                   {mappings.map((m) => (
                     <tr key={m._id} className="border-t border-zinc-200">
-                      <td className="px-3 py-2">{m.sourceChannelId}</td>
-                      <td className="px-3 py-2">{m.targetChannelId}</td>
+                      <td className="px-3 py-2">{renderChannelLabel(m.sourceChannelId)}</td>
+                      <td className="px-3 py-2">{renderChannelLabel(m.targetChannelId)}</td>
                       <td className="px-3 py-2">{m.priority ?? "-"}</td>
                       <td className="px-3 py-2">
                         <button
