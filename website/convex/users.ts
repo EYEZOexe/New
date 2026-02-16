@@ -24,6 +24,7 @@ export const viewer = queryGeneric({
       email: typeof user.email === "string" ? user.email : null,
       name: typeof user.name === "string" ? user.name : null,
       subscriptionStatus: subscription?.status ?? null,
+      hasSignalAccess: subscription?.status === "active",
     };
   },
 });

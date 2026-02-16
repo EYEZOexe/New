@@ -17,8 +17,11 @@ import type * as http from "../http.js";
 import type * as httpConnectors from "../httpConnectors.js";
 import type * as httpHelpers from "../httpHelpers.js";
 import type * as httpIngest from "../httpIngest.js";
+import type * as httpPayments from "../httpPayments.js";
 import type * as ingest from "../ingest.js";
 import type * as ingestUtils from "../ingestUtils.js";
+import type * as payments from "../payments.js";
+import type * as paymentsUtils from "../paymentsUtils.js";
 import type * as signals from "../signals.js";
 import type * as users from "../users.js";
 
@@ -38,8 +41,11 @@ declare const fullApi: ApiFromModules<{
   httpConnectors: typeof httpConnectors;
   httpHelpers: typeof httpHelpers;
   httpIngest: typeof httpIngest;
+  httpPayments: typeof httpPayments;
   ingest: typeof ingest;
   ingestUtils: typeof ingestUtils;
+  payments: typeof payments;
+  paymentsUtils: typeof paymentsUtils;
   signals: typeof signals;
   users: typeof users;
 }>;

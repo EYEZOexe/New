@@ -12,12 +12,21 @@ CONVEX_SELF_HOSTED_ADMIN_KEY=__SET_ME__
 # Convex Auth/OIDC origin for self-hosted HTTP actions (note the /http prefix)
 CONVEX_SITE_URL=https://convex-backend.g3netic.com/http
 NEXT_PUBLIC_CONVEX_SITE_URL=https://convex-backend.g3netic.com/http
+
+# Sell.app webhook ingestion + ops replay
+SELLAPP_WEBHOOK_SECRET=__SET_ME__
+SELLAPP_REPLAY_TOKEN=__SET_ME__
 ```
 
 Domain mapping in this project:
 - `https://convex-backend.g3netic.com` = Convex Cloud/backend origin
 - `https://convex-backend.g3netic.com/http` = Convex Auth/OIDC HTTP routes
 - `https://convex.g3netic.com` = Convex dashboard UI
+
+Webhook endpoints (Convex HTTP actions):
+- `POST /webhooks/sellapp` (Sell.app delivery + idempotent processing)
+- `POST /webhooks/sellapp/replay` (manual replay, requires `SELLAPP_REPLAY_TOKEN`)
+- `GET /webhooks/sellapp/failures` (failed event inbox, requires `SELLAPP_REPLAY_TOKEN`)
 
 Important:
 - `NEXT_PUBLIC_CONVEX_URL` must be backend origin without `/http`.

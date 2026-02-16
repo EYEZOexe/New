@@ -150,8 +150,11 @@ export default defineSchema({
     eventId: v.string(),
     eventType: v.string(),
     payload: v.any(),
+    payloadHash: v.optional(v.string()),
     receivedAt: v.number(),
     processedAt: v.optional(v.number()),
+    lastAttemptAt: v.optional(v.number()),
+    attemptCount: v.optional(v.number()),
     status: v.union(
       v.literal("received"),
       v.literal("processed"),
@@ -160,5 +163,6 @@ export default defineSchema({
     error: v.optional(v.string()),
   })
     .index("by_provider_eventId", ["provider", "eventId"])
+    .index("by_provider_status", ["provider", "status"])
     .index("by_status", ["status"]),
 });

@@ -19,6 +19,14 @@ type SignalRow = {
   attachments?: Array<{ url: string; name?: string }>;
 };
 
+type ViewerRow = {
+  userId: string;
+  email: string | null;
+  name: string | null;
+  subscriptionStatus: "active" | "inactive" | "canceled" | "past_due" | null;
+  hasSignalAccess: boolean;
+};
+
 export default function DashboardPage() {
   const router = useRouter();
   const { signOut } = useAuthActions();
@@ -27,14 +35,19 @@ export default function DashboardPage() {
   const [tenantKey, setTenantKey] = useState("t1");
   const [connectorId, setConnectorId] = useState("conn_01");
 
+  const viewerRef = makeFunctionReference<"query", Record<string, never>, ViewerRow | null>(
+    "users:viewer",
+  );
   const listRecentSignals = makeFunctionReference<
     "query",
     { tenantKey: string; connectorId: string; limit?: number },
     SignalRow[]
   >("signals:listRecent");
+  const viewer = useQuery(viewerRef, isAuthenticated ? {} : "skip");
+  const hasSignalAccess = viewer?.hasSignalAccess === true;
   const signals = useQuery(
     listRecentSignals,
-    isAuthenticated ? { tenantKey, connectorId, limit: 50 } : "skip",
+    isAuthenticated && hasSignalAccess ? { tenantKey, connectorId, limit: 50 } : "skip",
   );
 
   useEffect(() => {
@@ -49,6 +62,13 @@ export default function DashboardPage() {
       `[dashboard] realtime signals update: tenant=${tenantKey} connector=${connectorId} count=${signals.length}`,
     );
   }, [signals, tenantKey, connectorId]);
+
+  useEffect(() => {
+    if (!viewer) return;
+    console.info(
+      `[dashboard] access gate status user=${viewer.userId} subscription=${viewer.subscriptionStatus ?? "none"} allowed=${viewer.hasSignalAccess}`,
+    );
+  }, [viewer]);
 
   async function onLogout() {
     setIsLoggingOut(true);
@@ -100,6 +120,18 @@ export default function DashboardPage() {
           </Link>
         </div>
 
+        <div className="mt-6 rounded-md border border-zinc-200 bg-zinc-50 p-3">
+          <p className="text-xs font-medium text-zinc-700">Subscription status</p>
+          <p className="mt-1 text-sm text-zinc-900">
+            {viewer?.subscriptionStatus ?? "inactive"}
+          </p>
+          {!hasSignalAccess ? (
+            <p className="mt-2 text-xs text-amber-700">
+              Signal access is disabled until your subscription is active.
+            </p>
+          ) : null}
+        </div>
+
         <div className="mt-8 border-t border-zinc-200 pt-6">
           <h2 className="text-base font-semibold text-zinc-900">Signals</h2>
 
@@ -128,7 +160,12 @@ export default function DashboardPage() {
           </form>
 
           <div className="mt-4 space-y-3">
-            {!signals && (
+            {isAuthenticated && !hasSignalAccess && (
+              <p className="text-sm text-zinc-600">
+                Access is currently gated by subscription status.
+              </p>
+            )}
+            {!signals && hasSignalAccess && (
               <p className="text-sm text-zinc-600">Loading signals...</p>
             )}
             {signals?.length === 0 && (
