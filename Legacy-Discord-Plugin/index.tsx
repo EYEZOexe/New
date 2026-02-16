@@ -155,8 +155,8 @@ const settings = definePluginSettings({
     },
     configPollIntervalMs: {
         type: OptionType.NUMBER,
-        description: "Runtime config poll interval (ms)",
-        default: 5_000,
+        description: "Runtime config poll interval (ms, lower = faster discovery pickup)",
+        default: 2_000,
     },
 });
 
@@ -232,6 +232,26 @@ function getDiscoveredChannelStore() {
                     // Keep this strict: broad heuristics can latch onto unrelated modules
                     // that expose similarly named methods (which then return locale strings).
                     if (!hasGuildChannelsApi) continue;
+
+                    // Validate candidate by ensuring it can resolve the currently-open
+                    // channel via getChannel(). This rejects i18n/proxy modules that can
+                    // appear to "have" any method name.
+                    const getChannelMaybe = (candidate as any)?.getChannel;
+                    if (typeof getChannelMaybe !== "function") continue;
+
+                    const activeChannelIdMatch = window.location.pathname.match(/^\/channels\/\d+\/(\d+)/);
+                    const activeChannelId = activeChannelIdMatch?.[1] ?? "";
+                    if (activeChannelId) {
+                        try {
+                            const probe = getChannelMaybe.call(candidate, activeChannelId);
+                            const probeChannel = probe?.channel ?? probe;
+                            const probeId = String(probeChannel?.id ?? "").trim();
+                            const probeGuildId = String(probeChannel?.guild_id ?? probeChannel?.guildId ?? "").trim();
+                            if (probeId !== activeChannelId || !probeGuildId) continue;
+                        } catch {
+                            continue;
+                        }
+                    }
 
                     discoveredChannelStore = candidate;
                     break;
@@ -629,7 +649,7 @@ async function fetchGuildChannelsViaRest(guildId: string): Promise<DiscoveryChan
     const token = readDiscordAuthToken();
     if (!token && !loggedRestAuthMissing) {
         loggedRestAuthMissing = true;
-        console.warn("[ChannelScraper] REST fallback: Discord token not found via storage/webpack. Trying cookie-auth requests.");
+        console.warn("[ChannelScraper] REST fallback: Discord token not found via storage. Trying cookie-auth requests.");
     }
 
     const endpoints = [
@@ -913,7 +933,8 @@ async function pollRuntimeConfigLoop() {
             console.error("[ChannelScraper] Runtime config poll failed:", res.error);
         }
 
-        const interval = Math.max(3000, Number(settings.store.configPollIntervalMs ?? 30000));
+        const configuredInterval = Number(settings.store.configPollIntervalMs ?? 2000);
+        const interval = Math.max(1000, Number.isFinite(configuredInterval) ? configuredInterval : 2000);
         await new Promise((resolve) => setTimeout(resolve, interval));
     }
 }

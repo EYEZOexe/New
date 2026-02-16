@@ -35,6 +35,7 @@ Backend is Convex.
 - Fixed thread ingest 400s by aligning Convex thread event validation with emitted plugin fields and hardening plugin thread payload normalization for sparse thread events. (2026-02-16)
 - Tightened dynamic webpack channel-store selection to require guild-channel APIs, preventing i18n/proxy collisions that caused zero-channel discovery snapshots. (2026-02-16)
 - Simplified discovery flow: plugin now sends guild-only snapshots automatically on startup/runtime sync, and admin channel discovery remains explicit via guild-selected "Fetch channels". (2026-02-16)
+- Reduced discovery pickup latency and hardened dynamic store validation to avoid i18n/proxy false-positives during channel discovery probes. (2026-02-16)
 
 **Next**
 - Move payments and access gating to Convex as the source of truth.
@@ -165,6 +166,8 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
   Exit criteria: discovery probing no longer binds to i18n/proxy modules, `getChannels/getAllChannels` locale warnings stop, and guild channel snapshots populate reliably without opening each guild.
 - [x] Separate automatic guild discovery from manual channel discovery (2026-02-16)
   Exit criteria: plugin publishes guild metadata without fetching all channels, and admin only requests channel discovery for a selected guild via "Fetch channels".
+- [x] Reduce config polling latency and validate dynamic channel-store probe candidates (2026-02-16)
+  Exit criteria: plugin processes discovery requests faster (low-second pickup), and channel store probes no longer trigger repeated locale-key warnings from non-channel modules.
 
 ## Decision Log
 
