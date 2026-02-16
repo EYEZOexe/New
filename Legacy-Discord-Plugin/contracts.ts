@@ -2,8 +2,7 @@ export type ConnectorTransportConfig = {
     ingestBaseUrl: string;
     connectorId: string;
     tenantKey: string;
-    connectorKeyId: string;
-    connectorSecret: string;
+    connectorToken: string;
     requestTimeoutMs?: number;
     maxBatchSize?: number;
 };

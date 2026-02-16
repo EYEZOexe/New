@@ -136,19 +136,13 @@ const settings = definePluginSettings({
         type: OptionType.STRING,
         description: "Ingest API base URL",
         default: "",
-        placeholder: "https://api.example.com",
+        placeholder: "https://convex-backend.example.com/http",
     },
-    connectorKeyId: {
+    connectorToken: {
         type: OptionType.STRING,
-        description: "Connector key ID",
+        description: "Connector token (Bearer)",
         default: "",
-        placeholder: "key_live_01",
-    },
-    connectorSecret: {
-        type: OptionType.STRING,
-        description: "Connector shared secret",
-        default: "",
-        placeholder: "<secret>",
+        placeholder: "tok_...",
     },
     configPollIntervalMs: {
         type: OptionType.NUMBER,
@@ -168,8 +162,7 @@ function getTransportConfig(): ConnectorTransportConfig {
         tenantKey: String(settings.store.tenantKey ?? "").trim(),
         connectorId: String(settings.store.connectorId ?? "").trim(),
         ingestBaseUrl: String(settings.store.ingestBaseUrl ?? "").trim(),
-        connectorKeyId: String(settings.store.connectorKeyId ?? "").trim(),
-        connectorSecret: String(settings.store.connectorSecret ?? "").trim(),
+        connectorToken: String(settings.store.connectorToken ?? "").trim(),
         requestTimeoutMs: 15000,
         maxBatchSize: 100,
     };
@@ -180,8 +173,7 @@ function hasTransportConfig(config: ConnectorTransportConfig) {
         config.tenantKey &&
         config.connectorId &&
         config.ingestBaseUrl &&
-        config.connectorKeyId &&
-        config.connectorSecret
+        config.connectorToken
     );
 }
 
@@ -495,7 +487,7 @@ export default definePlugin({
 
         const transport = getTransportConfig();
         if (!hasTransportConfig(transport)) {
-            console.log("[ChannelScraper] Missing ingest config. Fill ingestBaseUrl, connectorId, keyId, and secret.");
+            console.log("[ChannelScraper] Missing ingest config. Fill ingestBaseUrl, connectorId, and connectorToken.");
             return;
         }
 

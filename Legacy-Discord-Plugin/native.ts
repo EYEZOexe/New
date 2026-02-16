@@ -1,5 +1,5 @@
 import { IpcMainInvokeEvent } from "electron";
-import { createHash, createHmac, randomBytes, randomUUID } from "crypto";
+import { randomUUID } from "crypto";
 import { promises as fs } from "fs";
 import path from "path";
 import {
@@ -38,11 +38,10 @@ type ApiError = {
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_BATCH_SIZE = 100;
-const FLUSH_INTERVAL_MS = 1_000;
+const FLUSH_INTERVAL_MS = 250;
 const MAX_RETRIES = 6;
 const BASE_BACKOFF_MS = 750;
 const MAX_BACKOFF_MS = 30_000;
-const NONCE_BYTES = 16;
 
 let transportConfig: ConnectorTransportConfig | null = null;
 let queue: QueueItem[] = [];
@@ -106,29 +105,6 @@ function sanitizeBaseUrl(url: string) {
     return String(url || "").trim().replace(/\/+$/, "");
 }
 
-function sha256Hex(value: string) {
-    return createHash("sha256").update(value).digest("hex");
-}
-
-function buildSignature(
-    secret: string,
-    method: string,
-    requestPath: string,
-    body: string,
-    timestamp: string,
-    nonce: string
-) {
-    const material = [
-        method.toUpperCase(),
-        requestPath,
-        sha256Hex(body),
-        timestamp,
-        nonce,
-    ].join("\n");
-
-    return createHmac("sha256", secret).update(material).digest("hex");
-}
-
 function isRetryable(status: number) {
     if (status === 409) return false;
     if (status === 429) return true;
@@ -147,8 +123,7 @@ function hasConfiguredTransport() {
         transportConfig.ingestBaseUrl?.trim() &&
         transportConfig.connectorId?.trim() &&
         transportConfig.tenantKey?.trim() &&
-        transportConfig.connectorKeyId?.trim() &&
-        transportConfig.connectorSecret?.trim()
+        transportConfig.connectorToken?.trim()
     );
 }
 
@@ -163,25 +138,10 @@ async function signedRequest<T>(
     const baseUrl = sanitizeBaseUrl(transportConfig.ingestBaseUrl);
     const url = `${baseUrl}${requestPath}`;
     const body = bodyObj == null ? "" : JSON.stringify(bodyObj);
-    const timestamp = String(Date.now());
-    const nonce = randomBytes(NONCE_BYTES).toString("hex");
-    const signature = buildSignature(
-        transportConfig.connectorSecret,
-        method,
-        requestPath,
-        body,
-        timestamp,
-        nonce
-    );
 
     const headers: Record<string, string> = {
         "Content-Type": "application/json",
-        "X-Connector-Key-Id": transportConfig.connectorKeyId,
-        "X-Connector-Id": transportConfig.connectorId,
-        "X-Tenant-Key": transportConfig.tenantKey,
-        "X-Timestamp": timestamp,
-        "X-Nonce": nonce,
-        "X-Signature": signature,
+        "Authorization": `Bearer ${transportConfig.connectorToken}`,
         "X-Correlation-Id": randomUUID(),
         ...(extraHeaders ?? {}),
     };
