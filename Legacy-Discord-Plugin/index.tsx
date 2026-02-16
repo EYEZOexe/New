@@ -229,8 +229,9 @@ function getDiscoveredChannelStore() {
                         hasOwnFunction(candidate, "getMutableChannelsForGuild") ||
                         hasOwnFunction(candidate, "getSelectableChannels");
 
-                    const hasChannelGetter = hasOwnFunction(candidate, "getChannel");
-                    if (!hasGuildChannelsApi && !hasChannelGetter) continue;
+                    // Keep this strict: broad heuristics can latch onto unrelated modules
+                    // that expose similarly named methods (which then return locale strings).
+                    if (!hasGuildChannelsApi) continue;
 
                     discoveredChannelStore = candidate;
                     break;
@@ -242,6 +243,18 @@ function getDiscoveredChannelStore() {
     }
 
     return discoveredChannelStore;
+}
+
+function asNonEmptyString(value: unknown) {
+    return typeof value === "string" && value.trim().length > 0
+        ? value.trim()
+        : "";
+}
+
+function asFiniteNumberOrNull(value: unknown) {
+    return typeof value === "number" && Number.isFinite(value)
+        ? value
+        : null;
 }
 
 function getChannelStoreCandidates() {
@@ -960,36 +973,49 @@ async function handleThread(thread: FluxThread, eventType: IngestThreadEvent["ev
     if (!hasTransportConfig(transport)) return;
     if (!isThreadType(thread.type)) return;
 
-    const expectedGuildId = monitoredChannels.get(thread.parent_id);
-    if (!expectedGuildId || expectedGuildId !== thread.guild_id) return;
+    const threadId = asNonEmptyString(thread.id);
+    if (!threadId) return;
+
+    const cachedThread = ChannelStore.getChannel(threadId) as (Channel & { parent_id?: string; guild_id?: string; name?: string }) | undefined;
+    const parentChannelId = asNonEmptyString(thread.parent_id) || asNonEmptyString(cachedThread?.parent_id);
+    if (!parentChannelId) return;
+
+    const expectedGuildId = monitoredChannels.get(parentChannelId);
+    if (!expectedGuildId) return;
+
+    const guildId = asNonEmptyString(thread.guild_id) || asNonEmptyString(cachedThread?.guild_id) || expectedGuildId;
+    if (expectedGuildId !== guildId) return;
+
+    const threadName = asNonEmptyString(thread.name) || asNonEmptyString(cachedThread?.name) || getChannelName(threadId) || threadId;
+    const metadata = thread.thread_metadata;
 
     const payload: IngestThreadEvent = {
         idempotency_key: buildIdempotencyKey(
             transport.tenantKey,
             transport.connectorId,
             "thread",
-            thread.id,
+            threadId,
             eventType
         ),
         event_type: eventType,
         thread: {
-            discord_thread_id: thread.id,
-            parent_channel_id: thread.parent_id,
-            guild_id: thread.guild_id,
-            name: thread.name,
-            archived: thread.thread_metadata?.archived ?? false,
-            locked: thread.thread_metadata?.locked ?? false,
-            auto_archive_duration: thread.thread_metadata?.auto_archive_duration ?? null,
-            archive_timestamp: thread.thread_metadata?.archive_timestamp ?? null,
-            message_count: thread.message_count ?? null,
-            member_count: thread.member_count ?? null,
-            rate_limit_per_user: thread.rate_limit_per_user ?? null,
-            owner_id: thread.owner_id ?? null,
+            discord_thread_id: threadId,
+            parent_channel_id: parentChannelId,
+            guild_id: guildId,
+            name: threadName,
+            archived: Boolean(metadata?.archived ?? false),
+            locked: Boolean(metadata?.locked ?? false),
+            auto_archive_duration: asFiniteNumberOrNull(metadata?.auto_archive_duration),
+            archive_timestamp: asNonEmptyString(metadata?.archive_timestamp) || null,
+            message_count: asFiniteNumberOrNull(thread.message_count),
+            member_count: asFiniteNumberOrNull(thread.member_count),
+            rate_limit_per_user: asFiniteNumberOrNull(thread.rate_limit_per_user),
+            owner_id: asNonEmptyString(thread.owner_id) || null,
             owner_username: null,
             owner_global_name: null,
-            last_message_id: thread.last_message_id ?? null,
+            last_message_id: asNonEmptyString(thread.last_message_id) || null,
             last_message_at: null,
-            created_timestamp: thread.thread_metadata?.create_timestamp ?? null,
+            created_timestamp: asNonEmptyString(metadata?.create_timestamp) || null,
         },
     };
 
@@ -1000,27 +1026,36 @@ async function handleThreadMembersUpdate(update: FluxThreadMembersUpdate) {
     const transport = getTransportConfig();
     if (!hasTransportConfig(transport)) return;
 
-    const thread = ChannelStore.getChannel(update.id) as (Channel & { parent_id?: string }) | undefined;
-    const parentChannelId = String(thread?.parent_id ?? "").trim();
-    if (!parentChannelId || !monitoredChannels.has(parentChannelId)) return;
+    const threadId = asNonEmptyString(update.id);
+    if (!threadId) return;
+
+    const thread = ChannelStore.getChannel(threadId) as (Channel & { parent_id?: string; guild_id?: string; name?: string }) | undefined;
+    const parentChannelId = asNonEmptyString(thread?.parent_id);
+    if (!parentChannelId) return;
+
+    const expectedGuildId = monitoredChannels.get(parentChannelId);
+    if (!expectedGuildId) return;
+
+    const guildId = asNonEmptyString(update.guild_id) || asNonEmptyString(thread?.guild_id) || expectedGuildId;
+    if (guildId !== expectedGuildId) return;
 
     const payload: IngestThreadEvent = {
         idempotency_key: buildIdempotencyKey(
             transport.tenantKey,
             transport.connectorId,
             "thread",
-            update.id,
+            threadId,
             "members_update"
         ),
         event_type: "members_update",
         thread: {
-            discord_thread_id: update.id,
+            discord_thread_id: threadId,
             parent_channel_id: parentChannelId,
-            guild_id: update.guild_id,
-            name: getChannelName(update.id),
+            guild_id: guildId,
+            name: asNonEmptyString(thread?.name) || getChannelName(threadId) || threadId,
             archived: false,
             locked: false,
-            member_count: update.member_count,
+            member_count: asFiniteNumberOrNull(update.member_count),
         },
         member_delta: {
             added: Array.isArray(update.added_members) ? update.added_members.map((member) => String(member.user_id)) : [],
