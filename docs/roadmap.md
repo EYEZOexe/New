@@ -39,6 +39,7 @@ Backend is Convex.
 - Replaced dynamic token/store probing in plugin discovery with Vencord store-based lookup (`findStoreLazy("AuthenticationStore")`) and stable ChannelStore-only probing to reduce false positives and restore guild-channel REST discovery reliability. (2026-02-16)
 - Added guild-object channel extraction fallback (`GuildStore.getGuild`) so channel discovery can still succeed when REST auth is unavailable and dynamic channel-store probing is disabled. (2026-02-16)
 - Fixed discovery request replay semantics on plugin restart: stale backend requests are baselined (not replayed), initial guild sync retries until GuildStore is ready, and targeted channel discovery no longer triggers channel-store fallback scans for guild enumeration. (2026-02-16)
+- Phase 1 signal pipeline is now hardened end-to-end: message ingest normalizes update/delete timestamps with fallbacks, stale post-delete updates are ignored server-side, plugin emits message delete events, and dashboard feed surfaces edited/deleted state with realtime update logs. (2026-02-16)
 
 **Next**
 - Move payments and access gating to Convex as the source of truth.
@@ -69,11 +70,11 @@ Backend is Convex.
 
 Goal: signals show up in the dashboard quickly and consistently.
 
-- [ ] Collector ingestion writes normalized signal docs to Convex
+- [x] Collector ingestion writes normalized signal docs to Convex (2026-02-16)
   Exit criteria: new messages appear in Convex and are queryable by customer.
-- [ ] Dashboard feed reads signals and updates near realtime
+- [x] Dashboard feed reads signals and updates near realtime (2026-02-16)
   Exit criteria: paid user sees new signals with p95 end-to-end delivery < 100ms.
-- [ ] Idempotency + edit/delete semantics defined
+- [x] Idempotency + edit/delete semantics defined (2026-02-16)
   Exit criteria: edits/deletes converge correctly across dashboard + bot.
 
 ### Phase 2: Payments + Access (Sell.app webhook)

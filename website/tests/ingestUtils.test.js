@@ -49,4 +49,44 @@ describe("ingestUtils", () => {
       createdAt: 1771200000000,
     });
   });
+
+  it("uses receivedAt fallback for delete events without deleted_at", () => {
+    const fields = messageEventToSignalFields(
+      {
+        event_type: "delete",
+        discord_message_id: "m2",
+        discord_channel_id: "c1",
+        discord_guild_id: "g1",
+        content_clean: "",
+        created_at: "2026-02-16T00:00:00.000Z",
+        edited_at: null,
+        deleted_at: null,
+        attachments: [],
+      },
+      { tenantKey: "t1", connectorId: "conn_01" },
+      { receivedAt: 1771300000000 },
+    );
+
+    expect(fields.deletedAt).toBe(1771300000000);
+  });
+
+  it("uses receivedAt fallback for update events without edited_at", () => {
+    const fields = messageEventToSignalFields(
+      {
+        event_type: "update",
+        discord_message_id: "m3",
+        discord_channel_id: "c1",
+        discord_guild_id: "g1",
+        content_clean: "updated",
+        created_at: "2026-02-16T00:00:00.000Z",
+        edited_at: null,
+        deleted_at: null,
+        attachments: [],
+      },
+      { tenantKey: "t1", connectorId: "conn_01" },
+      { receivedAt: 1771301000000 },
+    );
+
+    expect(fields.editedAt).toBe(1771301000000);
+  });
 });

@@ -86,6 +86,7 @@ export const ingestMessageBatch = internalMutation({
   handler: async (ctx, args) => {
     let accepted = 0;
     let deduped = 0;
+    let ignored = 0;
 
     for (const message of args.messages) {
       const existing = await ctx.db
@@ -101,6 +102,8 @@ export const ingestMessageBatch = internalMutation({
       const fields = messageEventToSignalFields(message as any, {
         tenantKey: args.tenantKey,
         connectorId: args.connectorId,
+      }, {
+        receivedAt: args.receivedAt,
       });
 
       if (!existing) {
@@ -110,10 +113,50 @@ export const ingestMessageBatch = internalMutation({
       }
 
       deduped += 1;
-      await ctx.db.patch(existing._id, fields as any);
+
+      if (typeof existing.deletedAt === "number" && message.event_type !== "delete") {
+        const incomingEventAt = fields.editedAt ?? fields.createdAt;
+        if (incomingEventAt <= existing.deletedAt) {
+          ignored += 1;
+          continue;
+        }
+      }
+
+      const patch: Record<string, unknown> = {
+        sourceChannelId: fields.sourceChannelId,
+        sourceGuildId: fields.sourceGuildId,
+        createdAt: fields.createdAt,
+      };
+
+      if (message.event_type === "delete") {
+        patch.deletedAt = fields.deletedAt ?? args.receivedAt;
+        patch.content = fields.content || existing.content;
+        if (fields.attachments.length > 0) {
+          patch.attachments = fields.attachments;
+        }
+      } else {
+        patch.content = fields.content;
+        patch.attachments = fields.attachments;
+
+        if (message.event_type === "update") {
+          patch.editedAt = fields.editedAt ?? args.receivedAt;
+        } else if (typeof fields.editedAt === "number") {
+          patch.editedAt = fields.editedAt;
+        }
+
+        if (typeof fields.deletedAt === "number") {
+          patch.deletedAt = fields.deletedAt;
+        }
+      }
+
+      await ctx.db.patch(existing._id, patch as any);
     }
 
-    return { accepted, deduped };
+    console.info(
+      `[ingest] signal batch processed tenant=${args.tenantKey} connector=${args.connectorId} accepted=${accepted} deduped=${deduped} ignored=${ignored} total=${args.messages.length}`,
+    );
+
+    return { accepted, deduped, ignored };
   },
 });
 

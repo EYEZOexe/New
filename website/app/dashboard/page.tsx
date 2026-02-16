@@ -11,6 +11,8 @@ import { makeFunctionReference } from "convex/server";
 type SignalRow = {
   _id: string;
   createdAt: number;
+  editedAt?: number;
+  deletedAt?: number;
   sourceGuildId: string;
   sourceChannelId: string;
   content: string;
@@ -40,6 +42,13 @@ export default function DashboardPage() {
       router.replace("/login?redirectTo=/dashboard");
     }
   }, [isAuthenticated, isLoading, router]);
+
+  useEffect(() => {
+    if (!signals) return;
+    console.info(
+      `[dashboard] realtime signals update: tenant=${tenantKey} connector=${connectorId} count=${signals.length}`,
+    );
+  }, [signals, tenantKey, connectorId]);
 
   async function onLogout() {
     setIsLoggingOut(true);
@@ -141,6 +150,18 @@ export default function DashboardPage() {
                 <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-900">
                   {signal.content}
                 </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
+                  {signal.editedAt ? (
+                    <span className="rounded bg-zinc-200 px-2 py-0.5">
+                      Edited {new Date(signal.editedAt).toLocaleString()}
+                    </span>
+                  ) : null}
+                  {signal.deletedAt ? (
+                    <span className="rounded bg-red-100 px-2 py-0.5 text-red-700">
+                      Deleted {new Date(signal.deletedAt).toLocaleString()}
+                    </span>
+                  ) : null}
+                </div>
                 {signal.attachments?.length ? (
                   <ul className="mt-3 space-y-1">
                     {signal.attachments.map((a, idx) => (

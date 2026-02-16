@@ -111,7 +111,7 @@ export function mountIngestRoutes(http: HttpRouter) {
       }
 
       const internal = anyApi as any;
-      let result: { accepted: number; deduped: number };
+      let result: { accepted: number; deduped: number; ignored?: number };
       try {
         result = await ctx.runMutation(internal.ingest.ingestMessageBatch, {
           tenantKey,
@@ -140,6 +140,7 @@ export function mountIngestRoutes(http: HttpRouter) {
         ok: true,
         accepted: result.accepted,
         deduped: result.deduped,
+        ignored: result.ignored ?? 0,
         correlation_id: auth.correlationId,
       });
     }),

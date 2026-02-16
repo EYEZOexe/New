@@ -46,6 +46,15 @@ interface FluxMessage {
     mention_roles: string[];
 }
 
+interface FluxMessageDeleteEvent {
+    id?: string;
+    channel_id?: string;
+    channelId?: string;
+    guild_id?: string;
+    guildId?: string;
+    message?: Partial<FluxMessage> & { id?: string; channel_id?: string; guild_id?: string; };
+}
+
 const THREAD_TYPE = {
     GUILD_NEWS_THREAD: 10,
     GUILD_PUBLIC_THREAD: 11,
@@ -1061,6 +1070,79 @@ async function handleMessage(message: FluxMessage, isUpdate: boolean) {
     await Native.enqueueMessageEvent(event);
 }
 
+async function handleMessageDelete(payload: FluxMessageDeleteEvent) {
+    const transport = getTransportConfig();
+    if (!hasTransportConfig(transport)) return;
+
+    const messageId = String(payload.id ?? payload.message?.id ?? "").trim();
+    const channelId = String(
+        payload.channel_id ??
+        payload.channelId ??
+        payload.message?.channel_id ??
+        ""
+    ).trim();
+    if (!messageId || !channelId) return;
+
+    const channel = ChannelStore.getChannel(channelId) as (Channel & { type?: number; parent_id?: string; guild_id?: string; }) | undefined;
+    const isThread = isThreadType(channel?.type);
+    const parentChannelId = isThread ? channel?.parent_id ?? null : null;
+    const effectiveChannelId = isThread && parentChannelId ? parentChannelId : channelId;
+    const expectedGuildId = monitoredChannels.get(effectiveChannelId);
+
+    const guildId = String(
+        channel?.guild_id ??
+        payload.guild_id ??
+        payload.guildId ??
+        payload.message?.guild_id ??
+        ""
+    ).trim();
+
+    if (!expectedGuildId || !guildId || expectedGuildId !== guildId) return;
+
+    const nowIso = new Date().toISOString();
+    const event: IngestMessageEvent = {
+        idempotency_key: buildIdempotencyKey(
+            transport.tenantKey,
+            transport.connectorId,
+            "message",
+            messageId,
+            "delete"
+        ),
+        event_type: "delete",
+        discord_message_id: messageId,
+        discord_guild_id: guildId,
+        discord_channel_id: effectiveChannelId,
+        discord_thread_id: isThread ? channelId : null,
+        discord_author_id: null,
+        author_username: null,
+        author_global_name: null,
+        content_raw: String(payload.message?.content ?? ""),
+        content_clean: normalizeContent(String(payload.message?.content ?? "")),
+        created_at: payload.message?.timestamp
+            ? new Date(payload.message.timestamp).toISOString()
+            : nowIso,
+        edited_at: payload.message?.edited_timestamp
+            ? new Date(payload.message.edited_timestamp).toISOString()
+            : null,
+        deleted_at: nowIso,
+        attachments: Array.isArray(payload.message?.attachments)
+            ? payload.message.attachments.map((attachment) => ({
+                discord_attachment_id: String(attachment.id ?? `${messageId}-${attachment.filename}`),
+                filename: String(attachment.filename ?? "file"),
+                source_url: String(attachment.url ?? ""),
+                size: Number(attachment.size ?? 0),
+                content_type: attachment.content_type ?? null,
+            }))
+            : [],
+        embeds: [],
+        mentioned_role_ids: Array.isArray(payload.message?.mention_roles)
+            ? payload.message.mention_roles.map((roleId) => String(roleId))
+            : [],
+    };
+
+    await Native.enqueueMessageEvent(event);
+}
+
 async function handleThread(thread: FluxThread, eventType: IngestThreadEvent["event_type"]) {
     const transport = getTransportConfig();
     if (!hasTransportConfig(transport)) return;
@@ -1173,6 +1255,9 @@ export default definePlugin({
         MESSAGE_UPDATE({ message }: { message: FluxMessage; }) {
             if (!message.content && message.content !== "") return;
             void handleMessage(message, true);
+        },
+        MESSAGE_DELETE(payload: FluxMessageDeleteEvent) {
+            void handleMessageDelete(payload);
         },
         THREAD_CREATE({ channel }: { channel: FluxThread }) {
             if (!channel) return;
