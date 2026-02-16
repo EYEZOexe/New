@@ -174,6 +174,7 @@ let discoveredChannelStore: any | null = null;
 let discoveredChannelStoreScanned = false;
 let lastHandledDiscoveryRequestVersion = -1;
 let initialDiscoverySnapshotDone = false;
+let discoveryStateInitialized = false;
 let lastAppliedConfigVersion = -1;
 const loggedRestErrorGuilds = new Set<string>();
 const AuthenticationStore = findStoreLazy("AuthenticationStore") as {
@@ -819,19 +820,6 @@ function listAccessibleGuilds() {
         }
     }
 
-    // Fallback: derive guild IDs from ChannelStore when GuildStore is unavailable/empty.
-    if (byId.size === 0) {
-        const channels = listAllAccessibleGuildChannels();
-        for (const channel of channels) {
-            if (!byId.has(channel.guild_id)) {
-                byId.set(channel.guild_id, {
-                    discord_guild_id: channel.guild_id,
-                    name: getGuildName(channel.guild_id),
-                });
-            }
-        }
-    }
-
     return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -841,13 +829,15 @@ async function syncGuildChannelSnapshot(targetGuildId?: string) {
 
     const guilds: IngestChannelGuildSync["guilds"] = [];
     const channels: IngestChannelGuildSync["channels"] = [];
-    const accessibleGuilds = listAccessibleGuilds();
+    const normalizedTargetGuildId = String(targetGuildId ?? "").trim();
+    const accessibleGuilds = normalizedTargetGuildId
+        ? [{ discord_guild_id: normalizedTargetGuildId, name: getGuildName(normalizedTargetGuildId) }]
+        : listAccessibleGuilds();
     let restFallbackChannels = 0;
     let objectFallbackChannels = 0;
     let domFallbackChannels = 0;
 
     const guildNameById = new Map(accessibleGuilds.map((guild) => [guild.discord_guild_id, guild.name]));
-    const normalizedTargetGuildId = String(targetGuildId ?? "").trim();
     const discoveryGuildIds = normalizedTargetGuildId
         ? [normalizedTargetGuildId]
         : accessibleGuilds.length > 0
@@ -924,7 +914,9 @@ async function syncGuildSnapshotOnly() {
         name: guild.name,
     }));
 
-    if (guilds.length === 0) return;
+    if (guilds.length === 0) {
+        return false;
+    }
 
     console.log(
         `[ChannelScraper] Guild snapshot prepared: ${guilds.length} guild(s), 0 channel(s).`
@@ -941,6 +933,7 @@ async function syncGuildSnapshotOnly() {
         guilds,
         channels: [],
     });
+    return true;
 }
 
 async function pollRuntimeConfigLoop() {
@@ -971,8 +964,15 @@ async function pollRuntimeConfigLoop() {
                 ? res.config.discovery_request.guild_id.trim()
                 : "";
 
-            const shouldRunRequestedSync = requestVersion > lastHandledDiscoveryRequestVersion;
             const shouldRunInitialSync = !initialDiscoverySnapshotDone;
+            if (!discoveryStateInitialized) {
+                // Baseline from current backend state to avoid replaying stale requests
+                // on every Discord restart.
+                lastHandledDiscoveryRequestVersion = requestVersion;
+                discoveryStateInitialized = true;
+            }
+
+            const shouldRunRequestedSync = requestVersion > lastHandledDiscoveryRequestVersion;
 
             if (shouldRunRequestedSync || shouldRunInitialSync) {
                 if (shouldRunRequestedSync) {
@@ -987,9 +987,16 @@ async function pollRuntimeConfigLoop() {
                     }
                 } else {
                     console.log("[ChannelScraper] Running initial discovery snapshot.");
-                    await syncGuildSnapshotOnly();
+                    const synced = await syncGuildSnapshotOnly();
+                    if (!synced) {
+                        console.log("[ChannelScraper] Guild snapshot skipped (guild store not ready), will retry.");
+                    } else {
+                        initialDiscoverySnapshotDone = true;
+                    }
                 }
-                initialDiscoverySnapshotDone = true;
+                if (shouldRunRequestedSync) {
+                    initialDiscoverySnapshotDone = true;
+                }
             }
         } else if (!res?.success && res?.error) {
             console.error("[ChannelScraper] Runtime config poll failed:", res.error);
@@ -1196,6 +1203,7 @@ export default definePlugin({
         runtimeConfigEtag = "";
         lastHandledDiscoveryRequestVersion = -1;
         initialDiscoverySnapshotDone = false;
+        discoveryStateInitialized = false;
         lastAppliedConfigVersion = -1;
         restChannelCache.clear();
         loggedRestFailureGuilds.clear();

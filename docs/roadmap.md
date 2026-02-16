@@ -38,6 +38,7 @@ Backend is Convex.
 - Reduced discovery pickup latency and hardened dynamic store validation to avoid i18n/proxy false-positives during channel discovery probes. (2026-02-16)
 - Replaced dynamic token/store probing in plugin discovery with Vencord store-based lookup (`findStoreLazy("AuthenticationStore")`) and stable ChannelStore-only probing to reduce false positives and restore guild-channel REST discovery reliability. (2026-02-16)
 - Added guild-object channel extraction fallback (`GuildStore.getGuild`) so channel discovery can still succeed when REST auth is unavailable and dynamic channel-store probing is disabled. (2026-02-16)
+- Fixed discovery request replay semantics on plugin restart: stale backend requests are baselined (not replayed), initial guild sync retries until GuildStore is ready, and targeted channel discovery no longer triggers channel-store fallback scans for guild enumeration. (2026-02-16)
 
 **Next**
 - Move payments and access gating to Convex as the source of truth.
@@ -174,6 +175,8 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
   Exit criteria: plugin resolves Discord auth token via store lookup and avoids broad dynamic module probing that can call i18n proxy functions during channel discovery.
 - [x] Add non-proxy channel fallback via guild object traversal (2026-02-16)
   Exit criteria: selected-guild channel discovery can extract channel IDs/names from guild object structures without invoking unstable store methods that trigger locale proxy warnings.
+- [x] Prevent stale discovery replay and wait for guild-store readiness on startup (2026-02-16)
+  Exit criteria: restarting Discord no longer auto-runs old guild-specific channel fetch requests, and initial guild metadata sync completes once GuildStore is populated.
 
 ## Decision Log
 
