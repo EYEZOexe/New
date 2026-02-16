@@ -61,7 +61,7 @@ Sell access policy functions:
 - `sellAccessPolicies:removeSellAccessPolicy`
 
 Operational admin pages:
-- `admin:/payments/policies` maps product/variant -> tier + billing mode (`recurring` / `fixed_term`) and duration days.
+- `admin:/payments/policies` maps product/variant -> tier + fixed-term duration days.
 - `admin:/discord` maps tier -> Discord role.
 
 Important:

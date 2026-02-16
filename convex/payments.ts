@@ -10,7 +10,6 @@ import {
 } from "./paymentsUtils";
 import {
   resolveEnabledSellAccessPolicy,
-  type BillingMode,
   type SubscriptionTier,
 } from "./sellAccessPolicies";
 import {
@@ -203,7 +202,6 @@ async function upsertSubscriptionForUser(
     productId: string | null;
     variantId: string | null;
     tier: SubscriptionTier | null;
-    billingMode: BillingMode | null;
     durationDays: number | null;
     now: number;
   },
@@ -212,7 +210,6 @@ async function upsertSubscriptionForUser(
   productId: string | null;
   variantId: string | null;
   tier: SubscriptionTier | null;
-  billingMode: BillingMode | null;
   endsAt: number | null;
 }> {
   const existing = await ctx.db
@@ -221,7 +218,6 @@ async function upsertSubscriptionForUser(
     .first();
 
   const resolvedTier = args.tier ?? existing?.tier ?? null;
-  const resolvedBillingMode = args.billingMode ?? existing?.billingMode ?? null;
   const resolvedProductId = args.productId ?? existing?.productId ?? null;
   const resolvedVariantId = args.variantId ?? existing?.variantId ?? null;
 
@@ -229,35 +225,27 @@ async function upsertSubscriptionForUser(
   let endsAt: number | undefined = existing?.endsAt;
 
   if (args.status === "active") {
-    if (resolvedBillingMode === "fixed_term") {
-      if (!Number.isFinite(args.durationDays) || !args.durationDays || args.durationDays <= 0) {
-        throw new Error("duration_days_invalid");
-      }
-      const durationMs = args.durationDays * 24 * 60 * 60 * 1000;
-      const canExtend =
-        existing?.status === "active" &&
-        existing.billingMode === "fixed_term" &&
-        existing.tier === resolvedTier &&
-        existing.productId === resolvedProductId &&
-        Number.isFinite(existing.endsAt) &&
-        (existing.endsAt ?? 0) > args.now;
-      const base = canExtend ? (existing!.endsAt as number) : args.now;
-      startedAt = canExtend ? existing?.startedAt ?? args.now : args.now;
-      endsAt = base + durationMs;
-    } else {
-      startedAt = args.now;
-      endsAt = undefined;
+    if (!Number.isFinite(args.durationDays) || !args.durationDays || args.durationDays <= 0) {
+      throw new Error("duration_days_invalid");
     }
-  } else if (resolvedBillingMode === "fixed_term") {
-    endsAt = args.now;
+    const durationMs = args.durationDays * 24 * 60 * 60 * 1000;
+    const canExtend =
+      existing?.status === "active" &&
+      existing.tier === resolvedTier &&
+      existing.productId === resolvedProductId &&
+      Number.isFinite(existing.endsAt) &&
+      (existing.endsAt ?? 0) > args.now;
+    const base = canExtend ? (existing!.endsAt as number) : args.now;
+    startedAt = canExtend ? existing?.startedAt ?? args.now : args.now;
+    endsAt = base + durationMs;
   } else {
-    endsAt = undefined;
+    endsAt = args.now;
   }
 
   const next = {
     status: args.status,
     tier: resolvedTier ?? undefined,
-    billingMode: resolvedBillingMode ?? undefined,
+    billingMode: "fixed_term" as const,
     productId: resolvedProductId ?? undefined,
     variantId: resolvedVariantId ?? undefined,
     startedAt: startedAt ?? undefined,
@@ -280,7 +268,6 @@ async function upsertSubscriptionForUser(
     productId: resolvedProductId,
     variantId: resolvedVariantId,
     tier: resolvedTier,
-    billingMode: resolvedBillingMode,
     endsAt: endsAt ?? null,
   };
 }
@@ -412,7 +399,6 @@ export const processSellWebhookEvent = internalMutation({
         productId: projected.productId,
         variantId: projected.variantId,
         tier: accessPolicy?.tier ?? null,
-        billingMode: accessPolicy?.billingMode ?? null,
         durationDays: accessPolicy?.durationDays ?? null,
         now: args.attemptedAt,
       });
@@ -465,7 +451,7 @@ export const processSellWebhookEvent = internalMutation({
       });
 
       console.info(
-        `[payments] processed webhook provider=${args.provider} event=${args.eventId} user=${resolvedUser.email ?? "unknown"} status=${projected.subscriptionStatus} tier=${subscription.tier ?? "none"} billing=${subscription.billingMode ?? "none"} ends_at=${subscription.endsAt ?? 0} attempts=${nextAttempt} resolvedVia=${resolvedUser.method} customer=${projected.externalCustomerId ?? "none"} subscription=${projected.externalSubscriptionId ?? "none"}`,
+        `[payments] processed webhook provider=${args.provider} event=${args.eventId} user=${resolvedUser.email ?? "unknown"} status=${projected.subscriptionStatus} tier=${subscription.tier ?? "none"} ends_at=${subscription.endsAt ?? 0} attempts=${nextAttempt} resolvedVia=${resolvedUser.method} customer=${projected.externalCustomerId ?? "none"} subscription=${projected.externalSubscriptionId ?? "none"}`,
       );
 
       return {
@@ -552,7 +538,6 @@ export const expireFixedTermSubscriptions = internalMutation({
     let roleSyncQueued = 0;
 
     for (const subscription of candidates) {
-      if (subscription.billingMode !== "fixed_term") continue;
       if (!subscription.endsAt || subscription.endsAt > now) continue;
 
       await ctx.db.patch(subscription._id, {
@@ -621,7 +606,6 @@ export const listPaymentCustomers = query({
       userId: Id<"users">;
       userEmail: string | null;
       tier: SubscriptionTier | null;
-      billingMode: BillingMode | null;
       subscriptionStatus: SubscriptionStatus | null;
       endsAt: number | null;
       customerEmail: string | null;
@@ -643,7 +627,6 @@ export const listPaymentCustomers = query({
         userId: row.userId,
         userEmail: user && typeof user.email === "string" ? user.email : null,
         tier: subscription?.tier ?? null,
-        billingMode: subscription?.billingMode ?? null,
         subscriptionStatus: subscription?.status ?? null,
         endsAt: subscription?.endsAt ?? null,
         customerEmail: row.customerEmail ?? null,

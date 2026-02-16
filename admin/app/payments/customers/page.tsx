@@ -10,7 +10,6 @@ type OperatorPaymentRow = {
   userId: string;
   userEmail: string | null;
   tier: "basic" | "advanced" | "pro" | null;
-  billingMode: "recurring" | "fixed_term" | null;
   subscriptionStatus: "active" | "inactive" | "canceled" | "past_due" | null;
   endsAt: number | null;
   customerEmail: string | null;
@@ -87,7 +86,6 @@ export default function PaymentCustomersPage() {
                 <th className="px-3 py-2">User</th>
                 <th className="px-3 py-2">Subscription</th>
                 <th className="px-3 py-2">Tier</th>
-                <th className="px-3 py-2">Billing</th>
                 <th className="px-3 py-2">Ends</th>
                 <th className="px-3 py-2">Customer ID</th>
                 <th className="px-3 py-2">Subscription ID</th>
@@ -98,14 +96,14 @@ export default function PaymentCustomersPage() {
             <tbody className="divide-y divide-zinc-200">
               {!rows && (
                 <tr>
-                  <td className="px-3 py-4 text-zinc-600" colSpan={10}>
+                  <td className="px-3 py-4 text-zinc-600" colSpan={8}>
                     Loading...
                   </td>
                 </tr>
               )}
               {rows?.length === 0 && (
                 <tr>
-                  <td className="px-3 py-4 text-zinc-600" colSpan={10}>
+                  <td className="px-3 py-4 text-zinc-600" colSpan={8}>
                     No payment customer mappings found.
                   </td>
                 </tr>
@@ -124,9 +122,6 @@ export default function PaymentCustomersPage() {
                   </td>
                   <td className="px-3 py-3 align-top text-zinc-700">
                     {row.tier ?? "n/a"}
-                  </td>
-                  <td className="px-3 py-3 align-top text-zinc-700">
-                    {row.billingMode ?? "n/a"}
                   </td>
                   <td className="px-3 py-3 align-top text-xs text-zinc-700">
                     {row.endsAt ? new Date(row.endsAt).toLocaleString() : "n/a"}

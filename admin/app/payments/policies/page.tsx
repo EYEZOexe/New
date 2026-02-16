@@ -7,13 +7,11 @@ import { useMemo, useState } from "react";
 
 type PolicyScope = "product" | "variant";
 type Tier = "basic" | "advanced" | "pro";
-type BillingMode = "recurring" | "fixed_term";
 
 type PolicyRow = {
   scope: PolicyScope;
   externalId: string;
   tier: Tier;
-  billingMode: BillingMode;
   durationDays: number | null;
   enabled: boolean;
   updatedAt: number;
@@ -35,8 +33,7 @@ export default function PaymentPoliciesPage() {
           scope: PolicyScope;
           externalId: string;
           tier: Tier;
-          billingMode: BillingMode;
-          durationDays?: number;
+          durationDays: number;
           enabled: boolean;
         },
         { ok: true }
@@ -60,7 +57,6 @@ export default function PaymentPoliciesPage() {
   const [scope, setScope] = useState<PolicyScope>("variant");
   const [externalId, setExternalId] = useState("");
   const [tier, setTier] = useState<Tier>("basic");
-  const [billingMode, setBillingMode] = useState<BillingMode>("fixed_term");
   const [durationDays, setDurationDays] = useState("30");
   const [enabled, setEnabled] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -72,21 +68,20 @@ export default function PaymentPoliciesPage() {
     setMessage(null);
     setError(null);
     try {
-      const duration =
-        billingMode === "fixed_term"
-          ? Number.parseInt(durationDays.trim(), 10)
-          : undefined;
+      const duration = Number.parseInt(durationDays.trim(), 10);
+      if (!Number.isInteger(duration) || duration <= 0) {
+        throw new Error("Duration days must be a positive integer.");
+      }
       await upsertPolicy({
         scope,
         externalId,
         tier,
-        billingMode,
-        durationDays: Number.isFinite(duration) ? duration : undefined,
+        durationDays: duration,
         enabled,
       });
       setMessage("Policy saved.");
       console.info(
-        `[admin/payment-policies] saved scope=${scope} id=${externalId} tier=${tier} billing=${billingMode} enabled=${enabled}`,
+        `[admin/payment-policies] saved scope=${scope} id=${externalId} tier=${tier} duration_days=${duration} enabled=${enabled}`,
       );
     } catch (err) {
       const text = err instanceof Error ? err.message : "Failed to save policy";
@@ -120,7 +115,7 @@ export default function PaymentPoliciesPage() {
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Sell Access Policies</h1>
             <p className="mt-2 text-sm text-zinc-600">
-              Map Sell product/variant IDs to tier and billing behavior.
+              Map Sell product/variant IDs to tier and fixed-term duration.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -172,23 +167,11 @@ export default function PaymentPoliciesPage() {
               </select>
             </label>
             <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
-              Billing mode
-              <select
-                className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm"
-                value={billingMode}
-                onChange={(e) => setBillingMode(e.target.value as BillingMode)}
-              >
-                <option value="fixed_term">fixed_term</option>
-                <option value="recurring">recurring</option>
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
-              Duration days (fixed_term)
+              Duration days
               <input
                 value={durationDays}
                 onChange={(e) => setDurationDays(e.target.value)}
-                disabled={billingMode !== "fixed_term"}
-                className="h-9 rounded-md border border-zinc-300 px-3 text-sm disabled:opacity-60"
+                className="h-9 rounded-md border border-zinc-300 px-3 text-sm"
                 placeholder="30"
               />
             </label>
@@ -222,7 +205,6 @@ export default function PaymentPoliciesPage() {
                 <th className="px-3 py-2">Scope</th>
                 <th className="px-3 py-2">External ID</th>
                 <th className="px-3 py-2">Tier</th>
-                <th className="px-3 py-2">Billing</th>
                 <th className="px-3 py-2">Duration</th>
                 <th className="px-3 py-2">Enabled</th>
                 <th className="px-3 py-2">Updated</th>
@@ -232,14 +214,14 @@ export default function PaymentPoliciesPage() {
             <tbody className="divide-y divide-zinc-200">
               {!rows && (
                 <tr>
-                  <td className="px-3 py-4 text-zinc-600" colSpan={8}>
+                  <td className="px-3 py-4 text-zinc-600" colSpan={7}>
                     Loading...
                   </td>
                 </tr>
               )}
               {rows?.length === 0 && (
                 <tr>
-                  <td className="px-3 py-4 text-zinc-600" colSpan={8}>
+                  <td className="px-3 py-4 text-zinc-600" colSpan={7}>
                     No policies configured.
                   </td>
                 </tr>
@@ -249,7 +231,6 @@ export default function PaymentPoliciesPage() {
                   <td className="px-3 py-3">{row.scope}</td>
                   <td className="px-3 py-3 font-mono text-xs">{row.externalId}</td>
                   <td className="px-3 py-3">{row.tier}</td>
-                  <td className="px-3 py-3">{row.billingMode}</td>
                   <td className="px-3 py-3">{row.durationDays ?? "n/a"}</td>
                   <td className="px-3 py-3">{row.enabled ? "yes" : "no"}</td>
                   <td className="px-3 py-3 text-xs">

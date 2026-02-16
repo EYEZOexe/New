@@ -25,7 +25,9 @@ export const viewer = queryGeneric({
       userId,
       email: typeof user.email === "string" ? user.email : null,
       name: typeof user.name === "string" ? user.name : null,
+      tier: subscription?.tier ?? null,
       subscriptionStatus: subscription?.status ?? null,
+      subscriptionEndsAt: subscription?.endsAt ?? null,
       hasSignalAccess: hasActiveSubscriptionAccess(subscription, now),
     };
   },

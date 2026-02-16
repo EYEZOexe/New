@@ -14,6 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Simplified payments model to fixed-term only (no recurring path): Sell access policies now enforce duration days for product/variant mappings, subscription access is validated against `endsAt`, and dashboard now shows tier + expiration + live time-left countdown from Convex. (2026-02-16)
 - Hardened Discord role-sync worker verification to prevent false-positive completes: worker now force-fetches guild member state, validates target role exists, and verifies post-condition after grant/revoke before ACKing `roleSync:completeRoleSyncJob`. (2026-02-16)
 - Added Sell billing enforcement for mixed payment models: Convex now supports admin-configured Sell access policies (`/payments/policies`) that map product/variant IDs to tier + billing mode (`recurring` / `fixed_term`), persists entitlement metadata on subscriptions (`tier`, `billingMode`, `variantId`, `endsAt`), and runs scheduled expiry to auto-revoke fixed-term access/roles after duration windows (30/60/90/etc). (2026-02-16)
 - Extended Phase 3 to tier-aware Discord role sync: Convex now supports admin-configured `basic`/`advanced`/`pro` product-to-role mappings (`discordTierRoleMappings` + `discordRoleConfig:*` functions), payment and link/unlink flows enqueue grant/revoke jobs against the desired tier role set, and admin has a new `/discord` surface to manage mappings and role-sync runtime status. Legacy env single-role sync remains as fallback when tier mappings are not configured. (2026-02-16)
@@ -63,7 +64,7 @@ Backend is Convex.
 - Convex deployment credentials. We need `CONVEX_SELF_HOSTED_ADMIN_KEY` available in CI/deploy to push schema/functions to self-hosted Convex.
 - Discord OAuth app configuration. `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, and callback URL registration must stay aligned with deployed `NEXT_PUBLIC_APP_URL` / `DISCORD_REDIRECT_URI`.
 - Discord role sync configuration/permissions. `ROLE_SYNC_BOT_TOKEN` must be aligned across Convex + bot env; tier role mappings must be maintained in admin (`/discord`) or legacy fallback env must be set; bot needs `Manage Roles` with hierarchy above all managed customer tier roles.
-- Sell webhook payload variance risk. Some events may omit `variant_id`; maintain product-level fallback policies so fixed-term/recurring enforcement remains deterministic.
+- Sell webhook payload variance risk. Some events may omit `variant_id`; maintain product-level fallback policies so fixed-term duration enforcement remains deterministic.
 - Some provider webhook variants may omit stable customer/subscription IDs; fallback email matching still exists for those events and should be monitored.
 - Bun migration consistency. Build and CI/deploy tooling must stay aligned with Bun lockfiles/workspaces or deployments will fail before app startup.
 - Webhook idempotency and retries. We need to guarantee "at least once" delivery does not create duplicate state.
@@ -102,6 +103,8 @@ Goal: payments reliably grant/revoke access even if the website is down.
   Link: `docs/reliability.md`
 - [x] Enforce recurring vs fixed-term entitlement lifecycle in Convex (2026-02-16)
   Exit criteria: active subscription access is policy-driven by product/variant mapping, and fixed-term access auto-expires with role revocation via scheduled jobs.
+- [x] Move to fixed-term-only subscription windows + dashboard remaining-time visibility (2026-02-16)
+  Exit criteria: policies are duration-driven without recurring mode selection, and customer dashboard shows live time left from Convex `endsAt`.
 
 ### Phase 3: Discord Linking (customer identity + roles)
 

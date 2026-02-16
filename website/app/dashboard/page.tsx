@@ -22,7 +22,9 @@ type ViewerRow = {
   userId: string;
   email: string | null;
   name: string | null;
+  tier: "basic" | "advanced" | "pro" | null;
   subscriptionStatus: "active" | "inactive" | "canceled" | "past_due" | null;
+  subscriptionEndsAt: number | null;
   hasSignalAccess: boolean;
 };
 
@@ -46,6 +48,18 @@ type UnlinkViewerDiscordResult = {
   unlinked: boolean;
 };
 
+function formatRemainingMs(remainingMs: number): string {
+  const totalSeconds = Math.max(0, Math.floor(remainingMs / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+  return `${minutes}m ${seconds}s`;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const { signOut } = useAuthActions();
@@ -59,6 +73,7 @@ export default function DashboardPage() {
     null,
   );
   const [discordCallbackError, setDiscordCallbackError] = useState<string | null>(null);
+  const [countdownNow, setCountdownNow] = useState(() => Date.now());
   const [tenantKey, setTenantKey] = useState("t1");
   const [connectorId, setConnectorId] = useState("conn_01");
 
@@ -115,9 +130,16 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!viewer) return;
     console.info(
-      `[dashboard] access gate status user=${viewer.userId} subscription=${viewer.subscriptionStatus ?? "none"} allowed=${viewer.hasSignalAccess}`,
+      `[dashboard] access gate status user=${viewer.userId} subscription=${viewer.subscriptionStatus ?? "none"} tier=${viewer.tier ?? "none"} ends_at=${viewer.subscriptionEndsAt ?? 0} allowed=${viewer.hasSignalAccess}`,
     );
   }, [viewer]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setCountdownNow(Date.now());
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -285,6 +307,13 @@ export default function DashboardPage() {
     return null;
   }
 
+  const remainingMs = viewer?.subscriptionEndsAt
+    ? viewer.subscriptionEndsAt - countdownNow
+    : null;
+  const hasRemainingTime = typeof remainingMs === "number" && remainingMs > 0;
+  const remainingText =
+    typeof remainingMs === "number" ? formatRemainingMs(remainingMs) : null;
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-zinc-100 p-6">
       <section className="w-full max-w-xl rounded-xl bg-white p-8 shadow-sm">
@@ -314,6 +343,23 @@ export default function DashboardPage() {
           <p className="text-xs font-medium text-zinc-700">Subscription status</p>
           <p className="mt-1 text-sm text-zinc-900">
             {viewer?.subscriptionStatus ?? "inactive"}
+          </p>
+          <p className="mt-1 text-xs text-zinc-600">
+            Tier: {viewer?.tier ?? "none"}
+          </p>
+          <p className="mt-1 text-xs text-zinc-600">
+            Expires:{" "}
+            {viewer?.subscriptionEndsAt
+              ? new Date(viewer.subscriptionEndsAt).toLocaleString()
+              : "n/a"}
+          </p>
+          <p className="mt-1 text-xs text-zinc-600">
+            Time left:{" "}
+            {hasRemainingTime
+              ? remainingText
+              : viewer?.subscriptionEndsAt
+                ? "expired"
+                : "n/a"}
           </p>
           {!hasSignalAccess ? (
             <p className="mt-2 text-xs text-amber-700">

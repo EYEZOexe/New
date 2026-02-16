@@ -5,14 +5,12 @@ import { mutation, query } from "./_generated/server";
 
 export const SUBSCRIPTION_TIERS = ["basic", "advanced", "pro"] as const;
 export type SubscriptionTier = (typeof SUBSCRIPTION_TIERS)[number];
-export type BillingMode = "recurring" | "fixed_term";
 export type PolicyScope = "product" | "variant";
 
 type AccessPolicy = {
   scope: PolicyScope;
   externalId: string;
   tier: SubscriptionTier;
-  billingMode: BillingMode;
   durationDays: number | null;
   enabled: boolean;
   updatedAt: number;
@@ -26,11 +24,7 @@ function normalizeRequired(value: string, field: string): string {
   return normalized;
 }
 
-function normalizeDurationDays(
-  billingMode: BillingMode,
-  durationDays: number | undefined,
-): number | null {
-  if (billingMode === "recurring") return null;
+function normalizeDurationDays(durationDays: number | undefined): number {
   if (!Number.isFinite(durationDays) || !Number.isInteger(durationDays) || durationDays <= 0) {
     throw new Error("duration_days_invalid");
   }
@@ -41,7 +35,6 @@ function toRow(row: {
   scope: PolicyScope;
   externalId: string;
   tier: SubscriptionTier;
-  billingMode: BillingMode;
   durationDays?: number;
   enabled: boolean;
   updatedAt: number;
@@ -50,7 +43,6 @@ function toRow(row: {
     scope: row.scope,
     externalId: row.externalId,
     tier: row.tier,
-    billingMode: row.billingMode,
     durationDays: row.durationDays ?? null,
     enabled: row.enabled,
     updatedAt: row.updatedAt,
@@ -100,13 +92,12 @@ export const upsertSellAccessPolicy = mutation({
     scope: v.union(v.literal("product"), v.literal("variant")),
     externalId: v.string(),
     tier: v.union(v.literal("basic"), v.literal("advanced"), v.literal("pro")),
-    billingMode: v.union(v.literal("recurring"), v.literal("fixed_term")),
     durationDays: v.optional(v.number()),
     enabled: v.boolean(),
   },
   handler: async (ctx, args) => {
     const externalId = normalizeRequired(args.externalId, "external_id");
-    const durationDays = normalizeDurationDays(args.billingMode, args.durationDays);
+    const durationDays = normalizeDurationDays(args.durationDays);
     const now = Date.now();
 
     const existing = await ctx.db
@@ -119,8 +110,8 @@ export const upsertSellAccessPolicy = mutation({
     if (existing) {
       await ctx.db.patch(existing._id, {
         tier: args.tier,
-        billingMode: args.billingMode,
-        durationDays: durationDays ?? undefined,
+        billingMode: "fixed_term",
+        durationDays,
         enabled: args.enabled,
         updatedAt: now,
       });
@@ -129,15 +120,15 @@ export const upsertSellAccessPolicy = mutation({
         scope: args.scope,
         externalId,
         tier: args.tier,
-        billingMode: args.billingMode,
-        durationDays: durationDays ?? undefined,
+        billingMode: "fixed_term",
+        durationDays,
         enabled: args.enabled,
         updatedAt: now,
       });
     }
 
     console.info(
-      `[sell-policy] upsert scope=${args.scope} id=${externalId} tier=${args.tier} billing=${args.billingMode} duration_days=${durationDays ?? 0} enabled=${args.enabled}`,
+      `[sell-policy] upsert scope=${args.scope} id=${externalId} tier=${args.tier} duration_days=${durationDays} enabled=${args.enabled}`,
     );
     return { ok: true as const };
   },

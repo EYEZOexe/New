@@ -14,7 +14,7 @@ NEXT_PUBLIC_CONVEX_URL=https://convex-backend.g3netic.com
 
 - `/connectors`: manage connector lifecycle and channel mapping.
 - `/payments/customers`: inspect Sell customer/subscription linkage.
-- `/payments/policies`: map Sell product/variant IDs to tier and billing behavior.
+- `/payments/policies`: map Sell product/variant IDs to tier and fixed-term duration.
 - `/discord`: configure tier-to-role mapping for `basic`, `advanced`, and `pro`.
 
 ## Run
