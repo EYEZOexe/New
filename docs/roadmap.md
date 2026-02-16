@@ -134,3 +134,4 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
 - Convex adoption design: `docs/plans/2026-02-14-convex-adoption-design.md`
 - Convex adoption plan: `docs/plans/2026-02-14-convex-adoption-plan.md`
 - Discord ingest design: `docs/plans/2026-02-16-discord-ingest-convex-design.md`
+- Discord ingest plan: `docs/plans/2026-02-16-discord-ingest-convex-plan.md`
