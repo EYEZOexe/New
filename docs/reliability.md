@@ -13,6 +13,7 @@ Approach:
 
 - Write an immutable webhook event record keyed by provider event ID.
 - Derive subscription state from events (or upsert the subscription doc with deterministic logic).
+- Persist provider customer/subscription linkage so future webhooks resolve users by stable external IDs before email fallback.
 - Keep all webhook handlers "at least once" safe.
 
 ## Failure Capture (Dead-Letter Queue)
@@ -56,4 +57,3 @@ Minimum:
 - structured logs for each webhook and job execution
 - metrics for success/failure rate, latency, retry counts
 - alerts on sustained failure rates or growing DLQ size
-

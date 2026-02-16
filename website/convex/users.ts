@@ -18,6 +18,11 @@ export const viewer = queryGeneric({
       .query("subscriptions")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .first();
+    const paymentCustomers = await ctx.db.query("paymentCustomers").collect();
+    const paymentCustomer =
+      paymentCustomers.find(
+        (row) => row.provider === "sellapp" && row.userId === userId,
+      ) ?? null;
 
     return {
       userId,
@@ -25,6 +30,15 @@ export const viewer = queryGeneric({
       name: typeof user.name === "string" ? user.name : null,
       subscriptionStatus: subscription?.status ?? null,
       hasSignalAccess: subscription?.status === "active",
+      paymentTracking: paymentCustomer
+        ? {
+            provider: paymentCustomer.provider,
+            externalCustomerId: paymentCustomer.externalCustomerId ?? null,
+            externalSubscriptionId: paymentCustomer.externalSubscriptionId ?? null,
+            lastEventId: paymentCustomer.lastEventId ?? null,
+            updatedAt: paymentCustomer.updatedAt,
+          }
+        : null,
     };
   },
 });

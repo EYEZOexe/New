@@ -14,6 +14,9 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Added an authenticated operator surface for payment linkage visibility: `payments:listPaymentCustomers` query and `/dashboard/operator` page show Sell customer/subscription mappings, user email/status context, and searchable linkage metadata for support/debugging. (2026-02-16)
+- Added durable Sell payment identity tracking in Convex (`paymentCustomers`): webhook processing now resolves users by external subscription/customer IDs before email fallback, and stores provider linkage for subsequent events and operator visibility. (2026-02-16)
+- Fixed Sell.app webhook failure persistence semantics in Convex: processing failures now commit `webhookEvents` as `failed` with incrementing attempt counts, and replay increments attempts predictably while keeping failure inbox visibility (`/webhooks/sellapp/failures`). (2026-02-16)
 - Phase 2 payments + access gating is live in Convex: Sell.app webhook ingestion (`/webhooks/sellapp`) is idempotent by provider event ID, updates subscription state, records attempt/failure metadata, and exposes controlled replay/failure inbox endpoints (`/webhooks/sellapp/replay`, `/webhooks/sellapp/failures`). Signal feed access is now gated server-side on active subscription status. (2026-02-16)
 - Website signup/login is validated end-to-end against self-hosted Convex (`https://convex-backend.g3netic.com`) using domain mapping:
   `convex-backend.g3netic.com` = backend origin, `convex-backend.g3netic.com/http` = auth/OIDC routes, and `convex.g3netic.com` = dashboard origin. (2026-02-16)
@@ -44,7 +47,7 @@ Backend is Convex.
 
 **Next**
 - Move Discord linking and role sync job queue to Convex.
-- Define and implement stable payment-customer-to-user identity mapping beyond email matching.
+- Add scheduled payment reconciliation and alerting for webhook drift/failure spikes.
 
 **Blockers / Risks**
 - Data migration. We need a clear plan to migrate users/subscriptions/signals into Convex without downtime.
@@ -52,7 +55,7 @@ Backend is Convex.
 - Convex Auth configuration. Self-hosted Convex must be configured with signing keys/JWKS and correct site URL, otherwise auth flows will fail at runtime.
 - Convex Auth issuer should be HTTPS. The current self-hosted issuer is `http://convex-backend.g3netic.com/http`; align `CONVEX_CLOUD_ORIGIN`/`CONVEX_SITE_ORIGIN` + proxy headers so OIDC metadata uses `https://...` to avoid mixed-scheme issues.
 - Convex deployment credentials. We need `CONVEX_SELF_HOSTED_ADMIN_KEY` available in CI/deploy to push schema/functions to self-hosted Convex.
-- Payment identity mapping currently uses customer email matching. We need durable provider customer/subscription ID linkage to avoid drift when emails change.
+- Some provider webhook variants may omit stable customer/subscription IDs; fallback email matching still exists for those events and should be monitored.
 - Bun migration consistency. Build and CI/deploy tooling must stay aligned with Bun lockfiles/workspaces or deployments will fail before app startup.
 - Webhook idempotency and retries. We need to guarantee "at least once" delivery does not create duplicate state.
 - Performance. Sub-100ms p95 delivery requires careful schema/indexing and realtime subscriptions; polling is not acceptable on the critical path.

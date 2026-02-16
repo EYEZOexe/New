@@ -111,6 +111,19 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_status", ["status"]),
 
+  paymentCustomers: defineTable({
+    provider: v.string(),
+    userId: v.id("users"),
+    externalCustomerId: v.optional(v.string()),
+    externalSubscriptionId: v.optional(v.string()),
+    customerEmail: v.optional(v.string()),
+    lastEventId: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_provider_userId", ["provider", "userId"])
+    .index("by_provider_externalCustomerId", ["provider", "externalCustomerId"])
+    .index("by_provider_externalSubscriptionId", ["provider", "externalSubscriptionId"]),
+
   discordLinks: defineTable({
     userId: v.id("users"),
     discordUserId: v.string(),
@@ -151,6 +164,11 @@ export default defineSchema({
     eventType: v.string(),
     payload: v.any(),
     payloadHash: v.optional(v.string()),
+    customerEmail: v.optional(v.string()),
+    externalCustomerId: v.optional(v.string()),
+    externalSubscriptionId: v.optional(v.string()),
+    resolvedUserId: v.optional(v.id("users")),
+    resolvedVia: v.optional(v.string()),
     receivedAt: v.number(),
     processedAt: v.optional(v.number()),
     lastAttemptAt: v.optional(v.number()),

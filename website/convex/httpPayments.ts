@@ -128,25 +128,15 @@ export function mountPaymentRoutes(http: HttpRouter) {
         });
       }
 
-      try {
-        const processed = await ctx.runMutation(internal.payments.processSellWebhookEvent, {
-          provider: PROVIDER,
-          eventId: eventMeta.eventId,
-          attemptedAt: Date.now(),
-        });
-
-        return jsonResponse({
-          ok: true,
-          event_id: eventMeta.eventId,
-          deduped: processed.deduped,
-          subscription_status: processed.subscriptionStatus,
-          correlation_id: correlationId,
-        });
-      } catch (error) {
+      const processed = await ctx.runMutation(internal.payments.processSellWebhookEvent, {
+        provider: PROVIDER,
+        eventId: eventMeta.eventId,
+        attemptedAt: Date.now(),
+      });
+      if (!processed.ok) {
         console.error(
-          `[payments] webhook processing failed event=${eventMeta.eventId} error=${String(error)}`,
+          `[payments] webhook processing failed event=${eventMeta.eventId} error=${processed.error}`,
         );
-
         return jsonError({
           status: 500,
           correlationId,
@@ -154,6 +144,14 @@ export function mountPaymentRoutes(http: HttpRouter) {
           message: "Webhook processing failed",
         });
       }
+
+      return jsonResponse({
+        ok: true,
+        event_id: eventMeta.eventId,
+        deduped: processed.deduped,
+        subscription_status: processed.subscriptionStatus,
+        correlation_id: correlationId,
+      });
     }),
   });
 
@@ -213,30 +211,36 @@ export function mountPaymentRoutes(http: HttpRouter) {
       }
 
       const internal = anyApi as any;
-      try {
-        const processed = await ctx.runMutation(internal.payments.processSellWebhookEvent, {
-          provider: PROVIDER,
-          eventId,
-          attemptedAt: Date.now(),
-        });
-
-        return jsonResponse({
-          ok: true,
-          replayed: true,
-          event_id: eventId,
-          deduped: processed.deduped,
-          subscription_status: processed.subscriptionStatus,
-          correlation_id: correlationId,
-        });
-      } catch (error) {
-        console.error(`[payments] replay failed event=${eventId} error=${String(error)}`);
+      const processed = await ctx.runMutation(internal.payments.processSellWebhookEvent, {
+        provider: PROVIDER,
+        eventId,
+        attemptedAt: Date.now(),
+      });
+      if (!processed.ok) {
+        const status = processed.errorCode === "webhook_event_not_found" ? 404 : 500;
+        console.error(`[payments] replay failed event=${eventId} error=${processed.error}`);
         return jsonError({
-          status: 500,
+          status,
           correlationId,
-          errorCode: "processing_failed",
-          message: "Replay failed",
+          errorCode:
+            processed.errorCode === "webhook_event_not_found"
+              ? "not_found"
+              : "processing_failed",
+          message:
+            processed.errorCode === "webhook_event_not_found"
+              ? "Webhook event not found"
+              : "Replay failed",
         });
       }
+
+      return jsonResponse({
+        ok: true,
+        replayed: true,
+        event_id: eventId,
+        deduped: processed.deduped,
+        subscription_status: processed.subscriptionStatus,
+        correlation_id: correlationId,
+      });
     }),
   });
 
