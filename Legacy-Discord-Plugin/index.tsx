@@ -94,6 +94,15 @@ interface FluxThreadListSync {
     threads: FluxThread[];
 }
 
+type DiscoveryChannelRow = {
+    guild_id: string;
+    discord_channel_id: string;
+    name: string;
+    type?: number | null;
+    parent_id?: string | null;
+    position?: number | null;
+};
+
 function isThreadType(type: number | null | undefined) {
     return type === THREAD_TYPE.GUILD_NEWS_THREAD ||
         type === THREAD_TYPE.GUILD_PUBLIC_THREAD ||
@@ -157,6 +166,8 @@ let runtimeConfigEtag = "";
 let runtimeConfigPollActive = false;
 let runtimeConfigPollAbort = false;
 let loggedChannelStoreDiagnostics = false;
+const REST_CHANNEL_CACHE_TTL_MS = 2 * 60_000;
+const restChannelCache = new Map<string, { expiresAt: number; rows: DiscoveryChannelRow[] }>();
 
 function getTransportConfig(): ConnectorTransportConfig {
     return {
@@ -202,7 +213,7 @@ function applyRuntimeConfig(config: ConnectorRuntimeConfig | undefined) {
 function listAccessibleChannelsForGuild(guildId: string) {
     const store: any = ChannelStore as any;
 
-    const out: Array<{ guild_id: string; discord_channel_id: string; name: string; type?: number | null; parent_id?: string | null; position?: number | null }> = [];
+    const out: DiscoveryChannelRow[] = [];
     const byId = new Map<string, (typeof out)[number]>();
     const seen = new WeakSet<object>();
 
@@ -321,14 +332,7 @@ function listAccessibleChannelsForGuild(guildId: string) {
 function listAllAccessibleGuildChannels() {
     const store: any = ChannelStore as any;
 
-    const byId = new Map<string, {
-        guild_id: string;
-        discord_channel_id: string;
-        name: string;
-        type?: number | null;
-        parent_id?: string | null;
-        position?: number | null;
-    }>();
+    const byId = new Map<string, DiscoveryChannelRow>();
     const seen = new WeakSet<object>();
 
     const toChannelLike = (value: any) => {
@@ -428,6 +432,92 @@ function listAllAccessibleGuildChannels() {
     return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function readDiscordAuthToken() {
+    try {
+        const raw = window.localStorage?.getItem("token");
+        if (!raw) return null;
+        const parsed = raw.startsWith("\"") ? JSON.parse(raw) : raw;
+        const token = String(parsed ?? "").trim();
+        return token || null;
+    } catch {
+        return null;
+    }
+}
+
+function toDiscoveryChannelRow(value: any, guildIdFallback: string): DiscoveryChannelRow | null {
+    const channel = value?.channel ?? value?.record?.channel ?? value;
+    if (!channel || typeof channel !== "object") return null;
+
+    const channelId = String(channel?.id ?? "").trim();
+    if (!channelId) return null;
+
+    const guildId = String(channel?.guild_id ?? channel?.guildId ?? guildIdFallback ?? "").trim();
+    if (!guildId) return null;
+
+    const name = String(channel?.name ?? "").trim() || channelId;
+
+    return {
+        guild_id: guildId,
+        discord_channel_id: channelId,
+        name,
+        type: typeof channel?.type === "number" ? channel.type : null,
+        parent_id: typeof channel?.parent_id === "string"
+            ? channel.parent_id
+            : typeof channel?.parentId === "string"
+                ? channel.parentId
+                : null,
+        position: typeof channel?.position === "number" ? channel.position : null,
+    };
+}
+
+async function fetchGuildChannelsViaRest(guildId: string): Promise<DiscoveryChannelRow[]> {
+    const now = Date.now();
+    const cached = restChannelCache.get(guildId);
+    if (cached && cached.expiresAt > now) return cached.rows;
+
+    const token = readDiscordAuthToken();
+    if (!token) return [];
+
+    const endpoints = [
+        `/api/v10/guilds/${encodeURIComponent(guildId)}/channels`,
+        `/api/v9/guilds/${encodeURIComponent(guildId)}/channels`,
+    ];
+
+    for (const endpoint of endpoints) {
+        try {
+            const response = await fetch(endpoint, {
+                method: "GET",
+                headers: {
+                    Authorization: token,
+                    "Content-Type": "application/json",
+                },
+            });
+
+            if (!response.ok) {
+                if (response.status === 401 || response.status === 403) break;
+                continue;
+            }
+
+            const json = await response.json();
+            if (!Array.isArray(json)) continue;
+
+            const rows = json
+                .map((value) => toDiscoveryChannelRow(value, guildId))
+                .filter((row): row is DiscoveryChannelRow => Boolean(row));
+
+            restChannelCache.set(guildId, {
+                expiresAt: now + REST_CHANNEL_CACHE_TTL_MS,
+                rows,
+            });
+            return rows;
+        } catch {
+            // Try next endpoint.
+        }
+    }
+
+    return [];
+}
+
 function listAccessibleGuilds() {
     const store: any = GuildStore as any;
     const fromStore =
@@ -486,6 +576,7 @@ async function syncGuildChannelSnapshot() {
     const channels: IngestChannelGuildSync["channels"] = [];
     const accessibleGuilds = listAccessibleGuilds();
     const allChannels = listAllAccessibleGuildChannels();
+    let restFallbackChannels = 0;
 
     if (!loggedChannelStoreDiagnostics) {
         loggedChannelStoreDiagnostics = true;
@@ -517,6 +608,13 @@ async function syncGuildChannelSnapshot() {
         if (rows.length === 0) {
             rows = allChannels.filter((channel) => channel.guild_id === guildId);
         }
+        if (rows.length === 0) {
+            const restRows = await fetchGuildChannelsViaRest(guildId);
+            if (restRows.length > 0) {
+                rows = restRows;
+                restFallbackChannels += restRows.length;
+            }
+        }
         for (const row of rows) {
             channels.push({
                 discord_channel_id: row.discord_channel_id,
@@ -532,7 +630,7 @@ async function syncGuildChannelSnapshot() {
     if (channels.length === 0 && guilds.length === 0) return;
 
     console.log(
-        `[ChannelScraper] Discovery snapshot prepared: ${guilds.length} guild(s), ${channels.length} channel(s), allChannels=${allChannels.length}.`
+        `[ChannelScraper] Discovery snapshot prepared: ${guilds.length} guild(s), ${channels.length} channel(s), allChannels=${allChannels.length}, restChannels=${restFallbackChannels}.`
     );
 
     await Native.enqueueChannelGuildSync({
