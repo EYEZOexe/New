@@ -142,14 +142,12 @@ export const requestChannelDiscovery = mutation({
 
     const now = nowMs();
     const nextDiscoveryVersion = (connector.discoveryRequestVersion ?? 0) + 1;
-    const nextConfigVersion = (connector.configVersion ?? 0) + 1;
     const guildId = typeof args.guildId === "string" ? args.guildId.trim() : "";
 
     await ctx.db.patch(connector._id, {
       discoveryRequestVersion: nextDiscoveryVersion,
       discoveryRequestedGuildId: guildId || undefined,
       discoveryRequestedAt: now,
-      configVersion: nextConfigVersion,
       updatedAt: now,
     });
 

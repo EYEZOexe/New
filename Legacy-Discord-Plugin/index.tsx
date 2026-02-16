@@ -174,6 +174,7 @@ let discoveredChannelStore: any | null = null;
 let discoveredChannelStoreScanned = false;
 let lastHandledDiscoveryRequestVersion = -1;
 let initialDiscoverySnapshotDone = false;
+let lastAppliedConfigVersion = -1;
 const loggedRestErrorGuilds = new Set<string>();
 
 function hasOwnFunction(obj: unknown, key: string) {
@@ -861,7 +862,13 @@ async function pollRuntimeConfigLoop() {
 
         const res = await Native.fetchRuntimeConfig(transport, runtimeConfigEtag || undefined);
         if (res?.success && res.status === 200 && res.config) {
-            applyRuntimeConfig(res.config);
+            const configVersionRaw = Number(res.config.config_version ?? 0);
+            const configVersion = Number.isFinite(configVersionRaw) ? configVersionRaw : 0;
+            if (configVersion !== lastAppliedConfigVersion) {
+                applyRuntimeConfig(res.config);
+                lastAppliedConfigVersion = configVersion;
+                console.log(`[ChannelScraper] Applied runtime config version ${configVersion}.`);
+            }
             runtimeConfigEtag = String(res.etag ?? "");
 
             const requestVersionRaw = Number(res.config.discovery_request?.version ?? 0);
@@ -1068,6 +1075,7 @@ export default definePlugin({
         runtimeConfigEtag = "";
         lastHandledDiscoveryRequestVersion = -1;
         initialDiscoverySnapshotDone = false;
+        lastAppliedConfigVersion = -1;
         restChannelCache.clear();
         loggedRestFailureGuilds.clear();
         loggedRestErrorGuilds.clear();

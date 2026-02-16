@@ -31,6 +31,7 @@ Backend is Convex.
 - Added per-available-channel role flags (`Source` / `Target`) in admin config and constrained mapping selectors accordingly (source list from source-enabled channels, target list from target-enabled channels). (2026-02-16)
 - Plugin ingestion scope now respects runtime `is_source` and only monitors channels marked as source for message/thread ingestion. (2026-02-16)
 - Hardened plugin webpack/token module probing to avoid proxy/i18n side effects and added explicit REST network diagnostics for guild channel fetch failures. (2026-02-16)
+- Decoupled discovery requests from config reloads: admin "Fetch channels" now only updates discovery request version, and plugin only reapplies runtime config when `config_version` changes (add/update path). (2026-02-16)
 
 **Next**
 - Move payments and access gating to Convex as the source of truth.
@@ -153,6 +154,8 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
   Exit criteria: admin can mark a channel as source/target/both; plugin only ingests from channels flagged as source; mapping source/target dropdowns are filtered by respective role flags.
 - [x] Stabilize discovery fallback probing to avoid i18n proxy collisions and expose REST fetch failure diagnostics (2026-02-16)
   Exit criteria: plugin no longer emits `Requested message getAllChannels/getToken` warnings from scanner probes, and failed Discord REST channel fetch attempts emit explicit HTTP/network diagnostics per guild.
+- [x] Reduce runtime-config churn by separating discovery requests from config updates (2026-02-16)
+  Exit criteria: clicking "Fetch channels" triggers discovery sync without bumping connector config version, and plugin only reapplies runtime ingestion configuration after actual add/update changes.
 
 ## Decision Log
 
