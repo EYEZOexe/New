@@ -7,6 +7,7 @@
 import { definePluginSettings } from "@api/Settings";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
+import { findStoreLazy } from "@webpack";
 import { ChannelStore, GuildStore } from "@webpack/common";
 import type { Channel, Guild } from "discord-types/general";
 import {
@@ -165,7 +166,6 @@ let monitoredGuildIds = new Set<string>();
 let runtimeConfigEtag = "";
 let runtimeConfigPollActive = false;
 let runtimeConfigPollAbort = false;
-let loggedChannelStoreDiagnostics = false;
 const REST_CHANNEL_CACHE_TTL_MS = 2 * 60_000;
 const restChannelCache = new Map<string, { expiresAt: number; rows: DiscoveryChannelRow[] }>();
 let loggedRestAuthMissing = false;
@@ -176,6 +176,9 @@ let lastHandledDiscoveryRequestVersion = -1;
 let initialDiscoverySnapshotDone = false;
 let lastAppliedConfigVersion = -1;
 const loggedRestErrorGuilds = new Set<string>();
+const AuthenticationStore = findStoreLazy("AuthenticationStore") as {
+    getToken?: () => string | null;
+};
 
 function hasOwnFunction(obj: unknown, key: string) {
     if (!obj || (typeof obj !== "object" && typeof obj !== "function")) return false;
@@ -280,11 +283,13 @@ function asFiniteNumberOrNull(value: unknown) {
 function getChannelStoreCandidates() {
     const stores: any[] = [];
     const baseStore: any = ChannelStore as any;
-    const dynamicStore = getDiscoveredChannelStore();
 
-    if (baseStore && typeof baseStore === "object") stores.push(baseStore);
-    if (dynamicStore && typeof dynamicStore === "object" && dynamicStore !== baseStore) {
-        stores.push(dynamicStore);
+    if (
+        baseStore &&
+        typeof baseStore === "object" &&
+        typeof baseStore.getChannel === "function"
+    ) {
+        stores.push(baseStore);
     }
 
     return stores;
@@ -612,6 +617,13 @@ function readDiscordAuthToken() {
 
     const tokenFromSession = readTokenFromStorage(window.sessionStorage);
     if (tokenFromSession) return tokenFromSession;
+
+    try {
+        const token = String(AuthenticationStore?.getToken?.() ?? "").trim();
+        if (token) return token;
+    } catch {
+        // ignore
+    }
     return null;
 }
 
@@ -701,6 +713,78 @@ async function fetchGuildChannelsViaRest(guildId: string): Promise<DiscoveryChan
     return [];
 }
 
+function listChannelsFromGuildObject(guildId: string) {
+    const byId = new Map<string, DiscoveryChannelRow>();
+    const seen = new WeakSet<object>();
+
+    const toChannelLike = (value: any): DiscoveryChannelRow | null => {
+        const channel = value?.channel ?? value?.record?.channel ?? value?.item?.channel ?? value;
+        if (!channel || typeof channel !== "object") return null;
+
+        const channelId = String(channel?.id ?? "").trim();
+        if (!channelId) return null;
+        if (typeof channel?.type !== "number") return null;
+
+        const channelGuildId = String(channel?.guild_id ?? channel?.guildId ?? guildId).trim();
+        if (!channelGuildId || channelGuildId !== guildId) return null;
+
+        const name = String(channel?.name ?? "").trim();
+        if (!name) return null;
+
+        return {
+            guild_id: channelGuildId,
+            discord_channel_id: channelId,
+            name,
+            type: channel.type,
+            parent_id: typeof channel?.parent_id === "string"
+                ? channel.parent_id
+                : typeof channel?.parentId === "string"
+                    ? channel.parentId
+                    : null,
+            position: typeof channel?.position === "number" ? channel.position : null,
+        };
+    };
+
+    const walk = (value: unknown, depth = 0) => {
+        if (!value || depth > 5) return;
+
+        if (Array.isArray(value)) {
+            for (const item of value) walk(item, depth + 1);
+            return;
+        }
+
+        if (typeof value !== "object") return;
+        const obj = value as object;
+        if (seen.has(obj)) return;
+        seen.add(obj);
+
+        const maybe = toChannelLike(value);
+        if (maybe) {
+            byId.set(maybe.discord_channel_id, maybe);
+        }
+
+        for (const nested of Object.values(value as Record<string, unknown>)) {
+            if (nested && (typeof nested === "object" || Array.isArray(nested))) {
+                walk(nested, depth + 1);
+            }
+        }
+    };
+
+    try {
+        const guild = (GuildStore as any)?.getGuild?.(guildId);
+        if (guild) {
+            walk((guild as any).channels);
+            walk((guild as any)._channels);
+            walk((guild as any).guildChannels);
+            walk(guild);
+        }
+    } catch {
+        // ignore
+    }
+
+    return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function listAccessibleGuilds() {
     const store: any = GuildStore as any;
     const fromStore =
@@ -759,30 +843,9 @@ async function syncGuildChannelSnapshot(targetGuildId?: string) {
     const channels: IngestChannelGuildSync["channels"] = [];
     const accessibleGuilds = listAccessibleGuilds();
     let restFallbackChannels = 0;
+    let objectFallbackChannels = 0;
     let domFallbackChannels = 0;
-    let storeFallbackChannels = 0;
 
-    if (!loggedChannelStoreDiagnostics) {
-        loggedChannelStoreDiagnostics = true;
-        const stores = getChannelStoreCandidates();
-        const methodCandidates = [
-            "getMutableGuildChannels",
-            "getGuildChannels",
-            "getChannelsForGuild",
-            "getMutableChannelsForGuild",
-            "getSelectableChannels",
-            "getChannels",
-            "getAllChannels",
-            "getChannel",
-        ];
-        const available = new Set<string>();
-        for (const store of stores) {
-            for (const name of methodCandidates) {
-                if (typeof store?.[name] === "function") available.add(name);
-            }
-        }
-        console.log(`[ChannelScraper] ChannelStore available methods: ${Array.from(available).join(", ") || "(none detected)"}`);
-    }
     const guildNameById = new Map(accessibleGuilds.map((guild) => [guild.discord_guild_id, guild.name]));
     const normalizedTargetGuildId = String(targetGuildId ?? "").trim();
     const discoveryGuildIds = normalizedTargetGuildId
@@ -807,18 +870,17 @@ async function syncGuildChannelSnapshot(targetGuildId?: string) {
         }
 
         if (rows.length === 0) {
-            // DOM fallback is cheap and does not depend on runtime store internals.
+            const objectRows = listChannelsFromGuildObject(guildId);
+            if (objectRows.length > 0) {
+                rows = objectRows;
+                objectFallbackChannels += objectRows.length;
+            }
+        }
+        if (rows.length === 0) {
             const domRows = listVisibleChannelsFromDom(guildId);
             if (domRows.length > 0) {
                 rows = domRows;
                 domFallbackChannels += domRows.length;
-            }
-        }
-        if (rows.length === 0) {
-            const storeRows = listAccessibleChannelsForGuild(guildId);
-            if (storeRows.length > 0) {
-                rows = storeRows;
-                storeFallbackChannels += storeRows.length;
             }
         }
         for (const row of rows) {
@@ -836,7 +898,7 @@ async function syncGuildChannelSnapshot(targetGuildId?: string) {
     if (channels.length === 0 && guilds.length === 0) return;
 
     console.log(
-        `[ChannelScraper] Discovery snapshot prepared: ${guilds.length} guild(s), ${channels.length} channel(s), restChannels=${restFallbackChannels}, domChannels=${domFallbackChannels}, storeChannels=${storeFallbackChannels}, targetGuild=${normalizedTargetGuildId || "all"}.`
+        `[ChannelScraper] Discovery snapshot prepared: ${guilds.length} guild(s), ${channels.length} channel(s), restChannels=${restFallbackChannels}, objectChannels=${objectFallbackChannels}, domChannels=${domFallbackChannels}, targetGuild=${normalizedTargetGuildId || "all"}.`
     );
 
     await Native.enqueueChannelGuildSync({
@@ -1141,8 +1203,6 @@ export default definePlugin({
         loggedRestAuthMissing = false;
         discoveredChannelStore = null;
         discoveredChannelStoreScanned = false;
-        loggedChannelStoreDiagnostics = false;
-
         const transport = getTransportConfig();
         if (!hasTransportConfig(transport)) {
             console.log("[ChannelScraper] Missing ingest config. Fill ingestBaseUrl, connectorId, and connectorToken.");

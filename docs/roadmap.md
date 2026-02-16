@@ -36,6 +36,8 @@ Backend is Convex.
 - Tightened dynamic webpack channel-store selection to require guild-channel APIs, preventing i18n/proxy collisions that caused zero-channel discovery snapshots. (2026-02-16)
 - Simplified discovery flow: plugin now sends guild-only snapshots automatically on startup/runtime sync, and admin channel discovery remains explicit via guild-selected "Fetch channels". (2026-02-16)
 - Reduced discovery pickup latency and hardened dynamic store validation to avoid i18n/proxy false-positives during channel discovery probes. (2026-02-16)
+- Replaced dynamic token/store probing in plugin discovery with Vencord store-based lookup (`findStoreLazy("AuthenticationStore")`) and stable ChannelStore-only probing to reduce false positives and restore guild-channel REST discovery reliability. (2026-02-16)
+- Added guild-object channel extraction fallback (`GuildStore.getGuild`) so channel discovery can still succeed when REST auth is unavailable and dynamic channel-store probing is disabled. (2026-02-16)
 
 **Next**
 - Move payments and access gating to Convex as the source of truth.
@@ -168,6 +170,10 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
   Exit criteria: plugin publishes guild metadata without fetching all channels, and admin only requests channel discovery for a selected guild via "Fetch channels".
 - [x] Reduce config polling latency and validate dynamic channel-store probe candidates (2026-02-16)
   Exit criteria: plugin processes discovery requests faster (low-second pickup), and channel store probes no longer trigger repeated locale-key warnings from non-channel modules.
+- [x] Stabilize discovery auth/store lookups using Vencord webpack store APIs (2026-02-16)
+  Exit criteria: plugin resolves Discord auth token via store lookup and avoids broad dynamic module probing that can call i18n proxy functions during channel discovery.
+- [x] Add non-proxy channel fallback via guild object traversal (2026-02-16)
+  Exit criteria: selected-guild channel discovery can extract channel IDs/names from guild object structures without invoking unstable store methods that trigger locale proxy warnings.
 
 ## Decision Log
 
