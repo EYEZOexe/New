@@ -115,6 +115,7 @@ export const rotateConnectorToken = mutation({
         tokenHash,
         status: "active",
         configVersion: 1,
+        discoveryRequestVersion: 0,
         updatedAt: ts,
         lastSeenAt: 0,
       });
@@ -126,6 +127,33 @@ export const rotateConnectorToken = mutation({
     }
 
     return { token };
+  },
+});
+
+export const requestChannelDiscovery = mutation({
+  args: {
+    tenantKey: v.string(),
+    connectorId: v.string(),
+    guildId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const connector = await getConnectorOrNull(ctx, args.tenantKey, args.connectorId);
+    if (!connector) throw new Error("connector_not_found");
+
+    const now = nowMs();
+    const nextDiscoveryVersion = (connector.discoveryRequestVersion ?? 0) + 1;
+    const nextConfigVersion = (connector.configVersion ?? 0) + 1;
+    const guildId = typeof args.guildId === "string" ? args.guildId.trim() : "";
+
+    await ctx.db.patch(connector._id, {
+      discoveryRequestVersion: nextDiscoveryVersion,
+      discoveryRequestedGuildId: guildId || undefined,
+      discoveryRequestedAt: now,
+      configVersion: nextConfigVersion,
+      updatedAt: now,
+    });
+
+    return { ok: true, requestVersion: nextDiscoveryVersion };
   },
 });
 
@@ -156,6 +184,8 @@ export const upsertSource = mutation({
     connectorId: v.string(),
     guildId: v.string(),
     channelId: v.string(),
+    isSource: v.boolean(),
+    isTarget: v.boolean(),
     threadMode: v.optional(
       v.union(v.literal("include"), v.literal("exclude"), v.literal("only")),
     ),
@@ -182,6 +212,8 @@ export const upsertSource = mutation({
         connectorId: args.connectorId,
         guildId: args.guildId,
         channelId: args.channelId,
+        isSource: args.isSource,
+        isTarget: args.isTarget,
         threadMode: args.threadMode,
         isEnabled: args.isEnabled,
         updatedAt: ts,
@@ -189,6 +221,8 @@ export const upsertSource = mutation({
     } else {
       await ctx.db.patch(existing._id, {
         guildId: args.guildId,
+        isSource: args.isSource,
+        isTarget: args.isTarget,
         threadMode: args.threadMode,
         isEnabled: args.isEnabled,
         updatedAt: ts,

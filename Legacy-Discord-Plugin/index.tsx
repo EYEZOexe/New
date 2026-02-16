@@ -156,7 +156,7 @@ const settings = definePluginSettings({
     configPollIntervalMs: {
         type: OptionType.NUMBER,
         description: "Runtime config poll interval (ms)",
-        default: 30_000,
+        default: 5_000,
     },
 });
 
@@ -170,9 +170,10 @@ const REST_CHANNEL_CACHE_TTL_MS = 2 * 60_000;
 const restChannelCache = new Map<string, { expiresAt: number; rows: DiscoveryChannelRow[] }>();
 let loggedRestAuthMissing = false;
 const loggedRestFailureGuilds = new Set<string>();
-let zeroChannelRetryTimer: ReturnType<typeof setTimeout> | null = null;
 let discoveredChannelStore: any | null = null;
 let discoveredChannelStoreScanned = false;
+let lastHandledDiscoveryRequestVersion = -1;
+let initialDiscoverySnapshotDone = false;
 
 function getDiscoveredChannelStore() {
     if (discoveredChannelStoreScanned) return discoveredChannelStore;
@@ -256,7 +257,8 @@ function applyRuntimeConfig(config: ConnectorRuntimeConfig | undefined) {
         const guildId = String(source.guild_id ?? "").trim();
         const channelId = String(source.channel_id ?? "").trim();
         const enabled = source.is_enabled !== false;
-        if (!guildId || !channelId || !enabled) continue;
+        const isSource = source.is_source !== false;
+        if (!guildId || !channelId || !enabled || !isSource) continue;
         nextMap.set(channelId, guildId);
         nextGuilds.add(guildId);
     }
@@ -713,7 +715,7 @@ function listAccessibleGuilds() {
     return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-async function syncGuildChannelSnapshot() {
+async function syncGuildChannelSnapshot(targetGuildId?: string) {
     const transport = getTransportConfig();
     if (!hasTransportConfig(transport)) return;
 
@@ -746,9 +748,12 @@ async function syncGuildChannelSnapshot() {
         console.log(`[ChannelScraper] ChannelStore available methods: ${Array.from(available).join(", ") || "(none detected)"}`);
     }
     const guildNameById = new Map(accessibleGuilds.map((guild) => [guild.discord_guild_id, guild.name]));
-    const discoveryGuildIds = accessibleGuilds.length > 0
-        ? accessibleGuilds.map((guild) => guild.discord_guild_id)
-        : Array.from(monitoredGuildIds);
+    const normalizedTargetGuildId = String(targetGuildId ?? "").trim();
+    const discoveryGuildIds = normalizedTargetGuildId
+        ? [normalizedTargetGuildId]
+        : accessibleGuilds.length > 0
+            ? accessibleGuilds.map((guild) => guild.discord_guild_id)
+            : Array.from(monitoredGuildIds);
 
     for (const guildId of discoveryGuildIds) {
         guilds.push({
@@ -788,17 +793,8 @@ async function syncGuildChannelSnapshot() {
     if (channels.length === 0 && guilds.length === 0) return;
 
     console.log(
-        `[ChannelScraper] Discovery snapshot prepared: ${guilds.length} guild(s), ${channels.length} channel(s), allChannels=${allChannels.length}, restChannels=${restFallbackChannels}, domChannels=${domFallbackChannels}.`
+        `[ChannelScraper] Discovery snapshot prepared: ${guilds.length} guild(s), ${channels.length} channel(s), allChannels=${allChannels.length}, restChannels=${restFallbackChannels}, domChannels=${domFallbackChannels}, targetGuild=${normalizedTargetGuildId || "all"}.`
     );
-
-    if (channels.length === 0 && guilds.length > 0 && !zeroChannelRetryTimer) {
-        zeroChannelRetryTimer = setTimeout(() => {
-            zeroChannelRetryTimer = null;
-            if (!runtimeConfigPollActive || runtimeConfigPollAbort) return;
-            void syncGuildChannelSnapshot();
-        }, 8_000);
-        console.log("[ChannelScraper] Discovery returned 0 channels; scheduled warmup retry in 8s.");
-    }
 
     await Native.enqueueChannelGuildSync({
         idempotency_key: buildIdempotencyKey(
@@ -828,7 +824,29 @@ async function pollRuntimeConfigLoop() {
         if (res?.success && res.status === 200 && res.config) {
             applyRuntimeConfig(res.config);
             runtimeConfigEtag = String(res.etag ?? "");
-            await syncGuildChannelSnapshot();
+
+            const requestVersionRaw = Number(res.config.discovery_request?.version ?? 0);
+            const requestVersion = Number.isFinite(requestVersionRaw) ? requestVersionRaw : 0;
+            const requestedGuildId = typeof res.config.discovery_request?.guild_id === "string"
+                ? res.config.discovery_request.guild_id.trim()
+                : "";
+
+            const shouldRunRequestedSync = requestVersion > lastHandledDiscoveryRequestVersion;
+            const shouldRunInitialSync = !initialDiscoverySnapshotDone;
+
+            if (shouldRunRequestedSync || shouldRunInitialSync) {
+                if (shouldRunRequestedSync) {
+                    lastHandledDiscoveryRequestVersion = requestVersion;
+                    console.log(
+                        `[ChannelScraper] Discovery fetch request received: version=${requestVersion}, guild=${requestedGuildId || "all"}`
+                    );
+                } else {
+                    console.log("[ChannelScraper] Running initial discovery snapshot.");
+                }
+
+                await syncGuildChannelSnapshot(requestedGuildId || undefined);
+                initialDiscoverySnapshotDone = true;
+            }
         } else if (!res?.success && res?.error) {
             console.error("[ChannelScraper] Runtime config poll failed:", res.error);
         }
@@ -1008,6 +1026,15 @@ export default definePlugin({
 
     async start() {
         console.log("[ChannelScraper] Plugin started.");
+        runtimeConfigEtag = "";
+        lastHandledDiscoveryRequestVersion = -1;
+        initialDiscoverySnapshotDone = false;
+        restChannelCache.clear();
+        loggedRestFailureGuilds.clear();
+        loggedRestAuthMissing = false;
+        discoveredChannelStore = null;
+        discoveredChannelStoreScanned = false;
+        loggedChannelStoreDiagnostics = false;
 
         const transport = getTransportConfig();
         if (!hasTransportConfig(transport)) {
@@ -1027,26 +1054,11 @@ export default definePlugin({
         }
 
         void pollRuntimeConfigLoop();
-
-        (async () => {
-            while (runtimeConfigPollActive && !runtimeConfigPollAbort) {
-                await new Promise((resolve) => setTimeout(resolve, 60_000));
-                try {
-                    await syncGuildChannelSnapshot();
-                } catch (error) {
-                    console.error("[ChannelScraper] Snapshot sync error:", error);
-                }
-            }
-        })();
     },
 
     async stop() {
         runtimeConfigPollActive = false;
         runtimeConfigPollAbort = true;
-        if (zeroChannelRetryTimer) {
-            clearTimeout(zeroChannelRetryTimer);
-            zeroChannelRetryTimer = null;
-        }
         await Native.flushConnectorQueue();
         await Native.shutdownConnectorTransport();
         console.log("[ChannelScraper] Plugin stopped.");

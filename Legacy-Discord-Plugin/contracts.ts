@@ -10,6 +10,8 @@ export type ConnectorTransportConfig = {
 export type RuntimeConfigSource = {
     guild_id: string;
     channel_id: string;
+    is_source?: boolean;
+    is_target?: boolean;
     thread_mode?: "include" | "exclude" | "only";
     is_enabled?: boolean;
 };
@@ -29,6 +31,11 @@ export type ConnectorRuntimeConfig = {
     config_version?: number;
     ingest_enabled?: boolean;
     forward_enabled?: boolean;
+    discovery_request?: {
+        version: number;
+        guild_id?: string | null;
+        requested_at?: number | null;
+    };
     sources: RuntimeConfigSource[];
     mappings?: RuntimeConfigMapping[];
 };

@@ -5,8 +5,8 @@ import { httpAction } from "./_generated/server";
 import { computeConnectorTokenHashFromRequest } from "./connectorsAuth";
 import { getCorrelationId, jsonError, jsonResponse } from "./httpHelpers";
 
-function buildConfigEtag(configVersion: number) {
-  return `W/\"${configVersion}\"`;
+function buildConfigEtag(configVersion: number, discoveryRequestVersion?: number) {
+  return `W/\"${configVersion}:${discoveryRequestVersion ?? 0}\"`;
 }
 
 export function mountConnectorRoutes(http: HttpRouter) {
@@ -87,7 +87,10 @@ export function mountConnectorRoutes(http: HttpRouter) {
         });
       }
 
-      const etag = buildConfigEtag(runtime.connector.configVersion);
+      const etag = buildConfigEtag(
+        runtime.connector.configVersion,
+        runtime.discoveryRequest?.version,
+      );
       const ifNoneMatch = request.headers.get("if-none-match");
       if (ifNoneMatch && ifNoneMatch.trim() === etag) {
         await ctx.runMutation(internal.connectorsInternal.touchConnectorLastSeen, {
@@ -114,6 +117,13 @@ export function mountConnectorRoutes(http: HttpRouter) {
             config_version: runtime.connector.configVersion,
             ingest_enabled: runtime.connector.status === "active",
             forward_enabled: false,
+            discovery_request: runtime.discoveryRequest
+              ? {
+                  version: runtime.discoveryRequest.version,
+                  guild_id: runtime.discoveryRequest.guildId ?? null,
+                  requested_at: runtime.discoveryRequest.requestedAt ?? null,
+                }
+              : undefined,
             sources: runtime.sources,
             mappings: runtime.mappings ?? [],
           },

@@ -11,6 +11,9 @@ export default defineSchema({
     tokenHash: v.string(),
     status: v.union(v.literal("active"), v.literal("paused")),
     configVersion: v.number(),
+    discoveryRequestVersion: v.optional(v.number()),
+    discoveryRequestedGuildId: v.optional(v.string()),
+    discoveryRequestedAt: v.optional(v.number()),
     updatedAt: v.number(),
     lastSeenAt: v.number(),
   })
@@ -22,6 +25,8 @@ export default defineSchema({
     connectorId: v.string(),
     guildId: v.string(),
     channelId: v.string(),
+    isSource: v.optional(v.boolean()),
+    isTarget: v.optional(v.boolean()),
     threadMode: v.optional(
       v.union(v.literal("include"), v.literal("exclude"), v.literal("only")),
     ),

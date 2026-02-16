@@ -23,10 +23,13 @@ Backend is Convex.
 - Fixed Vencord channel discovery extraction to handle wrapped/nested ChannelStore entries so channel snapshots persist in `discordChannels` for admin selection. (2026-02-16)
 - Expanded Vencord channel discovery fallbacks to probe multiple guild-scoped ChannelStore methods and log detected method availability for environment-specific debugging. (2026-02-16)
 - Added REST fallback (`/api/v10|v9/guilds/:id/channels`) for channel discovery when ChannelStore-based extraction returns empty in specific Discord client variants. (2026-02-16)
-- Hardened REST fallback auth + diagnostics: token lookup now includes Discord webpack `getToken()`, cookie-auth fallback requests are attempted, and zero-channel snapshots trigger short warmup retries. (2026-02-16)
+- Hardened REST fallback auth + diagnostics: token lookup now includes Discord webpack `getToken()`, and cookie-auth fallback requests are attempted when token extraction fails. (2026-02-16)
 - Added DOM-based fallback channel discovery by parsing visible `/channels/<guild>/<channel>` links when ChannelStore and REST fallbacks still return zero channels in constrained client contexts. (2026-02-16)
 - Added dynamic webpack-based channel store discovery to recover no-click channel discovery in builds where `@webpack/common` exposes only `getChannel`. (2026-02-16)
 - Refactored admin connector UX: left side now models "Available Channels", and mappings source/target selectors are constrained to enabled available channels instead of all discovered channels. (2026-02-16)
+- Added on-demand channel discovery requests from admin ("Fetch channels" per selected guild) and removed periodic plugin snapshot loops to reduce unnecessary discovery traffic. (2026-02-16)
+- Added per-available-channel role flags (`Source` / `Target`) in admin config and constrained mapping selectors accordingly (source list from source-enabled channels, target list from target-enabled channels). (2026-02-16)
+- Plugin ingestion scope now respects runtime `is_source` and only monitors channels marked as source for message/thread ingestion. (2026-02-16)
 
 **Next**
 - Move payments and access gating to Convex as the source of truth.
@@ -135,14 +138,18 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
   Exit criteria: plugin attempts multiple channel store APIs per guild, logs detected methods once, and increases discovery compatibility across Discord client variants.
 - [x] Add Discord REST fallback for channel snapshot discovery (2026-02-16)
   Exit criteria: when store-derived channels are empty, plugin fetches guild channels via Discord REST and snapshot payload includes non-zero channels when the account can access them.
-- [x] Improve REST fallback auth compatibility + zero-channel warmup retries (2026-02-16)
-  Exit criteria: plugin attempts token retrieval from storage and webpack runtime, emits actionable REST HTTP diagnostics, and retries snapshot shortly when guilds exist but channels are still zero.
+- [x] Improve REST fallback auth compatibility + diagnostics (2026-02-16)
+  Exit criteria: plugin attempts token retrieval from storage and webpack runtime, and emits actionable REST HTTP diagnostics when channel REST fetches fail.
 - [x] Add DOM fallback discovery for visible guild channels (2026-02-16)
   Exit criteria: when store and REST fallbacks are empty, plugin extracts channel IDs/names from rendered Discord channel links and sends them in discovery snapshots.
 - [x] Add dynamic webpack channel-store fallback for non-standard Discord client exports (2026-02-16)
   Exit criteria: plugin scans webpack modules for richer channel-store APIs and uses them for discovery when the common ChannelStore wrapper is incomplete.
 - [x] Constrain mapping source/target selectors to enabled available channels (2026-02-16)
   Exit criteria: mapping dropdowns no longer show all discovered channels; they only show channels explicitly saved/enabled in the left-side availability list.
+- [x] Add admin-triggered guild channel fetch requests and remove periodic discovery sync loop (2026-02-16)
+  Exit criteria: admin can request discovery for a selected guild via UI; plugin processes the request through runtime-config polling and does not run unconditional periodic snapshot sync.
+- [x] Add source/target role flags for available channels and enforce source-only ingestion (2026-02-16)
+  Exit criteria: admin can mark a channel as source/target/both; plugin only ingests from channels flagged as source; mapping source/target dropdowns are filtered by respective role flags.
 
 ## Decision Log
 

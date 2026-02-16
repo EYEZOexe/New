@@ -20,6 +20,8 @@ type SourceRow = {
   _id: string;
   guildId: string;
   channelId: string;
+  isSource?: boolean;
+  isTarget?: boolean;
   threadMode?: "include" | "exclude" | "only";
   isEnabled: boolean;
 };
@@ -122,6 +124,8 @@ export default function ConnectorDetailPage() {
           connectorId: string;
           guildId: string;
           channelId: string;
+          isSource: boolean;
+          isTarget: boolean;
           threadMode?: "include" | "exclude" | "only";
           isEnabled: boolean;
         },
@@ -162,6 +166,15 @@ export default function ConnectorDetailPage() {
       >("connectors:removeMapping"),
     [],
   );
+  const requestChannelDiscovery = useMemo(
+    () =>
+      makeFunctionReference<
+        "mutation",
+        { tenantKey: string; connectorId: string; guildId?: string },
+        { ok: true; requestVersion: number }
+      >("connectors:requestChannelDiscovery"),
+    [],
+  );
 
   const connectorArgs = hasRouteParams ? { tenantKey, connectorId } : "skip";
   const connector = useQuery(getConnector, connectorArgs);
@@ -172,6 +185,8 @@ export default function ConnectorDetailPage() {
   const [guildIdFilter, setGuildIdFilter] = useState<string>("");
   const [newSourceGuildId, setNewSourceGuildId] = useState("");
   const [newSourceChannelId, setNewSourceChannelId] = useState("");
+  const [newSourceIsSource, setNewSourceIsSource] = useState(true);
+  const [newSourceIsTarget, setNewSourceIsTarget] = useState(true);
   const [newSourceThreadMode, setNewSourceThreadMode] = useState("");
   const [newSourceEnabled, setNewSourceEnabled] = useState(true);
 
@@ -190,9 +205,12 @@ export default function ConnectorDetailPage() {
   const doRemoveSource = useMutation(removeSource);
   const doUpsertMapping = useMutation(upsertMapping);
   const doRemoveMapping = useMutation(removeMapping);
+  const doRequestChannelDiscovery = useMutation(requestChannelDiscovery);
 
   const [lastToken, setLastToken] = useState<string | null>(null);
   const [isRotating, setIsRotating] = useState(false);
+  const [isRequestingChannels, setIsRequestingChannels] = useState(false);
+  const [lastDiscoveryRequestVersion, setLastDiscoveryRequestVersion] = useState<number | null>(null);
 
   const [newMappingSource, setNewMappingSource] = useState("");
   const [newMappingTarget, setNewMappingTarget] = useState("");
@@ -215,13 +233,18 @@ export default function ConnectorDetailPage() {
   );
 
   const availableChannels = useMemo(() => {
-    const byChannelId = new Map<string, { guildId: string; channelId: string }>();
+    const byChannelId = new Map<
+      string,
+      { guildId: string; channelId: string; isSource: boolean; isTarget: boolean }
+    >();
     for (const source of sources) {
       if (!source.isEnabled) continue;
       if (!source.guildId || !source.channelId) continue;
       byChannelId.set(source.channelId, {
         guildId: source.guildId,
         channelId: source.channelId,
+        isSource: source.isSource ?? true,
+        isTarget: source.isTarget ?? true,
       });
     }
     const rows = Array.from(byChannelId.values());
@@ -238,14 +261,23 @@ export default function ConnectorDetailPage() {
     return availableChannels.filter((channel) => channel.guildId === guildIdFilter);
   }, [availableChannels, guildIdFilter]);
 
+  const mappingSourceOptions = useMemo(
+    () => mappingChannelOptions.filter((channel) => channel.isSource),
+    [mappingChannelOptions],
+  );
+  const mappingTargetOptions = useMemo(
+    () => mappingChannelOptions.filter((channel) => channel.isTarget),
+    [mappingChannelOptions],
+  );
+
   useEffect(() => {
-    if (newMappingSource && !mappingChannelOptions.some((channel) => channel.channelId === newMappingSource)) {
+    if (newMappingSource && !mappingSourceOptions.some((channel) => channel.channelId === newMappingSource)) {
       setNewMappingSource("");
     }
-    if (newMappingTarget && !mappingChannelOptions.some((channel) => channel.channelId === newMappingTarget)) {
+    if (newMappingTarget && !mappingTargetOptions.some((channel) => channel.channelId === newMappingTarget)) {
       setNewMappingTarget("");
     }
-  }, [mappingChannelOptions, newMappingSource, newMappingTarget]);
+  }, [mappingSourceOptions, mappingTargetOptions, newMappingSource, newMappingTarget]);
 
   function renderGuildLabel(guildId: string) {
     return `${guildNameById.get(guildId) ?? "Unknown guild"} (${guildId})`;
@@ -275,11 +307,14 @@ export default function ConnectorDetailPage() {
 
   async function onAddSource() {
     if (!hasRouteParams || !newSourceGuildId || !newSourceChannelId) return;
+    if (!newSourceIsSource && !newSourceIsTarget) return;
     await doUpsertSource({
       tenantKey,
       connectorId,
       guildId: newSourceGuildId,
       channelId: newSourceChannelId,
+      isSource: newSourceIsSource,
+      isTarget: newSourceIsTarget,
       threadMode:
         newSourceThreadMode === "include" ||
         newSourceThreadMode === "exclude" ||
@@ -303,6 +338,21 @@ export default function ConnectorDetailPage() {
       targetChannelId: newMappingTarget,
       priority: Number.isFinite(prio) ? prio : undefined,
     });
+  }
+
+  async function onRequestChannels() {
+    if (!hasRouteParams || !newSourceGuildId) return;
+    setIsRequestingChannels(true);
+    try {
+      const result = await doRequestChannelDiscovery({
+        tenantKey,
+        connectorId,
+        guildId: newSourceGuildId,
+      });
+      setLastDiscoveryRequestVersion(result.requestVersion);
+    } finally {
+      setIsRequestingChannels(false);
+    }
   }
 
   return (
@@ -433,6 +483,30 @@ export default function ConnectorDetailPage() {
                   />
                   Enabled
                 </label>
+                <label className="flex items-center gap-2 text-xs font-medium text-zinc-700">
+                  <input
+                    type="checkbox"
+                    checked={newSourceIsSource}
+                    onChange={(e) => setNewSourceIsSource(e.target.checked)}
+                  />
+                  Source
+                </label>
+                <label className="flex items-center gap-2 text-xs font-medium text-zinc-700">
+                  <input
+                    type="checkbox"
+                    checked={newSourceIsTarget}
+                    onChange={(e) => setNewSourceIsTarget(e.target.checked)}
+                  />
+                  Target
+                </label>
+                <button
+                  type="button"
+                  onClick={onRequestChannels}
+                  disabled={!newSourceGuildId || isRequestingChannels}
+                  className="h-9 rounded-md border border-zinc-300 bg-white px-4 text-sm font-medium disabled:opacity-60"
+                >
+                  {isRequestingChannels ? "Requesting..." : "Fetch channels"}
+                </button>
                 <button
                   type="button"
                   onClick={onAddSource}
@@ -441,6 +515,13 @@ export default function ConnectorDetailPage() {
                   Add / update available
                 </button>
               </div>
+              <p className="mt-3 text-xs text-zinc-600">
+                Select a guild, click <strong>Fetch channels</strong>, then pick a channel and save it as available.
+                Mark whether the channel is usable as a source, target, or both.
+                {lastDiscoveryRequestVersion
+                  ? ` Last fetch request: v${lastDiscoveryRequestVersion}.`
+                  : ""}
+              </p>
             </div>
 
             <div className="mt-4 overflow-x-auto rounded-lg border border-zinc-200">
@@ -451,6 +532,8 @@ export default function ConnectorDetailPage() {
                     <th className="px-3 py-2">Available Channel</th>
                     <th className="px-3 py-2">Thread</th>
                     <th className="px-3 py-2">Enabled</th>
+                    <th className="px-3 py-2">Source</th>
+                    <th className="px-3 py-2">Target</th>
                     <th className="px-3 py-2">Remove</th>
                   </tr>
                 </thead>
@@ -461,6 +544,8 @@ export default function ConnectorDetailPage() {
                       <td className="px-3 py-2">{renderChannelLabel(s.channelId)}</td>
                       <td className="px-3 py-2">{s.threadMode ?? "-"}</td>
                       <td className="px-3 py-2">{s.isEnabled ? "yes" : "no"}</td>
+                      <td className="px-3 py-2">{(s.isSource ?? true) ? "yes" : "no"}</td>
+                      <td className="px-3 py-2">{(s.isTarget ?? true) ? "yes" : "no"}</td>
                       <td className="px-3 py-2">
                         <button
                           type="button"
@@ -482,7 +567,7 @@ export default function ConnectorDetailPage() {
                     <tr>
                       <td
                         className="px-3 py-3 text-sm text-zinc-600"
-                        colSpan={5}
+                        colSpan={7}
                       >
                         No available channels yet.
                       </td>
@@ -522,7 +607,7 @@ export default function ConnectorDetailPage() {
                     onChange={(e) => setNewMappingSource(e.target.value)}
                   >
                     <option value="">Select source</option>
-                    {mappingChannelOptions.map((channel) => (
+                    {mappingSourceOptions.map((channel) => (
                       <option key={`src-${channel.channelId}`} value={channel.channelId}>
                         {renderChannelLabel(channel.channelId)}
                       </option>
@@ -537,7 +622,7 @@ export default function ConnectorDetailPage() {
                     onChange={(e) => setNewMappingTarget(e.target.value)}
                   >
                     <option value="">Select target</option>
-                    {mappingChannelOptions.map((channel) => (
+                    {mappingTargetOptions.map((channel) => (
                       <option key={`dst-${channel.channelId}`} value={channel.channelId}>
                         {renderChannelLabel(channel.channelId)}
                       </option>
@@ -548,6 +633,10 @@ export default function ConnectorDetailPage() {
               {availableChannels.length === 0 ? (
                 <p className="mt-3 text-xs text-zinc-600">
                   Add enabled available channels on the left before creating mappings.
+                </p>
+              ) : mappingSourceOptions.length === 0 || mappingTargetOptions.length === 0 ? (
+                <p className="mt-3 text-xs text-zinc-600">
+                  Mark at least one available channel as source and one as target to create mappings.
                 </p>
               ) : null}
 

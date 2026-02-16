@@ -74,9 +74,16 @@ export const getRuntimeConfig = internalQuery({
 
     return {
       connector,
+      discoveryRequest: {
+        version: connector.discoveryRequestVersion ?? 0,
+        guildId: connector.discoveryRequestedGuildId ?? undefined,
+        requestedAt: connector.discoveryRequestedAt ?? undefined,
+      },
       sources: sources.map((s) => ({
         guild_id: s.guildId,
         channel_id: s.channelId,
+        is_source: s.isSource ?? true,
+        is_target: s.isTarget ?? true,
         thread_mode: s.threadMode ?? undefined,
         is_enabled: s.isEnabled,
       })),
