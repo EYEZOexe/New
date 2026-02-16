@@ -21,6 +21,7 @@ Backend is Convex.
 - Define and enforce realtime signal delivery targets (p95 < 100ms) across web, admin, and bot.
 - Connector discovery bootstrap improved: plugin now sends accessible guild/channel metadata (IDs + names) even before source mappings exist, and admin config filters source channels by selected guild. (2026-02-16)
 - Fixed Vencord channel discovery extraction to handle wrapped/nested ChannelStore entries so channel snapshots persist in `discordChannels` for admin selection. (2026-02-16)
+- Expanded Vencord channel discovery fallbacks to probe multiple guild-scoped ChannelStore methods and log detected method availability for environment-specific debugging. (2026-02-16)
 
 **Next**
 - Move payments and access gating to Convex as the source of truth.
@@ -125,6 +126,8 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
   Exit criteria: source channel picker only shows channels from the selected guild; mapping/source tables show readable names with IDs.
 - [x] Fix channel snapshot extraction from Discord ChannelStore wrappers + global fallback scan (2026-02-16)
   Exit criteria: channel-guild sync writes non-empty `discordChannels` rows for accessible guilds even when guild-scoped store helpers are empty, and admin channel dropdowns populate after snapshot sync.
+- [x] Add ChannelStore method-probing fallbacks and diagnostics for channel discovery (2026-02-16)
+  Exit criteria: plugin attempts multiple channel store APIs per guild, logs detected methods once, and increases discovery compatibility across Discord client variants.
 
 ## Decision Log
 

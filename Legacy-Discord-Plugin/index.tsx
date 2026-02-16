@@ -156,6 +156,7 @@ let monitoredGuildIds = new Set<string>();
 let runtimeConfigEtag = "";
 let runtimeConfigPollActive = false;
 let runtimeConfigPollAbort = false;
+let loggedChannelStoreDiagnostics = false;
 
 function getTransportConfig(): ConnectorTransportConfig {
     return {
@@ -200,10 +201,6 @@ function applyRuntimeConfig(config: ConnectorRuntimeConfig | undefined) {
 
 function listAccessibleChannelsForGuild(guildId: string) {
     const store: any = ChannelStore as any;
-    const byGuild =
-        (typeof store.getMutableGuildChannels === "function" ? store.getMutableGuildChannels(guildId) : null) ??
-        (typeof store.getGuildChannels === "function" ? store.getGuildChannels(guildId) : null) ??
-        null;
 
     const out: Array<{ guild_id: string; discord_channel_id: string; name: string; type?: number | null; parent_id?: string | null; position?: number | null }> = [];
     const byId = new Map<string, (typeof out)[number]>();
@@ -272,23 +269,49 @@ function listAccessibleChannelsForGuild(guildId: string) {
         }
     };
 
-    if (byGuild) {
-        walk(byGuild);
-        if (byId.size > 0) {
-            out.push(...byId.values());
-            out.sort((a, b) => a.name.localeCompare(b.name));
-            return out;
+    const runMethod = (name: string, args: unknown[]) => {
+        if (typeof store?.[name] !== "function") return;
+        try {
+            const value = store[name](...args);
+            if (value) walk(value);
+        } catch {
+            // No-op: incompatible method signature in this Discord build.
+        }
+    };
+
+    const preferredMethods: Array<[string, unknown[]]> = [
+        ["getMutableGuildChannels", [guildId]],
+        ["getGuildChannels", [guildId]],
+        ["getChannelsForGuild", [guildId]],
+        ["getMutableChannelsForGuild", [guildId]],
+        ["getSelectableChannels", [guildId]],
+        ["getChannels", [guildId]],
+        ["getAllChannels", [guildId]],
+        ["getChannels", []],
+        ["getAllChannels", []],
+    ];
+
+    for (const [name, args] of preferredMethods) {
+        runMethod(name, args);
+        if (byId.size > 0 && args.length > 0) break;
+    }
+
+    // Last-resort: inspect guild object shape for embedded channel maps.
+    if (byId.size === 0) {
+        try {
+            const guild = (GuildStore as any)?.getGuild?.(guildId);
+            if (guild) {
+                walk((guild as any).channels);
+                walk((guild as any)._channels);
+                walk((guild as any).guildChannels);
+            }
+        } catch {
+            // ignore
         }
     }
 
-    const all =
-        (typeof store.getChannels === "function" ? store.getChannels() : null) ??
-        (typeof store.getAllChannels === "function" ? store.getAllChannels() : null) ??
-        null;
-
-    if (all && typeof all === "object") {
-        walk(all);
-    }
+    if (byId.size === 0) runMethod("getChannels", []);
+    if (byId.size === 0) runMethod("getAllChannels", []);
 
     out.push(...byId.values());
     out.sort((a, b) => a.name.localeCompare(b.name));
@@ -297,10 +320,6 @@ function listAccessibleChannelsForGuild(guildId: string) {
 
 function listAllAccessibleGuildChannels() {
     const store: any = ChannelStore as any;
-    const all =
-        (typeof store.getChannels === "function" ? store.getChannels() : null) ??
-        (typeof store.getAllChannels === "function" ? store.getAllChannels() : null) ??
-        null;
 
     const byId = new Map<string, {
         guild_id: string;
@@ -362,9 +381,49 @@ function listAllAccessibleGuildChannels() {
         }
     };
 
-    if (all && typeof all === "object") {
-        walk(all);
+    const runMethod = (name: string, args: unknown[]) => {
+        if (typeof store?.[name] !== "function") return;
+        try {
+            const value = store[name](...args);
+            if (value) walk(value);
+        } catch {
+            // ignore incompatible signatures
+        }
+    };
+
+    const guildIds = new Set<string>();
+    try {
+        const rawGuilds =
+            (typeof (GuildStore as any)?.getGuilds === "function"
+                ? (GuildStore as any).getGuilds()
+                : null) ??
+            (typeof (GuildStore as any)?.getFlattenedGuilds === "function"
+                ? (GuildStore as any).getFlattenedGuilds()
+                : null);
+        if (rawGuilds && typeof rawGuilds === "object") {
+            const values = Array.isArray(rawGuilds) ? rawGuilds : Object.values(rawGuilds);
+            for (const value of values) {
+                const guildLike = (value as any)?.guild ?? value;
+                const id = String((guildLike as any)?.id ?? "").trim();
+                if (id) guildIds.add(id);
+            }
+        }
+    } catch {
+        // ignore
     }
+
+    for (const guildId of guildIds) {
+        runMethod("getMutableGuildChannels", [guildId]);
+        runMethod("getGuildChannels", [guildId]);
+        runMethod("getChannelsForGuild", [guildId]);
+        runMethod("getMutableChannelsForGuild", [guildId]);
+        runMethod("getSelectableChannels", [guildId]);
+        runMethod("getChannels", [guildId]);
+        runMethod("getAllChannels", [guildId]);
+    }
+
+    runMethod("getChannels", []);
+    runMethod("getAllChannels", []);
 
     return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -427,6 +486,23 @@ async function syncGuildChannelSnapshot() {
     const channels: IngestChannelGuildSync["channels"] = [];
     const accessibleGuilds = listAccessibleGuilds();
     const allChannels = listAllAccessibleGuildChannels();
+
+    if (!loggedChannelStoreDiagnostics) {
+        loggedChannelStoreDiagnostics = true;
+        const store: any = ChannelStore as any;
+        const methodCandidates = [
+            "getMutableGuildChannels",
+            "getGuildChannels",
+            "getChannelsForGuild",
+            "getMutableChannelsForGuild",
+            "getSelectableChannels",
+            "getChannels",
+            "getAllChannels",
+            "getChannel",
+        ];
+        const available = methodCandidates.filter((name) => typeof store?.[name] === "function");
+        console.log(`[ChannelScraper] ChannelStore available methods: ${available.join(", ") || "(none detected)"}`);
+    }
     const guildNameById = new Map(accessibleGuilds.map((guild) => [guild.discord_guild_id, guild.name]));
     const discoveryGuildIds = accessibleGuilds.length > 0
         ? accessibleGuilds.map((guild) => guild.discord_guild_id)
