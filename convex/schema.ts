@@ -98,18 +98,41 @@ export default defineSchema({
 
   subscriptions: defineTable({
     userId: v.id("users"),
+    tier: v.optional(
+      v.union(v.literal("basic"), v.literal("advanced"), v.literal("pro")),
+    ),
+    billingMode: v.optional(
+      v.union(v.literal("recurring"), v.literal("fixed_term")),
+    ),
     status: v.union(
       v.literal("active"),
       v.literal("inactive"),
       v.literal("canceled"),
       v.literal("past_due"),
     ),
+    variantId: v.optional(v.string()),
     productId: v.optional(v.string()),
+    startedAt: v.optional(v.number()),
+    endsAt: v.optional(v.number()),
     source: v.optional(v.string()),
     updatedAt: v.number(),
   })
     .index("by_userId", ["userId"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    .index("by_status_endsAt", ["status", "endsAt"]),
+
+  sellAccessPolicies: defineTable({
+    scope: v.union(v.literal("product"), v.literal("variant")),
+    externalId: v.string(),
+    tier: v.union(v.literal("basic"), v.literal("advanced"), v.literal("pro")),
+    billingMode: v.union(v.literal("recurring"), v.literal("fixed_term")),
+    durationDays: v.optional(v.number()),
+    enabled: v.boolean(),
+    updatedAt: v.number(),
+  })
+    .index("by_scope_externalId", ["scope", "externalId"])
+    .index("by_enabled", ["enabled"])
+    .index("by_tier", ["tier"]),
 
   paymentCustomers: defineTable({
     provider: v.string(),
@@ -136,14 +159,12 @@ export default defineSchema({
 
   discordTierRoleMappings: defineTable({
     tier: v.union(v.literal("basic"), v.literal("advanced"), v.literal("pro")),
-    productId: v.string(),
     guildId: v.string(),
     roleId: v.string(),
     enabled: v.boolean(),
     updatedAt: v.number(),
   })
     .index("by_tier", ["tier"])
-    .index("by_productId", ["productId"])
     .index("by_enabled", ["enabled"]),
 
   roleSyncJobs: defineTable({

@@ -9,6 +9,11 @@ import {
   type SubscriptionStatus,
 } from "./paymentsUtils";
 import {
+  resolveEnabledSellAccessPolicy,
+  type BillingMode,
+  type SubscriptionTier,
+} from "./sellAccessPolicies";
+import {
   enqueueRoleSyncJobsForSubscription,
 } from "./roleSyncQueue";
 
@@ -196,31 +201,88 @@ async function upsertSubscriptionForUser(
     userId: Id<"users">;
     status: SubscriptionStatus;
     productId: string | null;
+    variantId: string | null;
+    tier: SubscriptionTier | null;
+    billingMode: BillingMode | null;
+    durationDays: number | null;
     now: number;
   },
-): Promise<void> {
+): Promise<{
+  status: SubscriptionStatus;
+  productId: string | null;
+  variantId: string | null;
+  tier: SubscriptionTier | null;
+  billingMode: BillingMode | null;
+  endsAt: number | null;
+}> {
   const existing = await ctx.db
     .query("subscriptions")
     .withIndex("by_userId", (q) => q.eq("userId", args.userId))
     .first();
 
+  const resolvedTier = args.tier ?? existing?.tier ?? null;
+  const resolvedBillingMode = args.billingMode ?? existing?.billingMode ?? null;
+  const resolvedProductId = args.productId ?? existing?.productId ?? null;
+  const resolvedVariantId = args.variantId ?? existing?.variantId ?? null;
+
+  let startedAt: number | undefined = existing?.startedAt;
+  let endsAt: number | undefined = existing?.endsAt;
+
+  if (args.status === "active") {
+    if (resolvedBillingMode === "fixed_term") {
+      if (!Number.isFinite(args.durationDays) || !args.durationDays || args.durationDays <= 0) {
+        throw new Error("duration_days_invalid");
+      }
+      const durationMs = args.durationDays * 24 * 60 * 60 * 1000;
+      const canExtend =
+        existing?.status === "active" &&
+        existing.billingMode === "fixed_term" &&
+        existing.tier === resolvedTier &&
+        existing.productId === resolvedProductId &&
+        Number.isFinite(existing.endsAt) &&
+        (existing.endsAt ?? 0) > args.now;
+      const base = canExtend ? (existing!.endsAt as number) : args.now;
+      startedAt = canExtend ? existing?.startedAt ?? args.now : args.now;
+      endsAt = base + durationMs;
+    } else {
+      startedAt = args.now;
+      endsAt = undefined;
+    }
+  } else if (resolvedBillingMode === "fixed_term") {
+    endsAt = args.now;
+  } else {
+    endsAt = undefined;
+  }
+
+  const next = {
+    status: args.status,
+    tier: resolvedTier ?? undefined,
+    billingMode: resolvedBillingMode ?? undefined,
+    productId: resolvedProductId ?? undefined,
+    variantId: resolvedVariantId ?? undefined,
+    startedAt: startedAt ?? undefined,
+    endsAt: endsAt ?? undefined,
+    source: PROVIDER,
+    updatedAt: args.now,
+  };
+
   if (!existing) {
     await ctx.db.insert("subscriptions", {
       userId: args.userId,
-      status: args.status,
-      productId: args.productId ?? undefined,
-      source: PROVIDER,
-      updatedAt: args.now,
+      ...next,
     });
-    return;
+  } else {
+    await ctx.db.patch(existing._id, next);
   }
 
-  await ctx.db.patch(existing._id, {
+  return {
     status: args.status,
-    productId: args.productId ?? undefined,
-    source: PROVIDER,
-    updatedAt: args.now,
-  });
+    productId: resolvedProductId,
+    variantId: resolvedVariantId,
+    tier: resolvedTier,
+    billingMode: resolvedBillingMode,
+    endsAt: endsAt ?? null,
+  };
 }
 
 async function listActiveDiscordLinksForUser(
@@ -322,6 +384,11 @@ export const processSellWebhookEvent = internalMutation({
     const projected = projectSellWebhookPayload(event.payload, event.eventId);
 
     try {
+      const accessPolicy = await resolveEnabledSellAccessPolicy(ctx, {
+        productId: projected.productId,
+        variantId: projected.variantId,
+      });
+
       const resolvedUser = await resolveUserFromPaymentTracking(ctx, {
         externalCustomerId: projected.externalCustomerId,
         externalSubscriptionId: projected.externalSubscriptionId,
@@ -333,10 +400,20 @@ export const processSellWebhookEvent = internalMutation({
         );
       }
 
-      await upsertSubscriptionForUser(ctx, {
+      if (projected.subscriptionStatus === "active" && !accessPolicy) {
+        throw new Error(
+          `sell_access_policy_missing:product=${projected.productId ?? "none"} variant=${projected.variantId ?? "none"}`,
+        );
+      }
+
+      const subscription = await upsertSubscriptionForUser(ctx, {
         userId: resolvedUser.id,
         status: projected.subscriptionStatus,
         productId: projected.productId,
+        variantId: projected.variantId,
+        tier: accessPolicy?.tier ?? null,
+        billingMode: accessPolicy?.billingMode ?? null,
+        durationDays: accessPolicy?.durationDays ?? null,
         now: args.attemptedAt,
       });
 
@@ -349,7 +426,7 @@ export const processSellWebhookEvent = internalMutation({
           userId: resolvedUser.id,
           discordUserId: link.discordUserId,
           subscriptionStatus: projected.subscriptionStatus,
-          productId: projected.productId,
+          tier: subscription.tier,
           source: `payment_${projected.eventType}`,
           now: args.attemptedAt,
         });
@@ -360,7 +437,7 @@ export const processSellWebhookEvent = internalMutation({
           );
         } else {
           console.info(
-            `[payments] role sync enqueue user=${resolvedUser.id} discord_user=${link.discordUserId} status=${projected.subscriptionStatus} product=${projected.productId ?? "none"} mapped_tier=${enqueueResult.mappedTier ?? "none"} source=${enqueueResult.mappingSource} granted=${enqueueResult.granted} revoked=${enqueueResult.revoked} deduped=${enqueueResult.deduped} skipped=${enqueueResult.skipped}`,
+            `[payments] role sync enqueue user=${resolvedUser.id} discord_user=${link.discordUserId} status=${projected.subscriptionStatus} tier=${subscription.tier ?? "none"} mapped_tier=${enqueueResult.mappedTier ?? "none"} source=${enqueueResult.mappingSource} granted=${enqueueResult.granted} revoked=${enqueueResult.revoked} deduped=${enqueueResult.deduped} skipped=${enqueueResult.skipped}`,
           );
         }
       }
@@ -388,7 +465,7 @@ export const processSellWebhookEvent = internalMutation({
       });
 
       console.info(
-        `[payments] processed webhook provider=${args.provider} event=${args.eventId} user=${resolvedUser.email ?? "unknown"} status=${projected.subscriptionStatus} attempts=${nextAttempt} resolvedVia=${resolvedUser.method} customer=${projected.externalCustomerId ?? "none"} subscription=${projected.externalSubscriptionId ?? "none"}`,
+        `[payments] processed webhook provider=${args.provider} event=${args.eventId} user=${resolvedUser.email ?? "unknown"} status=${projected.subscriptionStatus} tier=${subscription.tier ?? "none"} billing=${subscription.billingMode ?? "none"} ends_at=${subscription.endsAt ?? 0} attempts=${nextAttempt} resolvedVia=${resolvedUser.method} customer=${projected.externalCustomerId ?? "none"} subscription=${projected.externalSubscriptionId ?? "none"}`,
       );
 
       return {
@@ -455,6 +532,62 @@ export const listFailedSellWebhookEvents = internalQuery({
   },
 });
 
+export const expireFixedTermSubscriptions = internalMutation({
+  args: {
+    now: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const now = args.now ?? Date.now();
+    const limit = Math.max(1, Math.min(500, args.limit ?? 100));
+
+    const candidates = await ctx.db
+      .query("subscriptions")
+      .withIndex("by_status_endsAt", (q) =>
+        q.eq("status", "active").lte("endsAt", now),
+      )
+      .take(limit);
+
+    let expired = 0;
+    let roleSyncQueued = 0;
+
+    for (const subscription of candidates) {
+      if (subscription.billingMode !== "fixed_term") continue;
+      if (!subscription.endsAt || subscription.endsAt > now) continue;
+
+      await ctx.db.patch(subscription._id, {
+        status: "inactive",
+        updatedAt: now,
+      });
+      expired += 1;
+
+      const activeLinks = await listActiveDiscordLinksForUser(
+        ctx,
+        subscription.userId,
+      );
+      for (const link of activeLinks) {
+        const enqueueResult = await enqueueRoleSyncJobsForSubscription(ctx, {
+          userId: subscription.userId,
+          discordUserId: link.discordUserId,
+          subscriptionStatus: "inactive",
+          tier: subscription.tier ?? null,
+          source: "subscription_expired_fixed_term",
+          now,
+        });
+        roleSyncQueued += enqueueResult.granted + enqueueResult.revoked;
+      }
+    }
+
+    if (expired > 0) {
+      console.info(
+        `[payments] fixed-term expiry run expired=${expired} role_sync_jobs=${roleSyncQueued} now=${now}`,
+      );
+    }
+
+    return { expired, roleSyncQueued };
+  },
+});
+
 export const listPaymentCustomers = query({
   args: {
     limit: v.optional(v.number()),
@@ -487,7 +620,10 @@ export const listPaymentCustomers = query({
       provider: string;
       userId: Id<"users">;
       userEmail: string | null;
+      tier: SubscriptionTier | null;
+      billingMode: BillingMode | null;
       subscriptionStatus: SubscriptionStatus | null;
+      endsAt: number | null;
       customerEmail: string | null;
       externalCustomerId: string | null;
       externalSubscriptionId: string | null;
@@ -506,7 +642,10 @@ export const listPaymentCustomers = query({
         provider: row.provider,
         userId: row.userId,
         userEmail: user && typeof user.email === "string" ? user.email : null,
+        tier: subscription?.tier ?? null,
+        billingMode: subscription?.billingMode ?? null,
         subscriptionStatus: subscription?.status ?? null,
+        endsAt: subscription?.endsAt ?? null,
         customerEmail: row.customerEmail ?? null,
         externalCustomerId: row.externalCustomerId ?? null,
         externalSubscriptionId: row.externalSubscriptionId ?? null,

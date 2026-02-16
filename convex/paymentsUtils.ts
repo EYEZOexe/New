@@ -8,6 +8,7 @@ type EventMeta = {
 export type SellWebhookProjection = EventMeta & {
   customerEmail: string | null;
   productId: string | null;
+  variantId: string | null;
   externalCustomerId: string | null;
   externalSubscriptionId: string | null;
   rawStatus: string | null;
@@ -82,6 +83,13 @@ const PRODUCT_ID_PATHS = [
   "product.id",
   "data.product_id",
   "data.product.id",
+] as const;
+
+const VARIANT_ID_PATHS = [
+  "variant_id",
+  "variant.id",
+  "data.variant_id",
+  "data.variant.id",
 ] as const;
 
 const CUSTOMER_ID_PATHS = [
@@ -205,6 +213,7 @@ export function projectSellWebhookPayload(
     eventType,
     customerEmail: normalizeEmail(readFirstString(payload, CUSTOMER_EMAIL_PATHS)),
     productId: readFirstString(payload, PRODUCT_ID_PATHS),
+    variantId: readFirstString(payload, VARIANT_ID_PATHS),
     externalCustomerId: readFirstString(payload, CUSTOMER_ID_PATHS),
     externalSubscriptionId: readFirstString(payload, SUBSCRIPTION_ID_PATHS),
     rawStatus,

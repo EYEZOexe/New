@@ -14,6 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Added Sell billing enforcement for mixed payment models: Convex now supports admin-configured Sell access policies (`/payments/policies`) that map product/variant IDs to tier + billing mode (`recurring` / `fixed_term`), persists entitlement metadata on subscriptions (`tier`, `billingMode`, `variantId`, `endsAt`), and runs scheduled expiry to auto-revoke fixed-term access/roles after duration windows (30/60/90/etc). (2026-02-16)
 - Extended Phase 3 to tier-aware Discord role sync: Convex now supports admin-configured `basic`/`advanced`/`pro` product-to-role mappings (`discordTierRoleMappings` + `discordRoleConfig:*` functions), payment and link/unlink flows enqueue grant/revoke jobs against the desired tier role set, and admin has a new `/discord` surface to manage mappings and role-sync runtime status. Legacy env single-role sync remains as fallback when tier mappings are not configured. (2026-02-16)
 - Phase 3 role assignment automation is implemented end-to-end: Convex `roleSyncJobs` outbox table + claim/complete queue mutations (`roleSync:claimPendingRoleSyncJobs`, `roleSync:completeRoleSyncJob`) are live, Discord link/unlink and payment subscription transitions enqueue grant/revoke jobs, and a Bun-based worker bot was added in `Discord-Bot` to process jobs against Discord roles with retry/backoff semantics and structured logs. (2026-02-16)
 - Fixed dashboard Discord OAuth completion UI state so "Completing link..." no longer gets stuck: callback query cleanup now uses client history replacement and completion state resets reliably after `discord:linkViewerDiscord` success/failure. (2026-02-16)
@@ -61,6 +62,7 @@ Backend is Convex.
 - Convex deployment credentials. We need `CONVEX_SELF_HOSTED_ADMIN_KEY` available in CI/deploy to push schema/functions to self-hosted Convex.
 - Discord OAuth app configuration. `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, and callback URL registration must stay aligned with deployed `NEXT_PUBLIC_APP_URL` / `DISCORD_REDIRECT_URI`.
 - Discord role sync configuration/permissions. `ROLE_SYNC_BOT_TOKEN` must be aligned across Convex + bot env; tier role mappings must be maintained in admin (`/discord`) or legacy fallback env must be set; bot needs `Manage Roles` with hierarchy above all managed customer tier roles.
+- Sell webhook payload variance risk. Some events may omit `variant_id`; maintain product-level fallback policies so fixed-term/recurring enforcement remains deterministic.
 - Some provider webhook variants may omit stable customer/subscription IDs; fallback email matching still exists for those events and should be monitored.
 - Bun migration consistency. Build and CI/deploy tooling must stay aligned with Bun lockfiles/workspaces or deployments will fail before app startup.
 - Webhook idempotency and retries. We need to guarantee "at least once" delivery does not create duplicate state.
@@ -97,6 +99,8 @@ Goal: payments reliably grant/revoke access even if the website is down.
 - [x] Failure capture + replay for webhook processing (2026-02-16)
   Exit criteria: failures are recorded with enough context to retry safely.
   Link: `docs/reliability.md`
+- [x] Enforce recurring vs fixed-term entitlement lifecycle in Convex (2026-02-16)
+  Exit criteria: active subscription access is policy-driven by product/variant mapping, and fixed-term access auto-expires with role revocation via scheduled jobs.
 
 ### Phase 3: Discord Linking (customer identity + roles)
 
@@ -107,7 +111,7 @@ Goal: customers can link Discord and get the right role(s) in the customer guild
 - [x] Role assignment automation via job queue stored in Convex (2026-02-16)
   Exit criteria: paid users get correct role; revoked users lose role.
 - [x] Tier-based role mapping configurable in admin (2026-02-16)
-  Exit criteria: operator can set product->tier->guild/role mapping for basic/advanced/pro and role sync converges Discord roles accordingly.
+  Exit criteria: operator can set tier->guild/role mapping for basic/advanced/pro and role sync converges Discord roles accordingly.
 
 ### Phase 4: Mirroring (bot -> customer guild)
 

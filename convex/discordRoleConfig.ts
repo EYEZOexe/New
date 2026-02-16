@@ -8,7 +8,6 @@ export type SubscriptionTier = (typeof SUBSCRIPTION_TIERS)[number];
 
 type TierRoleMapping = {
   tier: SubscriptionTier;
-  productId: string;
   guildId: string;
   roleId: string;
   enabled: boolean;
@@ -34,7 +33,6 @@ export async function listEnabledTierRoleMappings(
   return rows
     .map((row) => ({
       tier: row.tier,
-      productId: row.productId,
       guildId: row.guildId,
       roleId: row.roleId,
       enabled: row.enabled,
@@ -54,7 +52,6 @@ export const listTierRoleMappings = query({
     for (const row of rows) {
       map.set(row.tier, {
         tier: row.tier,
-        productId: row.productId,
         guildId: row.guildId,
         roleId: row.roleId,
         enabled: row.enabled,
@@ -66,7 +63,6 @@ export const listTierRoleMappings = query({
       const row = map.get(tier);
       return {
         tier,
-        productId: row?.productId ?? "",
         guildId: row?.guildId ?? "",
         roleId: row?.roleId ?? "",
         enabled: row?.enabled ?? false,
@@ -79,25 +75,14 @@ export const listTierRoleMappings = query({
 export const upsertTierRoleMapping = mutation({
   args: {
     tier: v.union(v.literal("basic"), v.literal("advanced"), v.literal("pro")),
-    productId: v.string(),
     guildId: v.string(),
     roleId: v.string(),
     enabled: v.boolean(),
   },
   handler: async (ctx, args) => {
-    const productId = normalizeRequired(args.productId, "product_id");
     const guildId = normalizeRequired(args.guildId, "guild_id");
     const roleId = normalizeRequired(args.roleId, "role_id");
     const now = Date.now();
-
-    const byProduct = await ctx.db
-      .query("discordTierRoleMappings")
-      .withIndex("by_productId", (q) => q.eq("productId", productId))
-      .collect();
-    const conflict = byProduct.find((row) => row.tier !== args.tier);
-    if (conflict) {
-      throw new Error(`product_id_in_use:${conflict.tier}`);
-    }
 
     const existing = await ctx.db
       .query("discordTierRoleMappings")
@@ -106,7 +91,6 @@ export const upsertTierRoleMapping = mutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, {
-        productId,
         guildId,
         roleId,
         enabled: args.enabled,
@@ -115,7 +99,6 @@ export const upsertTierRoleMapping = mutation({
     } else {
       await ctx.db.insert("discordTierRoleMappings", {
         tier: args.tier,
-        productId,
         guildId,
         roleId,
         enabled: args.enabled,
@@ -124,7 +107,7 @@ export const upsertTierRoleMapping = mutation({
     }
 
     console.info(
-      `[discord-config] upsert tier=${args.tier} product=${productId} guild=${guildId} role=${roleId} enabled=${args.enabled}`,
+      `[discord-config] upsert tier=${args.tier} guild=${guildId} role=${roleId} enabled=${args.enabled}`,
     );
 
     return { ok: true as const };

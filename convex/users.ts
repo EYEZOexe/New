@@ -1,5 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { queryGeneric } from "convex/server";
+import { hasActiveSubscriptionAccess } from "./subscriptionAccess";
 
 export const viewer = queryGeneric({
   args: {},
@@ -18,13 +19,14 @@ export const viewer = queryGeneric({
       .query("subscriptions")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .first();
+    const now = Date.now();
 
     return {
       userId,
       email: typeof user.email === "string" ? user.email : null,
       name: typeof user.name === "string" ? user.name : null,
       subscriptionStatus: subscription?.status ?? null,
-      hasSignalAccess: subscription?.status === "active",
+      hasSignalAccess: hasActiveSubscriptionAccess(subscription, now),
     };
   },
 });

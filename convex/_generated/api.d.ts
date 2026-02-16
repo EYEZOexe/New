@@ -12,6 +12,7 @@ import type * as auth from "../auth.js";
 import type * as connectors from "../connectors.js";
 import type * as connectorsAuth from "../connectorsAuth.js";
 import type * as connectorsInternal from "../connectorsInternal.js";
+import type * as crons from "../crons.js";
 import type * as discord from "../discord.js";
 import type * as discordRoleConfig from "../discordRoleConfig.js";
 import type * as discovery from "../discovery.js";
@@ -26,7 +27,9 @@ import type * as payments from "../payments.js";
 import type * as paymentsUtils from "../paymentsUtils.js";
 import type * as roleSync from "../roleSync.js";
 import type * as roleSyncQueue from "../roleSyncQueue.js";
+import type * as sellAccessPolicies from "../sellAccessPolicies.js";
 import type * as signals from "../signals.js";
+import type * as subscriptionAccess from "../subscriptionAccess.js";
 import type * as users from "../users.js";
 
 import type {
@@ -40,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   connectors: typeof connectors;
   connectorsAuth: typeof connectorsAuth;
   connectorsInternal: typeof connectorsInternal;
+  crons: typeof crons;
   discord: typeof discord;
   discordRoleConfig: typeof discordRoleConfig;
   discovery: typeof discovery;
@@ -54,7 +58,9 @@ declare const fullApi: ApiFromModules<{
   paymentsUtils: typeof paymentsUtils;
   roleSync: typeof roleSync;
   roleSyncQueue: typeof roleSyncQueue;
+  sellAccessPolicies: typeof sellAccessPolicies;
   signals: typeof signals;
+  subscriptionAccess: typeof subscriptionAccess;
   users: typeof users;
 }>;
 

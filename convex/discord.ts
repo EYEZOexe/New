@@ -94,7 +94,7 @@ export const linkViewerDiscord = mutation({
             userId,
             discordUserId: row.discordUserId,
             subscriptionStatus: "inactive",
-            productId: null,
+            tier: null,
             source: "discord_link_replaced",
             now,
           });
@@ -142,7 +142,7 @@ export const linkViewerDiscord = mutation({
         userId,
         discordUserId,
         subscriptionStatus: subscription.status,
-        productId: subscription.productId ?? null,
+        tier: subscription.tier ?? null,
         source: "discord_linked_active_subscription",
         now,
       });
@@ -152,7 +152,7 @@ export const linkViewerDiscord = mutation({
         );
       } else {
         console.info(
-          `[discord-link] role sync enqueue source=discord_linked_active_subscription user=${userId} discord_user=${discordUserId} product=${subscription.productId ?? "none"} mapped_tier=${grantResult.mappedTier ?? "none"} granted=${grantResult.granted} revoked=${grantResult.revoked} deduped=${grantResult.deduped}`,
+          `[discord-link] role sync enqueue source=discord_linked_active_subscription user=${userId} discord_user=${discordUserId} tier=${subscription.tier ?? "none"} mapped_tier=${grantResult.mappedTier ?? "none"} granted=${grantResult.granted} revoked=${grantResult.revoked} deduped=${grantResult.deduped}`,
         );
       }
     }
@@ -189,7 +189,7 @@ export const unlinkViewerDiscord = mutation({
         userId,
         discordUserId: row.discordUserId,
         subscriptionStatus: "inactive",
-        productId: null,
+        tier: null,
         source: "discord_unlinked",
         now,
       });

@@ -25,11 +25,14 @@ DISCORD_REDIRECT_URI=https://convex.g3netic.com/api/auth/discord/callback
 # Sell.app webhook ingestion + ops replay
 SELLAPP_WEBHOOK_SECRET=__SET_ME__
 SELLAPP_REPLAY_TOKEN=__SET_ME__
+SELLAPP_API_TOKEN=__SET_ME__
 
 # Discord role sync queue (Convex backend + Discord-Bot worker)
+ROLE_SYNC_BOT_TOKEN=__SET_ME__
+
+# Optional legacy fallback single role if tier mapping is missing
 DISCORD_CUSTOMER_GUILD_ID=__SET_ME__
 DISCORD_CUSTOMER_ROLE_ID=__SET_ME__
-ROLE_SYNC_BOT_TOKEN=__SET_ME__
 ```
 
 Domain mapping in this project:
@@ -52,13 +55,22 @@ Role sync queue functions:
 - `roleSync:completeRoleSyncJob` (bot worker ACKs success/failure)
 - `roleSync:listRoleSyncJobs` (operator visibility query)
 
+Sell access policy functions:
+- `sellAccessPolicies:listSellAccessPolicies`
+- `sellAccessPolicies:upsertSellAccessPolicy`
+- `sellAccessPolicies:removeSellAccessPolicy`
+
+Operational admin pages:
+- `admin:/payments/policies` maps product/variant -> tier + billing mode (`recurring` / `fixed_term`) and duration days.
+- `admin:/discord` maps tier -> Discord role.
+
 Important:
 - `NEXT_PUBLIC_CONVEX_URL` must be backend origin without `/http`.
 - `CONVEX_SITE_URL` should use backend `/http` origin for self-hosted auth routes.
 
 ## Convex Backend
 
-This app includes Convex backend code in `website/convex`.
+This app uses Convex backend code from the repo root `convex/` directory.
 
 To push schema/functions to your self-hosted Convex instance:
 

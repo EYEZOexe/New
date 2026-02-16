@@ -9,7 +9,10 @@ type OperatorPaymentRow = {
   provider: string;
   userId: string;
   userEmail: string | null;
+  tier: "basic" | "advanced" | "pro" | null;
+  billingMode: "recurring" | "fixed_term" | null;
   subscriptionStatus: "active" | "inactive" | "canceled" | "past_due" | null;
+  endsAt: number | null;
   customerEmail: string | null;
   externalCustomerId: string | null;
   externalSubscriptionId: string | null;
@@ -59,6 +62,9 @@ export default function PaymentCustomersPage() {
             <Link href="/discord" className="text-sm font-medium underline">
               Discord roles
             </Link>
+            <Link href="/payments/policies" className="text-sm font-medium underline">
+              Access policies
+            </Link>
           </div>
         </div>
 
@@ -80,6 +86,9 @@ export default function PaymentCustomersPage() {
               <tr>
                 <th className="px-3 py-2">User</th>
                 <th className="px-3 py-2">Subscription</th>
+                <th className="px-3 py-2">Tier</th>
+                <th className="px-3 py-2">Billing</th>
+                <th className="px-3 py-2">Ends</th>
                 <th className="px-3 py-2">Customer ID</th>
                 <th className="px-3 py-2">Subscription ID</th>
                 <th className="px-3 py-2">Last Event</th>
@@ -89,14 +98,14 @@ export default function PaymentCustomersPage() {
             <tbody className="divide-y divide-zinc-200">
               {!rows && (
                 <tr>
-                  <td className="px-3 py-4 text-zinc-600" colSpan={6}>
+                  <td className="px-3 py-4 text-zinc-600" colSpan={10}>
                     Loading...
                   </td>
                 </tr>
               )}
               {rows?.length === 0 && (
                 <tr>
-                  <td className="px-3 py-4 text-zinc-600" colSpan={6}>
+                  <td className="px-3 py-4 text-zinc-600" colSpan={10}>
                     No payment customer mappings found.
                   </td>
                 </tr>
@@ -112,6 +121,15 @@ export default function PaymentCustomersPage() {
                   </td>
                   <td className="px-3 py-3 align-top text-zinc-700">
                     {row.subscriptionStatus ?? "none"}
+                  </td>
+                  <td className="px-3 py-3 align-top text-zinc-700">
+                    {row.tier ?? "n/a"}
+                  </td>
+                  <td className="px-3 py-3 align-top text-zinc-700">
+                    {row.billingMode ?? "n/a"}
+                  </td>
+                  <td className="px-3 py-3 align-top text-xs text-zinc-700">
+                    {row.endsAt ? new Date(row.endsAt).toLocaleString() : "n/a"}
                   </td>
                   <td className="px-3 py-3 align-top font-mono text-xs text-zinc-700">
                     {row.externalCustomerId ?? "n/a"}

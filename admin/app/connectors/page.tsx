@@ -71,6 +71,12 @@ export default function ConnectorsPage() {
               Payment customers
             </Link>
             <Link
+              href="/payments/policies"
+              className="text-sm font-medium text-zinc-900 underline"
+            >
+              Access policies
+            </Link>
+            <Link
               href="/discord"
               className="text-sm font-medium text-zinc-900 underline"
             >

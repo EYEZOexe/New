@@ -24,6 +24,12 @@ export default function Home() {
           </Link>
           <Link
             className="inline-flex items-center rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50"
+            href="/payments/policies"
+          >
+            Access policies
+          </Link>
+          <Link
+            className="inline-flex items-center rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50"
             href="/discord"
           >
             Discord roles

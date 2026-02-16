@@ -10,7 +10,6 @@ const TIERS: SubscriptionTier[] = ["basic", "advanced", "pro"];
 
 type TierRoleMappingRow = {
   tier: SubscriptionTier;
-  productId: string;
   guildId: string;
   roleId: string;
   enabled: boolean;
@@ -25,7 +24,6 @@ type RuntimeStatusRow = {
 };
 
 type DraftRow = {
-  productId: string;
   guildId: string;
   roleId: string;
   enabled: boolean;
@@ -35,19 +33,16 @@ function toDraftState(rows: TierRoleMappingRow[]): Record<SubscriptionTier, Draf
   const map = new Map(rows.map((row) => [row.tier, row]));
   return {
     basic: {
-      productId: map.get("basic")?.productId ?? "",
       guildId: map.get("basic")?.guildId ?? "",
       roleId: map.get("basic")?.roleId ?? "",
       enabled: map.get("basic")?.enabled ?? false,
     },
     advanced: {
-      productId: map.get("advanced")?.productId ?? "",
       guildId: map.get("advanced")?.guildId ?? "",
       roleId: map.get("advanced")?.roleId ?? "",
       enabled: map.get("advanced")?.enabled ?? false,
     },
     pro: {
-      productId: map.get("pro")?.productId ?? "",
       guildId: map.get("pro")?.guildId ?? "",
       roleId: map.get("pro")?.roleId ?? "",
       enabled: map.get("pro")?.enabled ?? false,
@@ -69,7 +64,6 @@ export default function DiscordRoleConfigPage() {
         "mutation",
         {
           tier: SubscriptionTier;
-          productId: string;
           guildId: string;
           roleId: string;
           enabled: boolean;
@@ -101,9 +95,9 @@ export default function DiscordRoleConfigPage() {
   const removeTierRoleMapping = useMutation(removeTierRoleMappingRef);
 
   const [drafts, setDrafts] = useState<Record<SubscriptionTier, DraftRow>>({
-    basic: { productId: "", guildId: "", roleId: "", enabled: false },
-    advanced: { productId: "", guildId: "", roleId: "", enabled: false },
-    pro: { productId: "", guildId: "", roleId: "", enabled: false },
+    basic: { guildId: "", roleId: "", enabled: false },
+    advanced: { guildId: "", roleId: "", enabled: false },
+    pro: { guildId: "", roleId: "", enabled: false },
   });
   const [savingTier, setSavingTier] = useState<SubscriptionTier | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -139,7 +133,6 @@ export default function DiscordRoleConfigPage() {
     try {
       await upsertTierRoleMapping({
         tier,
-        productId: draft.productId,
         guildId: draft.guildId,
         roleId: draft.roleId,
         enabled: draft.enabled,
@@ -183,7 +176,7 @@ export default function DiscordRoleConfigPage() {
               Discord Tier Role Config
             </h1>
             <p className="mt-2 text-sm text-zinc-600">
-              Map Sell product IDs to Discord roles for Basic, Advanced, and Pro.
+              Map each subscription tier to the Discord role to grant.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -195,6 +188,9 @@ export default function DiscordRoleConfigPage() {
             </Link>
             <Link href="/payments/customers" className="text-sm font-medium underline">
               Payment customers
+            </Link>
+            <Link href="/payments/policies" className="text-sm font-medium underline">
+              Access policies
             </Link>
           </div>
         </div>
@@ -234,16 +230,7 @@ export default function DiscordRoleConfigPage() {
                   {tier}
                 </h2>
 
-                <div className="mt-3 grid gap-3 md:grid-cols-3">
-                  <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
-                    Sell Product ID
-                    <input
-                      value={draft.productId}
-                      onChange={(e) => updateDraft(tier, "productId", e.target.value)}
-                      className="h-9 rounded-md border border-zinc-300 px-3 text-sm"
-                      placeholder="sell product id"
-                    />
-                  </label>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
                   <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
                     Discord Guild ID
                     <input

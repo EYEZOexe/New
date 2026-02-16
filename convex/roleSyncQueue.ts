@@ -40,7 +40,7 @@ async function resolveRoleTargetsForSubscription(
   ctx: MutationCtx,
   args: {
     status: SubscriptionStatus;
-    productId: string | null;
+    tier: "basic" | "advanced" | "pro" | null;
   },
 ): Promise<{
   desiredRoles: RoleSyncTarget[];
@@ -66,8 +66,8 @@ async function resolveRoleTargetsForSubscription(
       };
     }
 
-    const productId = args.productId?.trim() ?? "";
-    if (!productId) {
+    const tier = args.tier;
+    if (!tier) {
       return {
         desiredRoles: [],
         allManagedRoles,
@@ -76,7 +76,7 @@ async function resolveRoleTargetsForSubscription(
       };
     }
 
-    const mapped = tierMappings.find((row) => row.productId === productId);
+    const mapped = tierMappings.find((row) => row.tier === tier);
     if (!mapped) {
       return {
         desiredRoles: [],
@@ -199,7 +199,7 @@ export async function enqueueRoleSyncJobsForSubscription(
     userId: Id<"users">;
     discordUserId: string;
     subscriptionStatus: SubscriptionStatus;
-    productId: string | null;
+    tier: "basic" | "advanced" | "pro" | null;
     source: string;
     now: number;
   },
@@ -213,7 +213,7 @@ export async function enqueueRoleSyncJobsForSubscription(
 }> {
   const resolution = await resolveRoleTargetsForSubscription(ctx, {
     status: args.subscriptionStatus,
-    productId: args.productId,
+    tier: args.tier,
   });
 
   if (resolution.allManagedRoles.length === 0) {

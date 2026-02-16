@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
 import { query } from "./_generated/server";
+import { hasActiveSubscriptionAccess } from "./subscriptionAccess";
 
 export const listRecent = query({
   args: {
@@ -20,7 +21,7 @@ export const listRecent = query({
       .query("subscriptions")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .first();
-    if (subscription?.status !== "active") {
+    if (!hasActiveSubscriptionAccess(subscription, Date.now())) {
       console.info(
         `[signals] blocked user=${String(userId)} status=${subscription?.status ?? "none"} tenant=${args.tenantKey} connector=${args.connectorId}`,
       );

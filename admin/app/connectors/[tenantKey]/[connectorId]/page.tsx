@@ -381,6 +381,12 @@ export default function ConnectorDetailPage() {
             >
               Discord roles
             </Link>
+            <Link
+              href="/payments/policies"
+              className="text-sm font-medium text-zinc-900 underline"
+            >
+              Access policies
+            </Link>
           </div>
         </div>
 
