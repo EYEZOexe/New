@@ -206,33 +206,78 @@ function listAccessibleChannelsForGuild(guildId: string) {
         null;
 
     const out: Array<{ guild_id: string; discord_channel_id: string; name: string; type?: number | null; parent_id?: string | null; position?: number | null }> = [];
+    const byId = new Map<string, (typeof out)[number]>();
+    const seen = new WeakSet<object>();
 
-    const push = (channel: any) => {
+    const toChannelLike = (value: any) => {
+        const channel = value?.channel ?? value?.record?.channel ?? value?.item?.channel ?? value;
+        if (!channel || typeof channel !== "object") return null;
+
         const id = String(channel?.id ?? "").trim();
-        const name = String(channel?.name ?? "").trim();
-        if (!id || !name) return;
-        out.push({
-            guild_id: guildId,
-            discord_channel_id: id,
+        if (!id) return null;
+
+        const channelGuildId = String(channel?.guild_id ?? channel?.guildId ?? "").trim();
+        if (channelGuildId && channelGuildId !== guildId) return null;
+
+        const name = String(channel?.name ?? "").trim() || id;
+
+        return {
+            id,
+            guild_id: channelGuildId || guildId,
             name,
             type: typeof channel?.type === "number" ? channel.type : null,
-            parent_id: typeof channel?.parent_id === "string" ? channel.parent_id : null,
+            parent_id: typeof channel?.parent_id === "string"
+                ? channel.parent_id
+                : typeof channel?.parentId === "string"
+                    ? channel.parentId
+                    : null,
             position: typeof channel?.position === "number" ? channel.position : null,
+        };
+    };
+
+    const push = (value: any) => {
+        const channel = toChannelLike(value);
+        if (!channel) return;
+        byId.set(channel.id, {
+            guild_id: guildId,
+            discord_channel_id: channel.id,
+            name: channel.name,
+            type: channel.type,
+            parent_id: channel.parent_id,
+            position: channel.position,
         });
     };
 
-    if (byGuild) {
-        if (Array.isArray(byGuild)) {
-            for (const ch of byGuild) push(ch);
-            return out;
+    const walk = (value: any, depth = 0) => {
+        if (depth > 5) return;
+        if (!value) return;
+
+        if (Array.isArray(value)) {
+            for (const item of value) walk(item, depth + 1);
+            return;
         }
-        if (typeof byGuild === "object") {
-            for (const value of Object.values(byGuild)) {
-                if (Array.isArray(value)) {
-                    for (const ch of value) push(ch);
-                }
+
+        if (typeof value !== "object") return;
+
+        const obj = value as object;
+        if (seen.has(obj)) return;
+        seen.add(obj);
+
+        push(value);
+
+        for (const nested of Object.values(value as Record<string, unknown>)) {
+            if (nested && (typeof nested === "object" || Array.isArray(nested))) {
+                walk(nested, depth + 1);
             }
-            if (out.length > 0) return out;
+        }
+    };
+
+    if (byGuild) {
+        walk(byGuild);
+        if (byId.size > 0) {
+            out.push(...byId.values());
+            out.sort((a, b) => a.name.localeCompare(b.name));
+            return out;
         }
     }
 
@@ -242,12 +287,11 @@ function listAccessibleChannelsForGuild(guildId: string) {
         null;
 
     if (all && typeof all === "object") {
-        for (const channel of Object.values(all)) {
-            if (String((channel as any)?.guild_id ?? "") !== guildId) continue;
-            push(channel);
-        }
+        walk(all);
     }
 
+    out.push(...byId.values());
+    out.sort((a, b) => a.name.localeCompare(b.name));
     return out;
 }
 
@@ -319,6 +363,8 @@ async function syncGuildChannelSnapshot() {
     }
 
     if (channels.length === 0 && guilds.length === 0) return;
+
+    console.log(`[ChannelScraper] Discovery snapshot prepared: ${guilds.length} guild(s), ${channels.length} channel(s).`);
 
     await Native.enqueueChannelGuildSync({
         idempotency_key: buildIdempotencyKey(
