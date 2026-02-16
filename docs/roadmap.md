@@ -14,6 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Started Phase 4 mirroring implementation end-to-end: Convex now persists signal mirror queue + message linkage state (`signalMirrorJobs`, `mirroredSignals`), ingest enqueues create/update/delete mirror jobs from admin-configured source->target mappings when connector forwarding is enabled, Discord-Bot worker now claims mirror jobs and posts/edits/deletes messages in target channels, and admin connector config now includes mirroring toggle + bot runtime/queue visibility. (2026-02-16)
 - Simplified payments model to fixed-term only (no recurring path): Sell access policies now enforce duration days for product/variant mappings, subscription access is validated against `endsAt`, and dashboard now shows tier + expiration + live time-left countdown from Convex. (2026-02-16)
 - Hardened Discord role-sync worker verification to prevent false-positive completes: worker now force-fetches guild member state, validates target role exists, and verifies post-condition after grant/revoke before ACKing `roleSync:completeRoleSyncJob`. (2026-02-16)
 - Added Sell billing enforcement for mixed payment models: Convex now supports admin-configured Sell access policies (`/payments/policies`) that map product/variant IDs to tier + billing mode (`recurring` / `fixed_term`), persists entitlement metadata on subscriptions (`tier`, `billingMode`, `variantId`, `endsAt`), and runs scheduled expiry to auto-revoke fixed-term access/roles after duration windows (30/60/90/etc). (2026-02-16)
@@ -53,7 +54,7 @@ Backend is Convex.
 - Phase 1 signal pipeline is now hardened end-to-end: message ingest normalizes update/delete timestamps with fallbacks, stale post-delete updates are ignored server-side, plugin emits message delete events, and dashboard feed surfaces edited/deleted state with realtime update logs. (2026-02-16)
 
 **Next**
-- Start Phase 4 mirroring in `Discord-Bot`: post new signals into mapped customer channels using Convex as source of truth.
+- Validate Phase 4 mirroring in staging (Discord permissions, queue throughput, p95 ingest->mirror latency) and close any drift gaps.
 - Add scheduled payment reconciliation and alerting for webhook drift/failure spikes.
 
 **Blockers / Risks**
@@ -64,6 +65,7 @@ Backend is Convex.
 - Convex deployment credentials. We need `CONVEX_SELF_HOSTED_ADMIN_KEY` available in CI/deploy to push schema/functions to self-hosted Convex.
 - Discord OAuth app configuration. `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, and callback URL registration must stay aligned with deployed `NEXT_PUBLIC_APP_URL` / `DISCORD_REDIRECT_URI`.
 - Discord role sync configuration/permissions. `ROLE_SYNC_BOT_TOKEN` must be aligned across Convex + bot env; tier role mappings must be maintained in admin (`/discord`) or legacy fallback env must be set; bot needs `Manage Roles` with hierarchy above all managed customer tier roles.
+- Discord mirror permissions/configuration. `MIRROR_BOT_TOKEN` (or `ROLE_SYNC_BOT_TOKEN` fallback) must be aligned across Convex + bot env; connector forwarding must be enabled per connector and source->target mappings maintained in admin; bot needs send/edit/delete permissions in mapped target channels.
 - Sell webhook payload variance risk. Some events may omit `variant_id`; maintain product-level fallback policies so fixed-term duration enforcement remains deterministic.
 - Some provider webhook variants may omit stable customer/subscription IDs; fallback email matching still exists for those events and should be monitored.
 - Bun migration consistency. Build and CI/deploy tooling must stay aligned with Bun lockfiles/workspaces or deployments will fail before app startup.

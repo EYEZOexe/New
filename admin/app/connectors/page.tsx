@@ -10,6 +10,7 @@ type ConnectorRow = {
   tenantKey: string;
   connectorId: string;
   status: "active" | "paused";
+  forwardEnabled?: boolean;
   configVersion: number;
   updatedAt: number;
   lastSeenAt: number;
@@ -144,6 +145,7 @@ export default function ConnectorsPage() {
                     <th className="px-3 py-2">Tenant</th>
                     <th className="px-3 py-2">Connector</th>
                     <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Mirroring</th>
                     <th className="px-3 py-2">Config</th>
                     <th className="px-3 py-2">Last Seen</th>
                     <th className="px-3 py-2">Open</th>
@@ -155,6 +157,9 @@ export default function ConnectorsPage() {
                       <td className="px-3 py-2">{c.tenantKey}</td>
                       <td className="px-3 py-2">{c.connectorId}</td>
                       <td className="px-3 py-2">{c.status}</td>
+                      <td className="px-3 py-2">
+                        {c.forwardEnabled === true ? "enabled" : "disabled"}
+                      </td>
                       <td className="px-3 py-2">v{c.configVersion}</td>
                       <td className="px-3 py-2">
                         {c.lastSeenAt

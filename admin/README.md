@@ -12,7 +12,7 @@ NEXT_PUBLIC_CONVEX_URL=https://convex-backend.g3netic.com
 
 ## Available Routes
 
-- `/connectors`: manage connector lifecycle and channel mapping.
+- `/connectors`: manage connector lifecycle, channel mapping, and bot mirroring toggle/queue visibility.
 - `/payments/customers`: inspect Sell customer/subscription linkage.
 - `/payments/policies`: map Sell product/variant IDs to tier and fixed-term duration.
 - `/discord`: configure tier-to-role mapping for `basic`, `advanced`, and `pro`.

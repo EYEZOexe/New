@@ -1,6 +1,8 @@
 import { ConvexRoleSyncClient } from "./convexRoleSyncClient";
+import { ConvexSignalMirrorClient } from "./convexSignalMirrorClient";
 import { loadBotConfig } from "./config";
 import { DiscordRoleManager } from "./discordRoleManager";
+import { DiscordSignalMirrorManager } from "./discordSignalMirrorManager";
 import { logError, logInfo, logWarn } from "./logger";
 
 async function main() {
@@ -10,8 +12,15 @@ async function main() {
     convexUrl: config.convexUrl,
     botToken: config.roleSyncBotToken,
     workerId: config.workerId,
-    claimLimit: config.claimLimit,
+    claimLimit: config.roleSyncClaimLimit,
   });
+  const mirrorQueueClient = new ConvexSignalMirrorClient({
+    convexUrl: config.convexUrl,
+    botToken: config.mirrorBotToken,
+    workerId: config.workerId,
+    claimLimit: config.mirrorClaimLimit,
+  });
+  const mirrorManager = new DiscordSignalMirrorManager(roleManager.discordClient);
 
   let shuttingDown = false;
   let tickInProgress = false;
@@ -37,7 +46,7 @@ async function main() {
 
   await roleManager.login(config.discordBotToken);
   logInfo(
-    `worker started poll_interval_ms=${config.pollIntervalMs} claim_limit=${config.claimLimit}`,
+    `worker started poll_interval_ms=${config.pollIntervalMs} role_claim_limit=${config.roleSyncClaimLimit} mirror_claim_limit=${config.mirrorClaimLimit}`,
   );
 
   const tick = async () => {
@@ -46,9 +55,9 @@ async function main() {
 
     try {
       const jobs = await queueClient.claimJobs();
-      if (jobs.length === 0) return;
-
-      logInfo(`claimed ${jobs.length} role sync job(s)`);
+      if (jobs.length > 0) {
+        logInfo(`claimed ${jobs.length} role sync job(s)`);
+      }
       for (const job of jobs) {
         if (shuttingDown) break;
         try {
@@ -88,6 +97,52 @@ async function main() {
           });
         }
       }
+
+      const mirrorJobs = await mirrorQueueClient.claimJobs();
+      if (mirrorJobs.length > 0) {
+        logInfo(`claimed ${mirrorJobs.length} mirror job(s)`);
+      }
+      for (const job of mirrorJobs) {
+        if (shuttingDown) break;
+        try {
+          const result = await mirrorManager.executeJob(job);
+          if (!result.ok) {
+            logWarn(
+              `mirror_job=${job.jobId} event=${job.eventType} source_message=${job.sourceMessageId} failed: ${result.message}`,
+            );
+            await mirrorQueueClient.completeJob({
+              jobId: job.jobId,
+              claimToken: job.claimToken,
+              success: false,
+              error: result.message,
+            });
+            continue;
+          }
+
+          logInfo(
+            `mirror_job=${job.jobId} event=${job.eventType} source_message=${job.sourceMessageId} success=${result.message}`,
+          );
+          await mirrorQueueClient.completeJob({
+            jobId: job.jobId,
+            claimToken: job.claimToken,
+            success: true,
+            mirroredMessageId: result.mirroredMessageId,
+            mirroredGuildId: result.mirroredGuildId,
+          });
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          logError(
+            `mirror_job=${job.jobId} event=${job.eventType} source_message=${job.sourceMessageId} exception=${message}`,
+          );
+          await mirrorQueueClient.completeJob({
+            jobId: job.jobId,
+            claimToken: job.claimToken,
+            success: false,
+            error: message,
+          });
+        }
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logError(`tick failed: ${message}`);
@@ -108,4 +163,3 @@ main().catch((error) => {
   logError(`fatal startup error: ${message}`);
   process.exit(1);
 });
-

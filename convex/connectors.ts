@@ -114,6 +114,7 @@ export const rotateConnectorToken = mutation({
         connectorId: args.connectorId,
         tokenHash,
         status: "active",
+        forwardEnabled: false,
         configVersion: 1,
         discoveryRequestVersion: 0,
         updatedAt: ts,
@@ -171,6 +172,28 @@ export const setConnectorStatus = mutation({
       status: args.status,
       updatedAt: nowMs(),
     });
+
+    return { ok: true };
+  },
+});
+
+export const setForwardingEnabled = mutation({
+  args: {
+    tenantKey: v.string(),
+    connectorId: v.string(),
+    enabled: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const connector = await getConnectorOrNull(ctx, args.tenantKey, args.connectorId);
+    if (!connector) {
+      throw new Error("connector_not_found");
+    }
+
+    await ctx.db.patch(connector._id, {
+      forwardEnabled: args.enabled,
+      updatedAt: nowMs(),
+    });
+    await bumpConfigVersion(ctx, connector);
 
     return { ok: true };
   },

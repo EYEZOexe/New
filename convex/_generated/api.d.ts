@@ -23,6 +23,8 @@ import type * as httpIngest from "../httpIngest.js";
 import type * as httpPayments from "../httpPayments.js";
 import type * as ingest from "../ingest.js";
 import type * as ingestUtils from "../ingestUtils.js";
+import type * as mirror from "../mirror.js";
+import type * as mirrorQueue from "../mirrorQueue.js";
 import type * as payments from "../payments.js";
 import type * as paymentsUtils from "../paymentsUtils.js";
 import type * as roleSync from "../roleSync.js";
@@ -54,6 +56,8 @@ declare const fullApi: ApiFromModules<{
   httpPayments: typeof httpPayments;
   ingest: typeof ingest;
   ingestUtils: typeof ingestUtils;
+  mirror: typeof mirror;
+  mirrorQueue: typeof mirrorQueue;
   payments: typeof payments;
   paymentsUtils: typeof paymentsUtils;
   roleSync: typeof roleSync;

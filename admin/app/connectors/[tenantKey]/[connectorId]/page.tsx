@@ -11,6 +11,7 @@ type ConnectorRow = {
   tenantKey: string;
   connectorId: string;
   status: "active" | "paused";
+  forwardEnabled?: boolean;
   configVersion: number;
   updatedAt: number;
   lastSeenAt: number;
@@ -35,6 +36,34 @@ type MappingRow = {
 
 type GuildRow = { _id: string; guildId: string; name: string };
 type ChannelRow = { _id: string; channelId: string; guildId: string; name: string };
+type MirrorRuntimeStatusRow = {
+  hasMirrorBotToken: boolean;
+  usesDedicatedMirrorToken: boolean;
+  sharedRoleSyncTokenFallback: boolean;
+};
+type MirrorQueueStatsRow = {
+  pending: number;
+  pendingReady: number;
+  processing: number;
+  completed: number;
+  failed: number;
+  total: number;
+  updatedAt: number;
+};
+type MirrorJobRow = {
+  jobId: string;
+  sourceMessageId: string;
+  sourceChannelId: string;
+  targetChannelId: string;
+  eventType: "create" | "update" | "delete";
+  status: "pending" | "processing" | "completed" | "failed";
+  attemptCount: number;
+  maxAttempts: number;
+  runAfter: number;
+  lastError: string | null;
+  updatedAt: number;
+  createdAt: number;
+};
 
 function decodeParam(value: string | string[] | undefined) {
   if (typeof value !== "string") return "";
@@ -115,6 +144,15 @@ export default function ConnectorDetailPage() {
       >("connectors:setConnectorStatus"),
     [],
   );
+  const setForwardingEnabled = useMemo(
+    () =>
+      makeFunctionReference<
+        "mutation",
+        { tenantKey: string; connectorId: string; enabled: boolean },
+        { ok: true }
+      >("connectors:setForwardingEnabled"),
+    [],
+  );
   const upsertSource = useMemo(
     () =>
       makeFunctionReference<
@@ -175,12 +213,45 @@ export default function ConnectorDetailPage() {
       >("connectors:requestChannelDiscovery"),
     [],
   );
+  const getMirrorRuntimeStatus = useMemo(
+    () =>
+      makeFunctionReference<
+        "query",
+        Record<string, never>,
+        MirrorRuntimeStatusRow
+      >("mirror:getSignalMirrorRuntimeStatus"),
+    [],
+  );
+  const getMirrorQueueStats = useMemo(
+    () =>
+      makeFunctionReference<
+        "query",
+        { tenantKey: string; connectorId: string },
+        MirrorQueueStatsRow
+      >("mirror:getSignalMirrorQueueStats"),
+    [],
+  );
+  const listMirrorJobs = useMemo(
+    () =>
+      makeFunctionReference<
+        "query",
+        { tenantKey: string; connectorId: string; limit?: number },
+        MirrorJobRow[]
+      >("mirror:listSignalMirrorJobs"),
+    [],
+  );
 
   const connectorArgs = hasRouteParams ? { tenantKey, connectorId } : "skip";
   const connector = useQuery(getConnector, connectorArgs);
   const sources = useQuery(listSources, connectorArgs) ?? [];
   const mappings = useQuery(listMappings, connectorArgs) ?? [];
   const guilds = useQuery(listGuilds, connectorArgs) ?? [];
+  const mirrorRuntime = useQuery(getMirrorRuntimeStatus, {});
+  const mirrorQueueStats = useQuery(getMirrorQueueStats, connectorArgs);
+  const mirrorJobs = useQuery(
+    listMirrorJobs,
+    hasRouteParams ? { tenantKey, connectorId, limit: 10 } : "skip",
+  ) ?? [];
 
   const [guildIdFilter, setGuildIdFilter] = useState<string>("");
   const [newSourceGuildId, setNewSourceGuildId] = useState("");
@@ -201,6 +272,7 @@ export default function ConnectorDetailPage() {
 
   const doRotate = useMutation(rotateConnectorToken);
   const doSetStatus = useMutation(setStatus);
+  const doSetForwardingEnabled = useMutation(setForwardingEnabled);
   const doUpsertSource = useMutation(upsertSource);
   const doRemoveSource = useMutation(removeSource);
   const doUpsertMapping = useMutation(upsertMapping);
@@ -209,6 +281,7 @@ export default function ConnectorDetailPage() {
 
   const [lastToken, setLastToken] = useState<string | null>(null);
   const [isRotating, setIsRotating] = useState(false);
+  const [isUpdatingForwarding, setIsUpdatingForwarding] = useState(false);
   const [isRequestingChannels, setIsRequestingChannels] = useState(false);
   const [lastDiscoveryRequestVersion, setLastDiscoveryRequestVersion] = useState<number | null>(null);
 
@@ -279,6 +352,13 @@ export default function ConnectorDetailPage() {
     }
   }, [mappingSourceOptions, mappingTargetOptions, newMappingSource, newMappingTarget]);
 
+  useEffect(() => {
+    if (!mirrorQueueStats || !hasRouteParams) return;
+    console.info(
+      `[admin/connectors] mirror queue tenant=${tenantKey} connector=${connectorId} pending=${mirrorQueueStats.pending} processing=${mirrorQueueStats.processing} failed=${mirrorQueueStats.failed}`,
+    );
+  }, [mirrorQueueStats, hasRouteParams, tenantKey, connectorId]);
+
   function renderGuildLabel(guildId: string) {
     return `${guildNameById.get(guildId) ?? "Unknown guild"} (${guildId})`;
   }
@@ -303,6 +383,24 @@ export default function ConnectorDetailPage() {
     if (!hasRouteParams || !connector) return;
     const next = connector.status === "active" ? "paused" : "active";
     await doSetStatus({ tenantKey, connectorId, status: next });
+  }
+
+  async function onToggleForwarding() {
+    if (!hasRouteParams || !connector) return;
+    const next = !(connector.forwardEnabled === true);
+    setIsUpdatingForwarding(true);
+    try {
+      await doSetForwardingEnabled({
+        tenantKey,
+        connectorId,
+        enabled: next,
+      });
+      console.info(
+        `[admin/connectors] forwarding updated tenant=${tenantKey} connector=${connectorId} enabled=${next}`,
+      );
+    } finally {
+      setIsUpdatingForwarding(false);
+    }
   }
 
   async function onAddSource() {
@@ -364,7 +462,7 @@ export default function ConnectorDetailPage() {
               {tenantKey || "unknown"} / {connectorId || "unknown"}
             </h1>
             <p className="mt-2 text-sm text-zinc-600">
-              Runtime config and token management.
+              Runtime config, bot mirroring controls, and token management.
             </p>
           </div>
 
@@ -406,6 +504,9 @@ export default function ConnectorDetailPage() {
               status: {connector.status}
             </span>
             <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-800">
+              mirroring: {connector.forwardEnabled === true ? "enabled" : "disabled"}
+            </span>
+            <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-800">
               config: v{connector.configVersion}
             </span>
             <button
@@ -423,6 +524,18 @@ export default function ConnectorDetailPage() {
             >
               {isRotating ? "Rotating..." : "Rotate token"}
             </button>
+            <button
+              type="button"
+              onClick={onToggleForwarding}
+              disabled={isUpdatingForwarding}
+              className="h-9 rounded-md border border-zinc-300 bg-white px-4 text-sm font-medium disabled:opacity-60"
+            >
+              {isUpdatingForwarding
+                ? "Updating..."
+                : connector.forwardEnabled === true
+                  ? "Disable mirroring"
+                  : "Enable mirroring"}
+            </button>
           </div>
         )}
 
@@ -436,6 +549,28 @@ export default function ConnectorDetailPage() {
             </pre>
           </div>
         ) : null}
+
+        <div className="mt-6 rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-xs text-zinc-700">
+          <p>
+            Mirror bot token configured:{" "}
+            <strong>{mirrorRuntime?.hasMirrorBotToken ? "yes" : "no"}</strong>
+          </p>
+          <p className="mt-1">
+            Dedicated mirror token in use:{" "}
+            <strong>{mirrorRuntime?.usesDedicatedMirrorToken ? "yes" : "no"}</strong>
+          </p>
+          <p className="mt-1">
+            Shared role-sync token fallback:{" "}
+            <strong>{mirrorRuntime?.sharedRoleSyncTokenFallback ? "yes" : "no"}</strong>
+          </p>
+          <p className="mt-2">
+            Queue stats: pending <strong>{mirrorQueueStats?.pending ?? 0}</strong> (ready{" "}
+            <strong>{mirrorQueueStats?.pendingReady ?? 0}</strong>), processing{" "}
+            <strong>{mirrorQueueStats?.processing ?? 0}</strong>, failed{" "}
+            <strong>{mirrorQueueStats?.failed ?? 0}</strong>, total{" "}
+            <strong>{mirrorQueueStats?.total ?? 0}</strong>.
+          </p>
+        </div>
 
         <div className="mt-10 grid gap-8 lg:grid-cols-2">
           <div>
@@ -594,7 +729,7 @@ export default function ConnectorDetailPage() {
           </div>
 
           <div>
-            <h2 className="text-sm font-semibold text-zinc-900">Mappings</h2>
+            <h2 className="text-sm font-semibold text-zinc-900">Mirror Mappings</h2>
 
             <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
               <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
@@ -654,6 +789,9 @@ export default function ConnectorDetailPage() {
                   Mark at least one available channel as source and one as target to create mappings.
                 </p>
               ) : null}
+              <p className="mt-3 text-xs text-zinc-600">
+                These mappings define which target channels the bot mirrors to when connector mirroring is enabled.
+              </p>
 
               <div className="mt-3 flex flex-wrap items-end gap-3">
                 <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
@@ -720,6 +858,48 @@ export default function ConnectorDetailPage() {
                   ) : null}
                 </tbody>
               </table>
+            </div>
+
+            <div className="mt-6">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-700">
+                Recent Mirror Jobs
+              </h3>
+              <div className="mt-2 overflow-x-auto rounded-lg border border-zinc-200">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-zinc-50 text-xs font-semibold text-zinc-700">
+                    <tr>
+                      <th className="px-3 py-2">Event</th>
+                      <th className="px-3 py-2">Source</th>
+                      <th className="px-3 py-2">Target</th>
+                      <th className="px-3 py-2">Status</th>
+                      <th className="px-3 py-2">Attempts</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mirrorJobs.map((job) => (
+                      <tr key={job.jobId} className="border-t border-zinc-200">
+                        <td className="px-3 py-2">{job.eventType}</td>
+                        <td className="px-3 py-2">{renderChannelLabel(job.sourceChannelId)}</td>
+                        <td className="px-3 py-2">{renderChannelLabel(job.targetChannelId)}</td>
+                        <td className="px-3 py-2">
+                          {job.status}
+                          {job.lastError ? ` (${job.lastError})` : ""}
+                        </td>
+                        <td className="px-3 py-2">
+                          {job.attemptCount}/{job.maxAttempts}
+                        </td>
+                      </tr>
+                    ))}
+                    {mirrorJobs.length === 0 ? (
+                      <tr>
+                        <td className="px-3 py-3 text-sm text-zinc-600" colSpan={5}>
+                          No mirror jobs yet.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>

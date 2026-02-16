@@ -116,7 +116,7 @@ export function mountConnectorRoutes(http: HttpRouter) {
             status: runtime.connector.status === "active" ? "active" : "paused",
             config_version: runtime.connector.configVersion,
             ingest_enabled: runtime.connector.status === "active",
-            forward_enabled: false,
+            forward_enabled: runtime.forwardingEnabled,
             discovery_request: runtime.discoveryRequest
               ? {
                   version: runtime.discoveryRequest.version,

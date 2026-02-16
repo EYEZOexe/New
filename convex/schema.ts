@@ -10,6 +10,7 @@ export default defineSchema({
     connectorId: v.string(),
     tokenHash: v.string(),
     status: v.union(v.literal("active"), v.literal("paused")),
+    forwardEnabled: v.optional(v.boolean()),
     configVersion: v.number(),
     discoveryRequestVersion: v.optional(v.number()),
     discoveryRequestedGuildId: v.optional(v.string()),
@@ -201,6 +202,78 @@ export default defineSchema({
       "roleId",
       "action",
       "status",
+    ]),
+
+  signalMirrorJobs: defineTable({
+    tenantKey: v.string(),
+    connectorId: v.string(),
+    sourceMessageId: v.string(),
+    sourceChannelId: v.string(),
+    sourceGuildId: v.string(),
+    targetChannelId: v.string(),
+    eventType: v.union(
+      v.literal("create"),
+      v.literal("update"),
+      v.literal("delete"),
+    ),
+    content: v.string(),
+    attachments: v.optional(
+      v.array(
+        v.object({
+          url: v.string(),
+          name: v.optional(v.string()),
+          contentType: v.optional(v.string()),
+          size: v.optional(v.number()),
+        }),
+      ),
+    ),
+    sourceCreatedAt: v.number(),
+    sourceEditedAt: v.optional(v.number()),
+    sourceDeletedAt: v.optional(v.number()),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("processing"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    attemptCount: v.number(),
+    maxAttempts: v.number(),
+    runAfter: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    claimedAt: v.optional(v.number()),
+    claimToken: v.optional(v.string()),
+    claimWorkerId: v.optional(v.string()),
+    lastAttemptAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+  })
+    .index("by_status_runAfter", ["status", "runAfter"])
+    .index("by_tenant_connector", ["tenantKey", "connectorId"])
+    .index("by_dedupe", [
+      "tenantKey",
+      "connectorId",
+      "sourceMessageId",
+      "targetChannelId",
+      "eventType",
+      "status",
+    ]),
+
+  mirroredSignals: defineTable({
+    tenantKey: v.string(),
+    connectorId: v.string(),
+    sourceMessageId: v.string(),
+    targetChannelId: v.string(),
+    mirroredMessageId: v.string(),
+    mirroredGuildId: v.optional(v.string()),
+    lastMirroredAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_tenant_connector", ["tenantKey", "connectorId"])
+    .index("by_source_target", [
+      "tenantKey",
+      "connectorId",
+      "sourceMessageId",
+      "targetChannelId",
     ]),
 
   signals: defineTable({

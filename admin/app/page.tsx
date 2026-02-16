@@ -6,7 +6,7 @@ export default function Home() {
       <section className="mx-auto w-full max-w-4xl rounded-xl border border-zinc-200 bg-white p-8 shadow-sm">
         <h1 className="text-2xl font-semibold tracking-tight">Admin</h1>
         <p className="mt-2 text-sm text-zinc-600">
-          Connector configuration and ingestion status.
+          Connector configuration, bot mirroring, and ingestion status.
         </p>
 
         <div className="mt-6 flex flex-wrap gap-3">

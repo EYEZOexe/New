@@ -2,6 +2,7 @@ import { v } from "convex/values";
 
 import { internalMutation } from "./_generated/server";
 import { messageEventToSignalFields } from "./ingestUtils";
+import { enqueueMirrorJobsForSignal } from "./mirrorQueue";
 
 const IngestAttachment = v.object({
   discord_attachment_id: v.string(),
@@ -84,9 +85,39 @@ export const ingestMessageBatch = internalMutation({
     receivedAt: v.number(),
   },
   handler: async (ctx, args) => {
+    const connector = await ctx.db
+      .query("connectors")
+      .withIndex("by_tenant_connectorId", (q) =>
+        q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+      )
+      .first();
+    const forwardingEnabled = connector?.forwardEnabled === true;
+
+    const mirrorTargetsBySourceChannel = new Map<string, string[]>();
+    if (forwardingEnabled) {
+      const mappings = await ctx.db
+        .query("connectorMappings")
+        .withIndex("by_tenant_connectorId", (q) =>
+          q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+        )
+        .collect();
+
+      for (const mapping of mappings) {
+        const sourceChannelId = mapping.sourceChannelId.trim();
+        const targetChannelId = mapping.targetChannelId.trim();
+        if (!sourceChannelId || !targetChannelId) continue;
+        const current = mirrorTargetsBySourceChannel.get(sourceChannelId) ?? [];
+        current.push(targetChannelId);
+        mirrorTargetsBySourceChannel.set(sourceChannelId, current);
+      }
+    }
+
     let accepted = 0;
     let deduped = 0;
     let ignored = 0;
+    let mirrorEnqueued = 0;
+    let mirrorDeduped = 0;
+    let mirrorSkipped = 0;
 
     for (const message of args.messages) {
       const existing = await ctx.db
@@ -106,57 +137,101 @@ export const ingestMessageBatch = internalMutation({
         receivedAt: args.receivedAt,
       });
 
+      let mirrorContent = fields.content;
+      let mirrorAttachments = fields.attachments;
+
       if (!existing) {
         await ctx.db.insert("signals", fields as any);
         accepted += 1;
-        continue;
-      }
+      } else {
+        deduped += 1;
 
-      deduped += 1;
-
-      if (typeof existing.deletedAt === "number" && message.event_type !== "delete") {
-        const incomingEventAt = fields.editedAt ?? fields.createdAt;
-        if (incomingEventAt <= existing.deletedAt) {
-          ignored += 1;
-          continue;
+        if (typeof existing.deletedAt === "number" && message.event_type !== "delete") {
+          const incomingEventAt = fields.editedAt ?? fields.createdAt;
+          if (incomingEventAt <= existing.deletedAt) {
+            ignored += 1;
+            continue;
+          }
         }
+
+        const patch: Record<string, unknown> = {
+          sourceChannelId: fields.sourceChannelId,
+          sourceGuildId: fields.sourceGuildId,
+          createdAt: fields.createdAt,
+        };
+
+        if (message.event_type === "delete") {
+          patch.deletedAt = fields.deletedAt ?? args.receivedAt;
+          patch.content = fields.content || existing.content;
+          if (fields.attachments.length > 0) {
+            patch.attachments = fields.attachments;
+          }
+        } else {
+          patch.content = fields.content;
+          patch.attachments = fields.attachments;
+
+          if (message.event_type === "update") {
+            patch.editedAt = fields.editedAt ?? args.receivedAt;
+          } else if (typeof fields.editedAt === "number") {
+            patch.editedAt = fields.editedAt;
+          }
+
+          if (typeof fields.deletedAt === "number") {
+            patch.deletedAt = fields.deletedAt;
+          }
+        }
+
+        await ctx.db.patch(existing._id, patch as any);
+
+        mirrorContent = patch.content ? String(patch.content) : existing.content;
+        mirrorAttachments = Array.isArray(patch.attachments)
+          ? (patch.attachments as Array<{
+              url: string;
+              name?: string;
+              contentType?: string;
+              size?: number;
+            }>)
+          : fields.attachments;
       }
 
-      const patch: Record<string, unknown> = {
+      if (!forwardingEnabled) continue;
+
+      const targetChannelIds =
+        mirrorTargetsBySourceChannel.get(fields.sourceChannelId) ?? [];
+      if (targetChannelIds.length === 0) continue;
+
+      const mirrorResult = await enqueueMirrorJobsForSignal(ctx, {
+        tenantKey: args.tenantKey,
+        connectorId: args.connectorId,
+        sourceMessageId: fields.sourceMessageId,
         sourceChannelId: fields.sourceChannelId,
         sourceGuildId: fields.sourceGuildId,
-        createdAt: fields.createdAt,
-      };
-
-      if (message.event_type === "delete") {
-        patch.deletedAt = fields.deletedAt ?? args.receivedAt;
-        patch.content = fields.content || existing.content;
-        if (fields.attachments.length > 0) {
-          patch.attachments = fields.attachments;
-        }
-      } else {
-        patch.content = fields.content;
-        patch.attachments = fields.attachments;
-
-        if (message.event_type === "update") {
-          patch.editedAt = fields.editedAt ?? args.receivedAt;
-        } else if (typeof fields.editedAt === "number") {
-          patch.editedAt = fields.editedAt;
-        }
-
-        if (typeof fields.deletedAt === "number") {
-          patch.deletedAt = fields.deletedAt;
-        }
-      }
-
-      await ctx.db.patch(existing._id, patch as any);
+        targetChannelIds,
+        eventType: message.event_type,
+        content: mirrorContent,
+        attachments: mirrorAttachments,
+        sourceCreatedAt: fields.createdAt,
+        sourceEditedAt: fields.editedAt,
+        sourceDeletedAt: fields.deletedAt,
+        now: args.receivedAt,
+      });
+      mirrorEnqueued += mirrorResult.enqueued;
+      mirrorDeduped += mirrorResult.deduped;
+      mirrorSkipped += mirrorResult.skipped;
     }
 
     console.info(
-      `[ingest] signal batch processed tenant=${args.tenantKey} connector=${args.connectorId} accepted=${accepted} deduped=${deduped} ignored=${ignored} total=${args.messages.length}`,
+      `[ingest] signal batch processed tenant=${args.tenantKey} connector=${args.connectorId} accepted=${accepted} deduped=${deduped} ignored=${ignored} mirror_enqueued=${mirrorEnqueued} mirror_deduped=${mirrorDeduped} mirror_skipped=${mirrorSkipped} total=${args.messages.length}`,
     );
 
-    return { accepted, deduped, ignored };
+    return {
+      accepted,
+      deduped,
+      ignored,
+      mirrorEnqueued,
+      mirrorDeduped,
+      mirrorSkipped,
+    };
   },
 });
 

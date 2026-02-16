@@ -94,6 +94,7 @@ export const getRuntimeConfig = internalQuery({
         transform_json: m.transformJson ?? undefined,
         priority: m.priority ?? undefined,
       })),
+      forwardingEnabled: connector.forwardEnabled === true,
     };
   },
 });
