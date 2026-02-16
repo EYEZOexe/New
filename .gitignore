@@ -1,2 +1,3 @@
 website/jwks.json
 .worktrees/
+node_modules/

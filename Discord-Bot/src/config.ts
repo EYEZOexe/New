@@ -4,7 +4,8 @@ export type BotConfig = {
   roleSyncBotToken: string;
   mirrorBotToken: string;
   workerId: string;
-  pollIntervalMs: number;
+  roleSyncPollIntervalMs: number;
+  mirrorPollIntervalMs: number;
   roleSyncClaimLimit: number;
   mirrorClaimLimit: number;
 };
@@ -43,8 +44,12 @@ export function loadBotConfig(): BotConfig {
     mirrorBotToken: dedicatedMirrorToken || roleSyncBotToken,
     workerId:
       process.env.DISCORD_BOT_WORKER_ID?.trim() || `discord-worker-${process.pid}`,
-    pollIntervalMs: parseIntEnv("ROLE_SYNC_POLL_INTERVAL_MS", 2000, {
-      min: 500,
+    roleSyncPollIntervalMs: parseIntEnv("ROLE_SYNC_POLL_INTERVAL_MS", 1000, {
+      min: 100,
+      max: 60000,
+    }),
+    mirrorPollIntervalMs: parseIntEnv("MIRROR_POLL_INTERVAL_MS", 25, {
+      min: 10,
       max: 60000,
     }),
     roleSyncClaimLimit: parseIntEnv("ROLE_SYNC_CLAIM_LIMIT", 5, {

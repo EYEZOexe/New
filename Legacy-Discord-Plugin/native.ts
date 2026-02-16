@@ -38,7 +38,7 @@ type ApiError = {
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_BATCH_SIZE = 100;
-const FLUSH_INTERVAL_MS = 250;
+const FLUSH_INTERVAL_MS = 25;
 const MAX_RETRIES = 6;
 const BASE_BACKOFF_MS = 750;
 const MAX_BACKOFF_MS = 30_000;
@@ -196,7 +196,15 @@ async function queueItem(kind: QueueItemKind, payload: QueueItem["payload"]) {
         payload,
     });
 
-    await persistQueue();
+    // Persist asynchronously so message forwarding is not blocked on disk I/O.
+    void persistQueue();
+
+    // Fast path for message events: try immediate flush for lower mirror latency.
+    if (kind === "message" && hasConfiguredTransport()) {
+        void processQueue();
+        return;
+    }
+
     await scheduleFlush();
 }
 

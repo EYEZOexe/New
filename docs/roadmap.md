@@ -14,6 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Reduced Phase 4 mirror path latency by removing fixed queue waits: Vencord plugin outbox now fast-flushes message events immediately (with async disk persistence) and lowers fallback flush cadence from 250ms to 25ms, while Discord-Bot now runs a dedicated low-latency mirror queue loop (`MIRROR_POLL_INTERVAL_MS`, default 25ms) with immediate drain when work is present and per-job latency logs. (2026-02-16)
 - Started Phase 4 mirroring implementation end-to-end: Convex now persists signal mirror queue + message linkage state (`signalMirrorJobs`, `mirroredSignals`), ingest enqueues create/update/delete mirror jobs from admin-configured source->target mappings when connector forwarding is enabled, Discord-Bot worker now claims mirror jobs and posts/edits/deletes messages in target channels, and admin connector config now includes mirroring toggle + bot runtime/queue visibility. (2026-02-16)
 - Simplified payments model to fixed-term only (no recurring path): Sell access policies now enforce duration days for product/variant mappings, subscription access is validated against `endsAt`, and dashboard now shows tier + expiration + live time-left countdown from Convex. (2026-02-16)
 - Hardened Discord role-sync worker verification to prevent false-positive completes: worker now force-fetches guild member state, validates target role exists, and verifies post-condition after grant/revoke before ACKing `roleSync:completeRoleSyncJob`. (2026-02-16)

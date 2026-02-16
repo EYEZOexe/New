@@ -23,13 +23,16 @@ async function main() {
   const mirrorManager = new DiscordSignalMirrorManager(roleManager.discordClient);
 
   let shuttingDown = false;
-  let tickInProgress = false;
-  let timer: ReturnType<typeof setInterval> | null = null;
+  let roleTickInProgress = false;
+  let mirrorTickInProgress = false;
+  let roleTimer: ReturnType<typeof setInterval> | null = null;
+  let mirrorTimer: ReturnType<typeof setInterval> | null = null;
 
   const shutdown = async (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
-    if (timer) clearInterval(timer);
+    if (roleTimer) clearInterval(roleTimer);
+    if (mirrorTimer) clearInterval(mirrorTimer);
     logInfo(`received ${signal}; shutting down`);
     await roleManager.destroy();
     process.exit(0);
@@ -46,15 +49,17 @@ async function main() {
 
   await roleManager.login(config.discordBotToken);
   logInfo(
-    `worker started poll_interval_ms=${config.pollIntervalMs} role_claim_limit=${config.roleSyncClaimLimit} mirror_claim_limit=${config.mirrorClaimLimit}`,
+    `worker started role_poll_ms=${config.roleSyncPollIntervalMs} mirror_poll_ms=${config.mirrorPollIntervalMs} role_claim_limit=${config.roleSyncClaimLimit} mirror_claim_limit=${config.mirrorClaimLimit}`,
   );
 
-  const tick = async () => {
-    if (shuttingDown || tickInProgress) return;
-    tickInProgress = true;
+  const processRoleTick = async () => {
+    if (shuttingDown || roleTickInProgress) return 0;
+    roleTickInProgress = true;
+    let processed = 0;
 
     try {
       const jobs = await queueClient.claimJobs();
+      processed = jobs.length;
       if (jobs.length > 0) {
         logInfo(`claimed ${jobs.length} role sync job(s)`);
       }
@@ -98,7 +103,29 @@ async function main() {
         }
       }
 
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logError(`role tick failed: ${message}`);
+    } finally {
+      roleTickInProgress = false;
+      if (processed > 0 && !shuttingDown) {
+        queueMicrotask(() => {
+          void processRoleTick();
+        });
+      }
+    }
+
+    return processed;
+  };
+
+  const processMirrorTick = async () => {
+    if (shuttingDown || mirrorTickInProgress) return 0;
+    mirrorTickInProgress = true;
+    let processed = 0;
+
+    try {
       const mirrorJobs = await mirrorQueueClient.claimJobs();
+      processed = mirrorJobs.length;
       if (mirrorJobs.length > 0) {
         logInfo(`claimed ${mirrorJobs.length} mirror job(s)`);
       }
@@ -106,9 +133,14 @@ async function main() {
         if (shuttingDown) break;
         try {
           const result = await mirrorManager.executeJob(job);
+          const baseEventAt =
+            job.eventType === "update" && typeof job.sourceEditedAt === "number"
+              ? job.sourceEditedAt
+              : job.sourceCreatedAt;
+          const latencyMs = Math.max(0, Date.now() - baseEventAt);
           if (!result.ok) {
             logWarn(
-              `mirror_job=${job.jobId} event=${job.eventType} source_message=${job.sourceMessageId} failed: ${result.message}`,
+              `mirror_job=${job.jobId} event=${job.eventType} source_message=${job.sourceMessageId} failed=${result.message} latency_ms=${latencyMs}`,
             );
             await mirrorQueueClient.completeJob({
               jobId: job.jobId,
@@ -120,7 +152,7 @@ async function main() {
           }
 
           logInfo(
-            `mirror_job=${job.jobId} event=${job.eventType} source_message=${job.sourceMessageId} success=${result.message}`,
+            `mirror_job=${job.jobId} event=${job.eventType} source_message=${job.sourceMessageId} success=${result.message} latency_ms=${latencyMs}`,
           );
           await mirrorQueueClient.completeJob({
             jobId: job.jobId,
@@ -145,17 +177,27 @@ async function main() {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      logError(`tick failed: ${message}`);
+      logError(`mirror tick failed: ${message}`);
     } finally {
-      tickInProgress = false;
+      mirrorTickInProgress = false;
+      if (processed > 0 && !shuttingDown) {
+        queueMicrotask(() => {
+          void processMirrorTick();
+        });
+      }
     }
+
+    return processed;
   };
 
-  timer = setInterval(() => {
-    void tick();
-  }, config.pollIntervalMs);
+  roleTimer = setInterval(() => {
+    void processRoleTick();
+  }, config.roleSyncPollIntervalMs);
+  mirrorTimer = setInterval(() => {
+    void processMirrorTick();
+  }, config.mirrorPollIntervalMs);
 
-  await tick();
+  await Promise.all([processMirrorTick(), processRoleTick()]);
 }
 
 main().catch((error) => {

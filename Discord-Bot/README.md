@@ -12,7 +12,8 @@ CONVEX_URL=https://convex-backend.g3netic.com
 ROLE_SYNC_BOT_TOKEN=__SET_ME__
 MIRROR_BOT_TOKEN=__SET_ME__
 DISCORD_BOT_WORKER_ID=discord-worker-1
-ROLE_SYNC_POLL_INTERVAL_MS=2000
+ROLE_SYNC_POLL_INTERVAL_MS=1000
+MIRROR_POLL_INTERVAL_MS=25
 ROLE_SYNC_CLAIM_LIMIT=5
 MIRROR_CLAIM_LIMIT=10
 ```
@@ -20,6 +21,7 @@ MIRROR_CLAIM_LIMIT=10
 Notes:
 - `ROLE_SYNC_BOT_TOKEN` must match the same value configured in Convex backend env.
 - `MIRROR_BOT_TOKEN` is optional. If omitted in both Convex and bot env, the worker falls back to `ROLE_SYNC_BOT_TOKEN` for mirror queue auth.
+- `MIRROR_POLL_INTERVAL_MS` controls idle mirror queue polling cadence; lower values reduce mirror latency at the cost of more frequent Convex calls.
 - Bot account needs `Manage Roles` permission in the customer guild.
 - Bot account needs message send/edit/delete permissions in target mirror channels.
 - Bot role must be above all customer tier roles in Discord role hierarchy.
