@@ -22,6 +22,12 @@ export default function Home() {
           >
             Payment customers
           </Link>
+          <Link
+            className="inline-flex items-center rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50"
+            href="/discord"
+          >
+            Discord roles
+          </Link>
         </div>
       </section>
     </main>

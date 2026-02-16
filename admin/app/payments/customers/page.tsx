@@ -56,6 +56,9 @@ export default function PaymentCustomersPage() {
             <Link href="/connectors" className="text-sm font-medium underline">
               Connectors
             </Link>
+            <Link href="/discord" className="text-sm font-medium underline">
+              Discord roles
+            </Link>
           </div>
         </div>
 
@@ -131,4 +134,3 @@ export default function PaymentCustomersPage() {
     </main>
   );
 }
-

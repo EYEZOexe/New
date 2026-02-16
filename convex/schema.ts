@@ -134,6 +134,54 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_discordUserId", ["discordUserId"]),
 
+  discordTierRoleMappings: defineTable({
+    tier: v.union(v.literal("basic"), v.literal("advanced"), v.literal("pro")),
+    productId: v.string(),
+    guildId: v.string(),
+    roleId: v.string(),
+    enabled: v.boolean(),
+    updatedAt: v.number(),
+  })
+    .index("by_tier", ["tier"])
+    .index("by_productId", ["productId"])
+    .index("by_enabled", ["enabled"]),
+
+  roleSyncJobs: defineTable({
+    userId: v.id("users"),
+    discordUserId: v.string(),
+    guildId: v.string(),
+    roleId: v.string(),
+    action: v.union(v.literal("grant"), v.literal("revoke")),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("processing"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    source: v.optional(v.string()),
+    attemptCount: v.number(),
+    maxAttempts: v.number(),
+    runAfter: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    claimedAt: v.optional(v.number()),
+    claimToken: v.optional(v.string()),
+    claimWorkerId: v.optional(v.string()),
+    lastAttemptAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+  })
+    .index("by_status_runAfter", ["status", "runAfter"])
+    .index("by_userId_createdAt", ["userId", "createdAt"])
+    .index("by_discordUserId_status", ["discordUserId", "status"])
+    .index("by_dedupe", [
+      "userId",
+      "discordUserId",
+      "guildId",
+      "roleId",
+      "action",
+      "status",
+    ]),
+
   signals: defineTable({
     tenantKey: v.string(),
     connectorId: v.string(),

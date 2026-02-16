@@ -8,6 +8,9 @@ import {
   projectSellWebhookPayload,
   type SubscriptionStatus,
 } from "./paymentsUtils";
+import {
+  enqueueRoleSyncJobsForSubscription,
+} from "./roleSyncQueue";
 
 const PROVIDER = "sellapp";
 type UserResolutionMethod =
@@ -220,6 +223,17 @@ async function upsertSubscriptionForUser(
   });
 }
 
+async function listActiveDiscordLinksForUser(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+): Promise<Array<Doc<"discordLinks">>> {
+  const rows = await ctx.db
+    .query("discordLinks")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .collect();
+  return rows.filter((row) => row.unlinkedAt === undefined);
+}
+
 export const upsertSellWebhookEvent = internalMutation({
   args: {
     provider: v.literal(PROVIDER),
@@ -325,6 +339,31 @@ export const processSellWebhookEvent = internalMutation({
         productId: projected.productId,
         now: args.attemptedAt,
       });
+
+      const activeLinks = await listActiveDiscordLinksForUser(
+        ctx,
+        resolvedUser.id,
+      );
+      for (const link of activeLinks) {
+        const enqueueResult = await enqueueRoleSyncJobsForSubscription(ctx, {
+          userId: resolvedUser.id,
+          discordUserId: link.discordUserId,
+          subscriptionStatus: projected.subscriptionStatus,
+          productId: projected.productId,
+          source: `payment_${projected.eventType}`,
+          now: args.attemptedAt,
+        });
+
+        if (enqueueResult.mappingSource === "none") {
+          console.warn(
+            `[payments] role sync queue not configured; skipped enqueue user=${resolvedUser.id} discord_user=${link.discordUserId} status=${projected.subscriptionStatus}`,
+          );
+        } else {
+          console.info(
+            `[payments] role sync enqueue user=${resolvedUser.id} discord_user=${link.discordUserId} status=${projected.subscriptionStatus} product=${projected.productId ?? "none"} mapped_tier=${enqueueResult.mappedTier ?? "none"} source=${enqueueResult.mappingSource} granted=${enqueueResult.granted} revoked=${enqueueResult.revoked} deduped=${enqueueResult.deduped} skipped=${enqueueResult.skipped}`,
+          );
+        }
+      }
 
       await upsertPaymentCustomerTracking(ctx, {
         userId: resolvedUser.id,

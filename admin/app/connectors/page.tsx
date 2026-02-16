@@ -70,6 +70,12 @@ export default function ConnectorsPage() {
             >
               Payment customers
             </Link>
+            <Link
+              href="/discord"
+              className="text-sm font-medium text-zinc-900 underline"
+            >
+              Discord roles
+            </Link>
           </div>
         </div>
 

@@ -25,6 +25,11 @@ DISCORD_REDIRECT_URI=https://convex.g3netic.com/api/auth/discord/callback
 # Sell.app webhook ingestion + ops replay
 SELLAPP_WEBHOOK_SECRET=__SET_ME__
 SELLAPP_REPLAY_TOKEN=__SET_ME__
+
+# Discord role sync queue (Convex backend + Discord-Bot worker)
+DISCORD_CUSTOMER_GUILD_ID=__SET_ME__
+DISCORD_CUSTOMER_ROLE_ID=__SET_ME__
+ROLE_SYNC_BOT_TOKEN=__SET_ME__
 ```
 
 Domain mapping in this project:
@@ -41,6 +46,11 @@ Discord linking endpoints (Next.js routes):
 - `GET /api/auth/discord/start` (starts OAuth with state cookie)
 - `GET /api/auth/discord/callback` (OAuth callback; stores pending link cookie)
 - `POST /api/auth/discord/complete` (consumes pending cookie for authenticated dashboard link mutation)
+
+Role sync queue functions:
+- `roleSync:claimPendingRoleSyncJobs` (bot worker claims pending jobs with token)
+- `roleSync:completeRoleSyncJob` (bot worker ACKs success/failure)
+- `roleSync:listRoleSyncJobs` (operator visibility query)
 
 Important:
 - `NEXT_PUBLIC_CONVEX_URL` must be backend origin without `/http`.

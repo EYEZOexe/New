@@ -8,6 +8,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
+import { enqueueRoleSyncJobsForSubscription } from "./roleSyncQueue";
 
 async function listLinksByUserId(
   ctx: QueryCtx | MutationCtx,
@@ -87,6 +88,26 @@ export const linkViewerDiscord = mutation({
     for (const row of existingByUser) {
       if (row.unlinkedAt === undefined) {
         await ctx.db.patch(row._id, { unlinkedAt: now });
+
+        if (row.discordUserId !== discordUserId) {
+          const revokeResult = await enqueueRoleSyncJobsForSubscription(ctx, {
+            userId,
+            discordUserId: row.discordUserId,
+            subscriptionStatus: "inactive",
+            productId: null,
+            source: "discord_link_replaced",
+            now,
+          });
+          if (revokeResult.mappingSource === "none") {
+            console.warn(
+              `[discord-link] role sync queue not configured; skipped revoke enqueue user=${userId} discord_user=${row.discordUserId}`,
+            );
+          } else {
+            console.info(
+              `[discord-link] role sync enqueue source=discord_link_replaced user=${userId} discord_user=${row.discordUserId} granted=${revokeResult.granted} revoked=${revokeResult.revoked} deduped=${revokeResult.deduped}`,
+            );
+          }
+        }
       }
     }
 
@@ -111,6 +132,30 @@ export const linkViewerDiscord = mutation({
     console.info(
       `[discord-link] linked user=${userId} discord_user=${discordUserId} username=${username ?? "none"}`,
     );
+
+    const subscription = await ctx.db
+      .query("subscriptions")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .first();
+    if (subscription?.status === "active") {
+      const grantResult = await enqueueRoleSyncJobsForSubscription(ctx, {
+        userId,
+        discordUserId,
+        subscriptionStatus: subscription.status,
+        productId: subscription.productId ?? null,
+        source: "discord_linked_active_subscription",
+        now,
+      });
+      if (grantResult.mappingSource === "none") {
+        console.warn(
+          `[discord-link] role sync queue not configured; skipped grant enqueue user=${userId} discord_user=${discordUserId}`,
+        );
+      } else {
+        console.info(
+          `[discord-link] role sync enqueue source=discord_linked_active_subscription user=${userId} discord_user=${discordUserId} product=${subscription.productId ?? "none"} mapped_tier=${grantResult.mappedTier ?? "none"} granted=${grantResult.granted} revoked=${grantResult.revoked} deduped=${grantResult.deduped}`,
+        );
+      }
+    }
 
     return {
       ok: true,
@@ -139,6 +184,24 @@ export const unlinkViewerDiscord = mutation({
 
     for (const row of activeRows) {
       await ctx.db.patch(row._id, { unlinkedAt: now });
+
+      const revokeResult = await enqueueRoleSyncJobsForSubscription(ctx, {
+        userId,
+        discordUserId: row.discordUserId,
+        subscriptionStatus: "inactive",
+        productId: null,
+        source: "discord_unlinked",
+        now,
+      });
+      if (revokeResult.mappingSource === "none") {
+        console.warn(
+          `[discord-link] role sync queue not configured; skipped revoke enqueue user=${userId} discord_user=${row.discordUserId}`,
+        );
+      } else {
+        console.info(
+          `[discord-link] role sync enqueue source=discord_unlinked user=${userId} discord_user=${row.discordUserId} granted=${revokeResult.granted} revoked=${revokeResult.revoked} deduped=${revokeResult.deduped}`,
+        );
+      }
     }
 
     console.info(

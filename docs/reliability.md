@@ -50,6 +50,12 @@ Benefits:
 - isolates rate limits and transient Discord failures
 - retries become simple and auditable
 
+Implemented:
+
+- Convex `roleSyncJobs` table stores pending/processing/completed/failed role actions.
+- Bun worker in `Discord-Bot` claims jobs from Convex and ACKs success/failure with exponential backoff retries.
+- Role targets are resolved from tier mapping (`basic` / `advanced` / `pro`) stored in Convex and editable from admin UI; inactive/unlinked users are converged by revoking all managed tier roles.
+
 ## Observability Basics
 
 Minimum:

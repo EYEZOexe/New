@@ -14,6 +14,8 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Extended Phase 3 to tier-aware Discord role sync: Convex now supports admin-configured `basic`/`advanced`/`pro` product-to-role mappings (`discordTierRoleMappings` + `discordRoleConfig:*` functions), payment and link/unlink flows enqueue grant/revoke jobs against the desired tier role set, and admin has a new `/discord` surface to manage mappings and role-sync runtime status. Legacy env single-role sync remains as fallback when tier mappings are not configured. (2026-02-16)
+- Phase 3 role assignment automation is implemented end-to-end: Convex `roleSyncJobs` outbox table + claim/complete queue mutations (`roleSync:claimPendingRoleSyncJobs`, `roleSync:completeRoleSyncJob`) are live, Discord link/unlink and payment subscription transitions enqueue grant/revoke jobs, and a Bun-based worker bot was added in `Discord-Bot` to process jobs against Discord roles with retry/backoff semantics and structured logs. (2026-02-16)
 - Fixed dashboard Discord OAuth completion UI state so "Completing link..." no longer gets stuck: callback query cleanup now uses client history replacement and completion state resets reliably after `discord:linkViewerDiscord` success/failure. (2026-02-16)
 - Phase 3 Discord OAuth linking is now implemented in `website`: new Next.js auth routes (`/api/auth/discord/start`, `/api/auth/discord/callback`, `/api/auth/discord/complete`) validate OAuth state cookies, exchange code for Discord identity, and dashboard flow persists link/unlink state in Convex (`discord:linkViewerDiscord`, `discord:unlinkViewerDiscord`) with frontend/backend linkage logs. (2026-02-16)
 - Added an operator surface in `admin` for payment linkage visibility: `payments:listPaymentCustomers` query and `admin` route `/payments/customers` show Sell customer/subscription mappings, user email/status context, and searchable linkage metadata for support/debugging. (2026-02-16)
@@ -48,7 +50,7 @@ Backend is Convex.
 - Phase 1 signal pipeline is now hardened end-to-end: message ingest normalizes update/delete timestamps with fallbacks, stale post-delete updates are ignored server-side, plugin emits message delete events, and dashboard feed surfaces edited/deleted state with realtime update logs. (2026-02-16)
 
 **Next**
-- Add role assignment automation via Convex role sync job queue and bot consumer.
+- Start Phase 4 mirroring in `Discord-Bot`: post new signals into mapped customer channels using Convex as source of truth.
 - Add scheduled payment reconciliation and alerting for webhook drift/failure spikes.
 
 **Blockers / Risks**
@@ -58,6 +60,7 @@ Backend is Convex.
 - Convex Auth issuer should be HTTPS. The current self-hosted issuer is `http://convex-backend.g3netic.com/http`; align `CONVEX_CLOUD_ORIGIN`/`CONVEX_SITE_ORIGIN` + proxy headers so OIDC metadata uses `https://...` to avoid mixed-scheme issues.
 - Convex deployment credentials. We need `CONVEX_SELF_HOSTED_ADMIN_KEY` available in CI/deploy to push schema/functions to self-hosted Convex.
 - Discord OAuth app configuration. `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, and callback URL registration must stay aligned with deployed `NEXT_PUBLIC_APP_URL` / `DISCORD_REDIRECT_URI`.
+- Discord role sync configuration/permissions. `ROLE_SYNC_BOT_TOKEN` must be aligned across Convex + bot env; tier role mappings must be maintained in admin (`/discord`) or legacy fallback env must be set; bot needs `Manage Roles` with hierarchy above all managed customer tier roles.
 - Some provider webhook variants may omit stable customer/subscription IDs; fallback email matching still exists for those events and should be monitored.
 - Bun migration consistency. Build and CI/deploy tooling must stay aligned with Bun lockfiles/workspaces or deployments will fail before app startup.
 - Webhook idempotency and retries. We need to guarantee "at least once" delivery does not create duplicate state.
@@ -101,8 +104,10 @@ Goal: customers can link Discord and get the right role(s) in the customer guild
 
 - [x] Discord OAuth linking flow stores linkage in Convex (2026-02-16)
   Exit criteria: user can link/unlink; linkage is stored and queryable.
-- [ ] Role assignment automation via job queue stored in Convex
+- [x] Role assignment automation via job queue stored in Convex (2026-02-16)
   Exit criteria: paid users get correct role; revoked users lose role.
+- [x] Tier-based role mapping configurable in admin (2026-02-16)
+  Exit criteria: operator can set product->tier->guild/role mapping for basic/advanced/pro and role sync converges Discord roles accordingly.
 
 ### Phase 4: Mirroring (bot -> customer guild)
 

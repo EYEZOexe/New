@@ -368,12 +368,20 @@ export default function ConnectorDetailPage() {
             </p>
           </div>
 
-          <Link
-            href="/connectors"
-            className="text-sm font-medium text-zinc-900 underline"
-          >
-            Back to connectors
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/connectors"
+              className="text-sm font-medium text-zinc-900 underline"
+            >
+              Back to connectors
+            </Link>
+            <Link
+              href="/discord"
+              className="text-sm font-medium text-zinc-900 underline"
+            >
+              Discord roles
+            </Link>
+          </div>
         </div>
 
         {!hasRouteParams ? (
