@@ -174,6 +174,35 @@ let discoveredChannelStore: any | null = null;
 let discoveredChannelStoreScanned = false;
 let lastHandledDiscoveryRequestVersion = -1;
 let initialDiscoverySnapshotDone = false;
+const loggedRestErrorGuilds = new Set<string>();
+
+function hasOwnFunction(obj: unknown, key: string) {
+    if (!obj || (typeof obj !== "object" && typeof obj !== "function")) return false;
+    try {
+        const descriptor = Object.getOwnPropertyDescriptor(obj, key);
+        if (!descriptor) return false;
+        if (typeof descriptor.value === "function") return true;
+        return typeof descriptor.get === "function";
+    } catch {
+        return false;
+    }
+}
+
+function getFunctionIfOwn(obj: unknown, key: string): ((...args: any[]) => any) | null {
+    if (!obj || (typeof obj !== "object" && typeof obj !== "function")) return null;
+    try {
+        const descriptor = Object.getOwnPropertyDescriptor(obj, key);
+        if (!descriptor) return null;
+        if (typeof descriptor.value === "function") return descriptor.value;
+        if (typeof descriptor.get === "function") {
+            const value = descriptor.get.call(obj);
+            return typeof value === "function" ? value : null;
+        }
+    } catch {
+        return null;
+    }
+    return null;
+}
 
 function getDiscoveredChannelStore() {
     if (discoveredChannelStoreScanned) return discoveredChannelStore;
@@ -193,13 +222,13 @@ function getDiscoveredChannelStore() {
                     if (!candidate || typeof candidate !== "object") continue;
 
                     const hasGuildChannelsApi =
-                        typeof candidate.getMutableGuildChannels === "function" ||
-                        typeof candidate.getGuildChannels === "function" ||
-                        typeof candidate.getChannelsForGuild === "function" ||
-                        typeof candidate.getMutableChannelsForGuild === "function" ||
-                        typeof candidate.getSelectableChannels === "function";
+                        hasOwnFunction(candidate, "getMutableGuildChannels") ||
+                        hasOwnFunction(candidate, "getGuildChannels") ||
+                        hasOwnFunction(candidate, "getChannelsForGuild") ||
+                        hasOwnFunction(candidate, "getMutableChannelsForGuild") ||
+                        hasOwnFunction(candidate, "getSelectableChannels");
 
-                    const hasChannelGetter = typeof candidate.getChannel === "function";
+                    const hasChannelGetter = hasOwnFunction(candidate, "getChannel");
                     if (!hasGuildChannelsApi && !hasChannelGetter) continue;
 
                     discoveredChannelStore = candidate;
@@ -341,9 +370,10 @@ function listAccessibleChannelsForGuild(guildId: string) {
 
     const runMethod = (name: string, args: unknown[]) => {
         for (const store of stores) {
-            if (typeof store?.[name] !== "function") continue;
+            const fn = getFunctionIfOwn(store, name);
+            if (!fn) continue;
             try {
-                const value = store[name](...args);
+                const value = fn.apply(store, args as any[]);
                 if (value) walk(value);
             } catch {
                 // No-op: incompatible method signature in this Discord build.
@@ -448,9 +478,10 @@ function listAllAccessibleGuildChannels() {
 
     const runMethod = (name: string, args: unknown[]) => {
         for (const store of stores) {
-            if (typeof store?.[name] !== "function") continue;
+            const fn = getFunctionIfOwn(store, name);
+            if (!fn) continue;
             try {
-                const value = store[name](...args);
+                const value = fn.apply(store, args as any[]);
                 if (value) walk(value);
             } catch {
                 // ignore incompatible signatures
@@ -559,15 +590,19 @@ function readDiscordAuthToken() {
             (req: any) => {
                 const modules = Object.values(req?.c ?? {}) as any[];
                 for (const mod of modules) {
-                    const tokenGetter =
-                        mod?.exports?.default?.getToken ??
-                        mod?.exports?.getToken ??
-                        null;
-                    if (typeof tokenGetter !== "function") continue;
+                    const candidateA = mod?.exports?.default;
+                    const candidateB = mod?.exports;
+                    const tokenGetterA = getFunctionIfOwn(candidateA, "getToken");
+                    const tokenGetterB = getFunctionIfOwn(candidateB, "getToken");
+                    const tokenGetter = tokenGetterA ?? tokenGetterB;
+                    const candidate = tokenGetterA ? candidateA : candidateB;
+                    if (!tokenGetter || !candidate) continue;
                     try {
-                        const value = tokenGetter.call(mod?.exports?.default ?? mod?.exports);
+                        const value = tokenGetter.call(candidate);
                         const parsed = String(value ?? "").trim();
                         if (!parsed) continue;
+                        // User/bot tokens are long non-whitespace strings; reject obvious non-tokens.
+                        if (parsed.length < 20 || /\s/.test(parsed)) continue;
                         token = parsed;
                         break;
                     } catch {
@@ -658,6 +693,10 @@ async function fetchGuildChannelsViaRest(guildId: string): Promise<DiscoveryChan
             });
             return rows;
         } catch {
+            if (!loggedRestErrorGuilds.has(guildId)) {
+                loggedRestErrorGuilds.add(guildId);
+                console.warn(`[ChannelScraper] REST fallback network error for guild ${guildId} at ${endpoint}`);
+            }
             // Try next endpoint.
         }
     }
@@ -1031,6 +1070,7 @@ export default definePlugin({
         initialDiscoverySnapshotDone = false;
         restChannelCache.clear();
         loggedRestFailureGuilds.clear();
+        loggedRestErrorGuilds.clear();
         loggedRestAuthMissing = false;
         discoveredChannelStore = null;
         discoveredChannelStoreScanned = false;
