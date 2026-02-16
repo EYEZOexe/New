@@ -12,6 +12,15 @@ CONVEX_SELF_HOSTED_ADMIN_KEY=__SET_ME__
 # Convex Auth/OIDC origin for self-hosted HTTP actions (note the /http prefix)
 CONVEX_SITE_URL=https://convex-backend.g3netic.com/http
 NEXT_PUBLIC_CONVEX_SITE_URL=https://convex-backend.g3netic.com/http
+# Public website/dashboard origin for OAuth callback construction fallback
+NEXT_PUBLIC_APP_URL=https://convex.g3netic.com
+
+# Discord OAuth linking (dashboard -> Discord -> callback)
+DISCORD_CLIENT_ID=__SET_ME__
+DISCORD_CLIENT_SECRET=__SET_ME__
+# Optional explicit callback URL override; defaults to:
+# ${NEXT_PUBLIC_APP_URL}/api/auth/discord/callback
+DISCORD_REDIRECT_URI=https://convex.g3netic.com/api/auth/discord/callback
 
 # Sell.app webhook ingestion + ops replay
 SELLAPP_WEBHOOK_SECRET=__SET_ME__
@@ -27,6 +36,11 @@ Webhook endpoints (Convex HTTP actions):
 - `POST /webhooks/sellapp` (Sell.app delivery + idempotent processing)
 - `POST /webhooks/sellapp/replay` (manual replay, requires `SELLAPP_REPLAY_TOKEN`)
 - `GET /webhooks/sellapp/failures` (failed event inbox, requires `SELLAPP_REPLAY_TOKEN`)
+
+Discord linking endpoints (Next.js routes):
+- `GET /api/auth/discord/start` (starts OAuth with state cookie)
+- `GET /api/auth/discord/callback` (OAuth callback; stores pending link cookie)
+- `POST /api/auth/discord/complete` (consumes pending cookie for authenticated dashboard link mutation)
 
 Important:
 - `NEXT_PUBLIC_CONVEX_URL` must be backend origin without `/http`.
