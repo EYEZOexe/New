@@ -123,8 +123,8 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
   Exit criteria: discovery sync populates guild/channel selectors with names + IDs for a fresh connector.
 - [x] Improve admin connector selection UX with guild-scoped channel filtering (2026-02-16)
   Exit criteria: source channel picker only shows channels from the selected guild; mapping/source tables show readable names with IDs.
-- [x] Fix channel snapshot extraction from Discord ChannelStore wrappers (2026-02-16)
-  Exit criteria: channel-guild sync writes non-empty `discordChannels` rows for accessible guilds and admin channel dropdowns populate after snapshot sync.
+- [x] Fix channel snapshot extraction from Discord ChannelStore wrappers + global fallback scan (2026-02-16)
+  Exit criteria: channel-guild sync writes non-empty `discordChannels` rows for accessible guilds even when guild-scoped store helpers are empty, and admin channel dropdowns populate after snapshot sync.
 
 ## Decision Log
 

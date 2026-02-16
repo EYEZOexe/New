@@ -295,6 +295,80 @@ function listAccessibleChannelsForGuild(guildId: string) {
     return out;
 }
 
+function listAllAccessibleGuildChannels() {
+    const store: any = ChannelStore as any;
+    const all =
+        (typeof store.getChannels === "function" ? store.getChannels() : null) ??
+        (typeof store.getAllChannels === "function" ? store.getAllChannels() : null) ??
+        null;
+
+    const byId = new Map<string, {
+        guild_id: string;
+        discord_channel_id: string;
+        name: string;
+        type?: number | null;
+        parent_id?: string | null;
+        position?: number | null;
+    }>();
+    const seen = new WeakSet<object>();
+
+    const toChannelLike = (value: any) => {
+        const channel = value?.channel ?? value?.record?.channel ?? value?.item?.channel ?? value;
+        if (!channel || typeof channel !== "object") return null;
+
+        const id = String(channel?.id ?? "").trim();
+        const guildId = String(channel?.guild_id ?? channel?.guildId ?? "").trim();
+        if (!id || !guildId) return null;
+
+        const name = String(channel?.name ?? "").trim() || id;
+        return {
+            guild_id: guildId,
+            discord_channel_id: id,
+            name,
+            type: typeof channel?.type === "number" ? channel.type : null,
+            parent_id: typeof channel?.parent_id === "string"
+                ? channel.parent_id
+                : typeof channel?.parentId === "string"
+                    ? channel.parentId
+                    : null,
+            position: typeof channel?.position === "number" ? channel.position : null,
+        };
+    };
+
+    const walk = (value: any, depth = 0) => {
+        if (depth > 8) return;
+        if (!value) return;
+
+        if (Array.isArray(value)) {
+            for (const item of value) walk(item, depth + 1);
+            return;
+        }
+
+        if (typeof value !== "object") return;
+
+        const obj = value as object;
+        if (seen.has(obj)) return;
+        seen.add(obj);
+
+        const maybeChannel = toChannelLike(value);
+        if (maybeChannel) {
+            byId.set(maybeChannel.discord_channel_id, maybeChannel);
+        }
+
+        for (const nested of Object.values(value as Record<string, unknown>)) {
+            if (nested && (typeof nested === "object" || Array.isArray(nested))) {
+                walk(nested, depth + 1);
+            }
+        }
+    };
+
+    if (all && typeof all === "object") {
+        walk(all);
+    }
+
+    return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function listAccessibleGuilds() {
     const store: any = GuildStore as any;
     const fromStore =
@@ -329,6 +403,19 @@ function listAccessibleGuilds() {
         }
     }
 
+    // Fallback: derive guild IDs from ChannelStore when GuildStore is unavailable/empty.
+    if (byId.size === 0) {
+        const channels = listAllAccessibleGuildChannels();
+        for (const channel of channels) {
+            if (!byId.has(channel.guild_id)) {
+                byId.set(channel.guild_id, {
+                    discord_guild_id: channel.guild_id,
+                    name: getGuildName(channel.guild_id),
+                });
+            }
+        }
+    }
+
     return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -339,6 +426,7 @@ async function syncGuildChannelSnapshot() {
     const guilds: IngestChannelGuildSync["guilds"] = [];
     const channels: IngestChannelGuildSync["channels"] = [];
     const accessibleGuilds = listAccessibleGuilds();
+    const allChannels = listAllAccessibleGuildChannels();
     const guildNameById = new Map(accessibleGuilds.map((guild) => [guild.discord_guild_id, guild.name]));
     const discoveryGuildIds = accessibleGuilds.length > 0
         ? accessibleGuilds.map((guild) => guild.discord_guild_id)
@@ -349,7 +437,10 @@ async function syncGuildChannelSnapshot() {
             discord_guild_id: guildId,
             name: guildNameById.get(guildId) ?? getGuildName(guildId),
         });
-        const rows = listAccessibleChannelsForGuild(guildId);
+        let rows = listAccessibleChannelsForGuild(guildId);
+        if (rows.length === 0) {
+            rows = allChannels.filter((channel) => channel.guild_id === guildId);
+        }
         for (const row of rows) {
             channels.push({
                 discord_channel_id: row.discord_channel_id,
@@ -364,7 +455,9 @@ async function syncGuildChannelSnapshot() {
 
     if (channels.length === 0 && guilds.length === 0) return;
 
-    console.log(`[ChannelScraper] Discovery snapshot prepared: ${guilds.length} guild(s), ${channels.length} channel(s).`);
+    console.log(
+        `[ChannelScraper] Discovery snapshot prepared: ${guilds.length} guild(s), ${channels.length} channel(s), allChannels=${allChannels.length}.`
+    );
 
     await Native.enqueueChannelGuildSync({
         idempotency_key: buildIdempotencyKey(
