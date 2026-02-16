@@ -60,12 +60,17 @@ export default function ConnectorsPage() {
             </p>
           </div>
 
-          <Link
-            href="/"
-            className="text-sm font-medium text-zinc-900 underline"
-          >
-            Home
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link href="/" className="text-sm font-medium text-zinc-900 underline">
+              Home
+            </Link>
+            <Link
+              href="/payments/customers"
+              className="text-sm font-medium text-zinc-900 underline"
+            >
+              Payment customers
+            </Link>
+          </div>
         </div>
 
         <div className="mt-6 rounded-lg border border-zinc-200 bg-zinc-50 p-4">

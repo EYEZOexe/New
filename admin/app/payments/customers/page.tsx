@@ -1,9 +1,8 @@
 "use client";
 
-import { useConvexAuth, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 type OperatorPaymentRow = {
@@ -18,9 +17,7 @@ type OperatorPaymentRow = {
   updatedAt: number;
 };
 
-export default function OperatorPage() {
-  const router = useRouter();
-  const { isAuthenticated, isLoading } = useConvexAuth();
+export default function PaymentCustomersPage() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useMemo(() => search.trim(), [search]);
 
@@ -30,50 +27,36 @@ export default function OperatorPage() {
     OperatorPaymentRow[]
   >("payments:listPaymentCustomers");
 
-  const rows = useQuery(
-    listPaymentCustomersRef,
-    isAuthenticated ? { limit: 100, search: debouncedSearch || undefined } : "skip",
-  );
-
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.replace("/login?redirectTo=/dashboard/operator");
-    }
-  }, [isAuthenticated, isLoading, router]);
+  const rows = useQuery(listPaymentCustomersRef, {
+    limit: 200,
+    search: debouncedSearch || undefined,
+  });
 
   useEffect(() => {
     if (!rows) return;
     console.info(
-      `[dashboard/operator] payment customer rows updated count=${rows.length} search=${debouncedSearch || "none"}`,
+      `[admin/payment-customers] rows updated count=${rows.length} search=${debouncedSearch || "none"}`,
     );
   }, [rows, debouncedSearch]);
 
-  if (isLoading) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-zinc-100 p-6">
-        <section className="w-full max-w-6xl rounded-xl bg-white p-8 shadow-sm">
-          <h1 className="text-2xl font-semibold text-zinc-900">Operator</h1>
-          <p className="mt-2 text-sm text-zinc-600">Checking session...</p>
-        </section>
-      </main>
-    );
-  }
-
-  if (!isAuthenticated) return null;
-
   return (
-    <main className="min-h-screen bg-zinc-100 p-6">
-      <section className="mx-auto w-full max-w-6xl rounded-xl bg-white p-8 shadow-sm">
+    <main className="min-h-screen bg-zinc-50 p-8 text-zinc-900">
+      <section className="mx-auto w-full max-w-6xl rounded-xl border border-zinc-200 bg-white p-8 shadow-sm">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-zinc-900">Operator: Payment Customers</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Payment Customers</h1>
             <p className="mt-2 text-sm text-zinc-600">
-              Live view of Sell customer/subscription linkage in Convex.
+              Sell customer/subscription linkage for support and reconciliation.
             </p>
           </div>
-          <Link href="/dashboard" className="text-sm font-medium text-zinc-900 underline">
-            Back to dashboard
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link href="/" className="text-sm font-medium underline">
+              Home
+            </Link>
+            <Link href="/connectors" className="text-sm font-medium underline">
+              Connectors
+            </Link>
+          </div>
         </div>
 
         <div className="mt-6 flex flex-wrap items-end gap-3">

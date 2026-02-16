@@ -25,13 +25,6 @@ type ViewerRow = {
   name: string | null;
   subscriptionStatus: "active" | "inactive" | "canceled" | "past_due" | null;
   hasSignalAccess: boolean;
-  paymentTracking: {
-    provider: string;
-    externalCustomerId: string | null;
-    externalSubscriptionId: string | null;
-    lastEventId: string | null;
-    updatedAt: number;
-  } | null;
 };
 
 export default function DashboardPage() {
@@ -73,7 +66,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!viewer) return;
     console.info(
-      `[dashboard] access gate status user=${viewer.userId} subscription=${viewer.subscriptionStatus ?? "none"} allowed=${viewer.hasSignalAccess} paymentCustomer=${viewer.paymentTracking?.externalCustomerId ?? "none"} paymentSubscription=${viewer.paymentTracking?.externalSubscriptionId ?? "none"}`,
+      `[dashboard] access gate status user=${viewer.userId} subscription=${viewer.subscriptionStatus ?? "none"} allowed=${viewer.hasSignalAccess}`,
     );
   }, [viewer]);
 
@@ -125,13 +118,6 @@ export default function DashboardPage() {
           <Link href="/" className="text-sm font-medium text-zinc-900 underline">
             Back to home
           </Link>
-          <span className="mx-2 text-zinc-400">|</span>
-          <Link
-            href="/dashboard/operator"
-            className="text-sm font-medium text-zinc-900 underline"
-          >
-            Operator view
-          </Link>
         </div>
 
         <div className="mt-6 rounded-md border border-zinc-200 bg-zinc-50 p-3">
@@ -144,20 +130,6 @@ export default function DashboardPage() {
               Signal access is disabled until your subscription is active.
             </p>
           ) : null}
-          <div className="mt-3 grid gap-1 text-xs text-zinc-600">
-            <p>
-              Sell customer ID:{" "}
-              <span className="font-mono text-zinc-900">
-                {viewer?.paymentTracking?.externalCustomerId ?? "not linked"}
-              </span>
-            </p>
-            <p>
-              Sell subscription ID:{" "}
-              <span className="font-mono text-zinc-900">
-                {viewer?.paymentTracking?.externalSubscriptionId ?? "not linked"}
-              </span>
-            </p>
-          </div>
         </div>
 
         <div className="mt-8 border-t border-zinc-200 pt-6">

@@ -9,12 +9,18 @@ export default function Home() {
           Connector configuration and ingestion status.
         </p>
 
-        <div className="mt-6">
+        <div className="mt-6 flex flex-wrap gap-3">
           <Link
             className="inline-flex items-center rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50"
             href="/connectors"
           >
             Manage connectors
+          </Link>
+          <Link
+            className="inline-flex items-center rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50"
+            href="/payments/customers"
+          >
+            Payment customers
           </Link>
         </div>
       </section>

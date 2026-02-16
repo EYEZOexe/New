@@ -1,5 +1,4 @@
 import { v } from "convex/values";
-import { getAuthUserId } from "@convex-dev/auth/server";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
@@ -423,12 +422,6 @@ export const listPaymentCustomers = query({
     search: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      console.info("[payments] blocked listPaymentCustomers for unauthenticated request");
-      return [];
-    }
-
     const limit = Math.max(1, Math.min(200, args.limit ?? 50));
     const search = (args.search ?? "").trim().toLowerCase();
 
@@ -484,7 +477,7 @@ export const listPaymentCustomers = query({
     }
 
     console.info(
-      `[payments] operator listPaymentCustomers user=${String(userId)} search=${search || "none"} returned=${result.length}`,
+      `[payments] operator listPaymentCustomers search=${search || "none"} returned=${result.length}`,
     );
 
     return result;

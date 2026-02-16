@@ -14,7 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
-- Added an authenticated operator surface for payment linkage visibility: `payments:listPaymentCustomers` query and `/dashboard/operator` page show Sell customer/subscription mappings, user email/status context, and searchable linkage metadata for support/debugging. (2026-02-16)
+- Added an operator surface in `admin` for payment linkage visibility: `payments:listPaymentCustomers` query and `admin` route `/payments/customers` show Sell customer/subscription mappings, user email/status context, and searchable linkage metadata for support/debugging. (2026-02-16)
 - Added durable Sell payment identity tracking in Convex (`paymentCustomers`): webhook processing now resolves users by external subscription/customer IDs before email fallback, and stores provider linkage for subsequent events and operator visibility. (2026-02-16)
 - Fixed Sell.app webhook failure persistence semantics in Convex: processing failures now commit `webhookEvents` as `failed` with incrementing attempt counts, and replay increments attempts predictably while keeping failure inbox visibility (`/webhooks/sellapp/failures`). (2026-02-16)
 - Phase 2 payments + access gating is live in Convex: Sell.app webhook ingestion (`/webhooks/sellapp`) is idempotent by provider event ID, updates subscription state, records attempt/failure metadata, and exposes controlled replay/failure inbox endpoints (`/webhooks/sellapp/replay`, `/webhooks/sellapp/failures`). Signal feed access is now gated server-side on active subscription status. (2026-02-16)
