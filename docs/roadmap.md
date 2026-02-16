@@ -24,6 +24,7 @@ Backend is Convex.
 - Expanded Vencord channel discovery fallbacks to probe multiple guild-scoped ChannelStore methods and log detected method availability for environment-specific debugging. (2026-02-16)
 - Added REST fallback (`/api/v10|v9/guilds/:id/channels`) for channel discovery when ChannelStore-based extraction returns empty in specific Discord client variants. (2026-02-16)
 - Hardened REST fallback auth + diagnostics: token lookup now includes Discord webpack `getToken()`, cookie-auth fallback requests are attempted, and zero-channel snapshots trigger short warmup retries. (2026-02-16)
+- Added DOM-based fallback channel discovery by parsing visible `/channels/<guild>/<channel>` links when ChannelStore and REST fallbacks still return zero channels in constrained client contexts. (2026-02-16)
 
 **Next**
 - Move payments and access gating to Convex as the source of truth.
@@ -134,6 +135,8 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
   Exit criteria: when store-derived channels are empty, plugin fetches guild channels via Discord REST and snapshot payload includes non-zero channels when the account can access them.
 - [x] Improve REST fallback auth compatibility + zero-channel warmup retries (2026-02-16)
   Exit criteria: plugin attempts token retrieval from storage and webpack runtime, emits actionable REST HTTP diagnostics, and retries snapshot shortly when guilds exist but channels are still zero.
+- [x] Add DOM fallback discovery for visible guild channels (2026-02-16)
+  Exit criteria: when store and REST fallbacks are empty, plugin extracts channel IDs/names from rendered Discord channel links and sends them in discovery snapshots.
 
 ## Decision Log
 

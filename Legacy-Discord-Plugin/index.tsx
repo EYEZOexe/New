@@ -435,6 +435,39 @@ function listAllAccessibleGuildChannels() {
     return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function listVisibleChannelsFromDom(guildIdFilter?: string) {
+    const byId = new Map<string, DiscoveryChannelRow>();
+    const anchors = document.querySelectorAll<HTMLAnchorElement>('a[href^="/channels/"]');
+
+    for (const anchor of anchors) {
+        const href = anchor.getAttribute("href") ?? "";
+        const match = href.match(/^\/channels\/(\d+)\/(\d+)/);
+        if (!match) continue;
+
+        const guildId = match[1];
+        const channelId = match[2];
+        if (!guildId || !channelId) continue;
+        if (guildIdFilter && guildId !== guildIdFilter) continue;
+
+        const nameFromNode = anchor.querySelector<HTMLElement>('[class*="name"]')?.textContent?.trim() ?? "";
+        const aria = String(anchor.getAttribute("aria-label") ?? "").trim();
+        const nameFromAria = aria.includes(" (") ? aria.slice(0, aria.indexOf(" (")).trim() : aria;
+        const fallbackName = getChannelName(channelId);
+        const name = nameFromNode || nameFromAria || fallbackName || channelId;
+
+        byId.set(channelId, {
+            guild_id: guildId,
+            discord_channel_id: channelId,
+            name,
+            type: null,
+            parent_id: null,
+            position: null,
+        });
+    }
+
+    return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function readDiscordAuthToken() {
     const readTokenFromStorage = (storage: Storage | undefined | null) => {
         if (!storage) return null;
@@ -631,6 +664,7 @@ async function syncGuildChannelSnapshot() {
     const accessibleGuilds = listAccessibleGuilds();
     const allChannels = listAllAccessibleGuildChannels();
     let restFallbackChannels = 0;
+    let domFallbackChannels = 0;
 
     if (!loggedChannelStoreDiagnostics) {
         loggedChannelStoreDiagnostics = true;
@@ -669,6 +703,13 @@ async function syncGuildChannelSnapshot() {
                 restFallbackChannels += restRows.length;
             }
         }
+        if (rows.length === 0) {
+            const domRows = listVisibleChannelsFromDom(guildId);
+            if (domRows.length > 0) {
+                rows = domRows;
+                domFallbackChannels += domRows.length;
+            }
+        }
         for (const row of rows) {
             channels.push({
                 discord_channel_id: row.discord_channel_id,
@@ -684,7 +725,7 @@ async function syncGuildChannelSnapshot() {
     if (channels.length === 0 && guilds.length === 0) return;
 
     console.log(
-        `[ChannelScraper] Discovery snapshot prepared: ${guilds.length} guild(s), ${channels.length} channel(s), allChannels=${allChannels.length}, restChannels=${restFallbackChannels}.`
+        `[ChannelScraper] Discovery snapshot prepared: ${guilds.length} guild(s), ${channels.length} channel(s), allChannels=${allChannels.length}, restChannels=${restFallbackChannels}, domChannels=${domFallbackChannels}.`
     );
 
     if (channels.length === 0 && guilds.length > 0 && !zeroChannelRetryTimer) {
