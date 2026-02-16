@@ -12,6 +12,7 @@ import type * as auth from "../auth.js";
 import type * as connectors from "../connectors.js";
 import type * as connectorsAuth from "../connectorsAuth.js";
 import type * as connectorsInternal from "../connectorsInternal.js";
+import type * as discord from "../discord.js";
 import type * as discovery from "../discovery.js";
 import type * as http from "../http.js";
 import type * as httpConnectors from "../httpConnectors.js";
@@ -36,6 +37,7 @@ declare const fullApi: ApiFromModules<{
   connectors: typeof connectors;
   connectorsAuth: typeof connectorsAuth;
   connectorsInternal: typeof connectorsInternal;
+  discord: typeof discord;
   discovery: typeof discovery;
   http: typeof http;
   httpConnectors: typeof httpConnectors;
