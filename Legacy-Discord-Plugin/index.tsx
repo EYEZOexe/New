@@ -592,44 +592,7 @@ function readDiscordAuthToken() {
 
     const tokenFromSession = readTokenFromStorage(window.sessionStorage);
     if (tokenFromSession) return tokenFromSession;
-
-    try {
-        const chunk = (window as any).webpackChunkdiscord_app;
-        if (!Array.isArray(chunk) || typeof chunk.push !== "function") return null;
-
-        let token: string | null = null;
-        chunk.push([
-            [Math.random()],
-            {},
-            (req: any) => {
-                const modules = Object.values(req?.c ?? {}) as any[];
-                for (const mod of modules) {
-                    const candidateA = mod?.exports?.default;
-                    const candidateB = mod?.exports;
-                    const tokenGetterA = getFunctionIfOwn(candidateA, "getToken");
-                    const tokenGetterB = getFunctionIfOwn(candidateB, "getToken");
-                    const tokenGetter = tokenGetterA ?? tokenGetterB;
-                    const candidate = tokenGetterA ? candidateA : candidateB;
-                    if (!tokenGetter || !candidate) continue;
-                    try {
-                        const value = tokenGetter.call(candidate);
-                        const parsed = String(value ?? "").trim();
-                        if (!parsed) continue;
-                        // User/bot tokens are long non-whitespace strings; reject obvious non-tokens.
-                        if (parsed.length < 20 || /\s/.test(parsed)) continue;
-                        token = parsed;
-                        break;
-                    } catch {
-                        // keep scanning modules
-                    }
-                }
-            },
-        ]);
-
-        return token;
-    } catch {
-        return null;
-    }
+    return null;
 }
 
 function toDiscoveryChannelRow(value: any, guildIdFallback: string): DiscoveryChannelRow | null {
@@ -775,9 +738,9 @@ async function syncGuildChannelSnapshot(targetGuildId?: string) {
     const guilds: IngestChannelGuildSync["guilds"] = [];
     const channels: IngestChannelGuildSync["channels"] = [];
     const accessibleGuilds = listAccessibleGuilds();
-    const allChannels = listAllAccessibleGuildChannels();
     let restFallbackChannels = 0;
     let domFallbackChannels = 0;
+    let storeFallbackChannels = 0;
 
     if (!loggedChannelStoreDiagnostics) {
         loggedChannelStoreDiagnostics = true;
@@ -813,22 +776,29 @@ async function syncGuildChannelSnapshot(targetGuildId?: string) {
             discord_guild_id: guildId,
             name: guildNameById.get(guildId) ?? getGuildName(guildId),
         });
-        let rows = listAccessibleChannelsForGuild(guildId);
-        if (rows.length === 0) {
-            rows = allChannels.filter((channel) => channel.guild_id === guildId);
+        let rows: DiscoveryChannelRow[] = [];
+
+        // REST is the preferred path for explicit channel discovery requests.
+        // It avoids broad runtime probing and keeps latency predictable.
+        const restRows = await fetchGuildChannelsViaRest(guildId);
+        if (restRows.length > 0) {
+            rows = restRows;
+            restFallbackChannels += restRows.length;
         }
+
         if (rows.length === 0) {
-            const restRows = await fetchGuildChannelsViaRest(guildId);
-            if (restRows.length > 0) {
-                rows = restRows;
-                restFallbackChannels += restRows.length;
-            }
-        }
-        if (rows.length === 0) {
+            // DOM fallback is cheap and does not depend on runtime store internals.
             const domRows = listVisibleChannelsFromDom(guildId);
             if (domRows.length > 0) {
                 rows = domRows;
                 domFallbackChannels += domRows.length;
+            }
+        }
+        if (rows.length === 0) {
+            const storeRows = listAccessibleChannelsForGuild(guildId);
+            if (storeRows.length > 0) {
+                rows = storeRows;
+                storeFallbackChannels += storeRows.length;
             }
         }
         for (const row of rows) {
@@ -846,7 +816,7 @@ async function syncGuildChannelSnapshot(targetGuildId?: string) {
     if (channels.length === 0 && guilds.length === 0) return;
 
     console.log(
-        `[ChannelScraper] Discovery snapshot prepared: ${guilds.length} guild(s), ${channels.length} channel(s), allChannels=${allChannels.length}, restChannels=${restFallbackChannels}, domChannels=${domFallbackChannels}, targetGuild=${normalizedTargetGuildId || "all"}.`
+        `[ChannelScraper] Discovery snapshot prepared: ${guilds.length} guild(s), ${channels.length} channel(s), restChannels=${restFallbackChannels}, domChannels=${domFallbackChannels}, storeChannels=${storeFallbackChannels}, targetGuild=${normalizedTargetGuildId || "all"}.`
     );
 
     await Native.enqueueChannelGuildSync({
@@ -859,6 +829,35 @@ async function syncGuildChannelSnapshot(targetGuildId?: string) {
         ),
         guilds,
         channels,
+    });
+}
+
+async function syncGuildSnapshotOnly() {
+    const transport = getTransportConfig();
+    if (!hasTransportConfig(transport)) return;
+
+    const accessibleGuilds = listAccessibleGuilds();
+    const guilds: IngestChannelGuildSync["guilds"] = accessibleGuilds.map((guild) => ({
+        discord_guild_id: guild.discord_guild_id,
+        name: guild.name,
+    }));
+
+    if (guilds.length === 0) return;
+
+    console.log(
+        `[ChannelScraper] Guild snapshot prepared: ${guilds.length} guild(s), 0 channel(s).`
+    );
+
+    await Native.enqueueChannelGuildSync({
+        idempotency_key: buildIdempotencyKey(
+            transport.tenantKey,
+            transport.connectorId,
+            "sync",
+            String(Date.now()),
+            "guilds"
+        ),
+        guilds,
+        channels: [],
     });
 }
 
@@ -897,13 +896,17 @@ async function pollRuntimeConfigLoop() {
                 if (shouldRunRequestedSync) {
                     lastHandledDiscoveryRequestVersion = requestVersion;
                     console.log(
-                        `[ChannelScraper] Discovery fetch request received: version=${requestVersion}, guild=${requestedGuildId || "all"}`
+                        `[ChannelScraper] Discovery fetch request received: version=${requestVersion}, guild=${requestedGuildId || "guilds-only"}`
                     );
+                    if (requestedGuildId) {
+                        await syncGuildChannelSnapshot(requestedGuildId);
+                    } else {
+                        await syncGuildSnapshotOnly();
+                    }
                 } else {
                     console.log("[ChannelScraper] Running initial discovery snapshot.");
+                    await syncGuildSnapshotOnly();
                 }
-
-                await syncGuildChannelSnapshot(requestedGuildId || undefined);
                 initialDiscoverySnapshotDone = true;
             }
         } else if (!res?.success && res?.error) {

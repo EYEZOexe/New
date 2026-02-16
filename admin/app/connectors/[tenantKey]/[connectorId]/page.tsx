@@ -209,7 +209,6 @@ export default function ConnectorDetailPage() {
 
   const [lastToken, setLastToken] = useState<string | null>(null);
   const [isRotating, setIsRotating] = useState(false);
-  const [isRequestingGuilds, setIsRequestingGuilds] = useState(false);
   const [isRequestingChannels, setIsRequestingChannels] = useState(false);
   const [lastDiscoveryRequestVersion, setLastDiscoveryRequestVersion] = useState<number | null>(null);
 
@@ -353,20 +352,6 @@ export default function ConnectorDetailPage() {
       setLastDiscoveryRequestVersion(result.requestVersion);
     } finally {
       setIsRequestingChannels(false);
-    }
-  }
-
-  async function onRequestGuilds() {
-    if (!hasRouteParams) return;
-    setIsRequestingGuilds(true);
-    try {
-      const result = await doRequestChannelDiscovery({
-        tenantKey,
-        connectorId,
-      });
-      setLastDiscoveryRequestVersion(result.requestVersion);
-    } finally {
-      setIsRequestingGuilds(false);
     }
   }
 
@@ -516,16 +501,8 @@ export default function ConnectorDetailPage() {
                 </label>
                 <button
                   type="button"
-                  onClick={onRequestGuilds}
-                  disabled={isRequestingGuilds || isRequestingChannels}
-                  className="h-9 rounded-md border border-zinc-300 bg-white px-4 text-sm font-medium disabled:opacity-60"
-                >
-                  {isRequestingGuilds ? "Requesting..." : "Fetch guilds"}
-                </button>
-                <button
-                  type="button"
                   onClick={onRequestChannels}
-                  disabled={!newSourceGuildId || isRequestingGuilds || isRequestingChannels}
+                  disabled={!newSourceGuildId || isRequestingChannels}
                   className="h-9 rounded-md border border-zinc-300 bg-white px-4 text-sm font-medium disabled:opacity-60"
                 >
                   {isRequestingChannels ? "Requesting..." : "Fetch channels"}
@@ -539,7 +516,7 @@ export default function ConnectorDetailPage() {
                 </button>
               </div>
               <p className="mt-3 text-xs text-zinc-600">
-                Click <strong>Fetch guilds</strong> first if guilds are missing. Then select a guild and click{" "}
+                Guilds sync automatically from the plugin. Select a guild, click{" "}
                 <strong>Fetch channels</strong>, pick a channel, and save it as available.
                 Mark whether the channel is usable as a source, target, or both.
                 {lastDiscoveryRequestVersion
