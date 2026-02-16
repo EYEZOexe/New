@@ -38,14 +38,14 @@ Backend is Convex.
 
 ### Phase 0: Foundations
 
-- [ ] Convex project initialized for this repo
+- [x] Convex project initialized for this repo (2026-02-16)
   Exit criteria: `apps/web` and backend functions can read/write Convex in dev.
 - [x] Cut over website auth to Convex Auth (email + password) (2026-02-15)
   Exit criteria: `website` build includes Convex Auth login/signup and uses `NEXT_PUBLIC_CONVEX_URL`; admin is explicitly out of scope for signup/login.
 - [x] Schema defined for core entities (users, subscriptions, signals, discord linkage) (2026-02-15)
   Exit criteria: schema exists with indexes needed for critical queries (`website/convex/schema.ts`).
 
-### Phase 1: Payments + Access (Sell.app webhook)
+### Phase 2: Payments + Access (Sell.app webhook)
 
 Goal: payments reliably grant/revoke access even if the website is down.
 
@@ -55,7 +55,7 @@ Goal: payments reliably grant/revoke access even if the website is down.
   Exit criteria: failures are recorded with enough context to retry safely.
   Link: `docs/reliability.md`
 
-### Phase 2: Discord Linking (customer identity + roles)
+### Phase 3: Discord Linking (customer identity + roles)
 
 Goal: customers can link Discord and get the right role(s) in the customer guild.
 
@@ -64,7 +64,7 @@ Goal: customers can link Discord and get the right role(s) in the customer guild
 - [ ] Role assignment automation via job queue stored in Convex
   Exit criteria: paid users get correct role; revoked users lose role.
 
-### Phase 3: Signal Pipeline (ingestion -> Convex -> dashboard)
+### Phase 1: Signal Pipeline (ingestion -> Convex -> dashboard)
 
 Goal: signals show up in the dashboard quickly and consistently.
 
@@ -133,3 +133,4 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
 
 - Convex adoption design: `docs/plans/2026-02-14-convex-adoption-design.md`
 - Convex adoption plan: `docs/plans/2026-02-14-convex-adoption-plan.md`
+- Discord ingest design: `docs/plans/2026-02-16-discord-ingest-convex-design.md`
