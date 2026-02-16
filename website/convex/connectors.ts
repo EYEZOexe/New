@@ -57,6 +57,44 @@ export const getConnector = query({
   },
 });
 
+export const listSources = query({
+  args: {
+    tenantKey: v.string(),
+    connectorId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("connectorSources")
+      .withIndex("by_tenant_connectorId", (q) =>
+        q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+      )
+      .collect();
+
+    rows.sort((a, b) =>
+      `${a.guildId}:${a.channelId}`.localeCompare(`${b.guildId}:${b.channelId}`),
+    );
+    return rows;
+  },
+});
+
+export const listMappings = query({
+  args: {
+    tenantKey: v.string(),
+    connectorId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("connectorMappings")
+      .withIndex("by_tenant_connectorId", (q) =>
+        q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+      )
+      .collect();
+
+    rows.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+    return rows;
+  },
+});
+
 export const rotateConnectorToken = mutation({
   args: {
     tenantKey: v.string(),
