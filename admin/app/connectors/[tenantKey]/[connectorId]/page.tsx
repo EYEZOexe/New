@@ -182,12 +182,6 @@ export default function ConnectorDetailPage() {
       : { tenantKey, connectorId };
   const sourceChannels = useQuery(listChannels, sourceChannelsArgs) ?? [];
 
-  const mappingChannelsArgs = !hasRouteParams
-    ? "skip"
-    : guildIdFilter
-      ? { tenantKey, connectorId, guildId: guildIdFilter }
-      : { tenantKey, connectorId };
-  const mappingChannels = useQuery(listChannels, mappingChannelsArgs) ?? [];
   const allChannels = useQuery(listChannels, connectorArgs) ?? [];
 
   const doRotate = useMutation(rotateConnectorToken);
@@ -211,15 +205,6 @@ export default function ConnectorDetailPage() {
     }
   }, [newSourceGuildId, newSourceChannelId, sourceChannels]);
 
-  useEffect(() => {
-    if (newMappingSource && !mappingChannels.some((channel) => channel.channelId === newMappingSource)) {
-      setNewMappingSource("");
-    }
-    if (newMappingTarget && !mappingChannels.some((channel) => channel.channelId === newMappingTarget)) {
-      setNewMappingTarget("");
-    }
-  }, [mappingChannels, newMappingSource, newMappingTarget]);
-
   const guildNameById = useMemo(
     () => new Map(guilds.map((guild) => [guild.guildId, guild.name])),
     [guilds],
@@ -228,6 +213,39 @@ export default function ConnectorDetailPage() {
     () => new Map(allChannels.map((channel) => [channel.channelId, channel.name])),
     [allChannels],
   );
+
+  const availableChannels = useMemo(() => {
+    const byChannelId = new Map<string, { guildId: string; channelId: string }>();
+    for (const source of sources) {
+      if (!source.isEnabled) continue;
+      if (!source.guildId || !source.channelId) continue;
+      byChannelId.set(source.channelId, {
+        guildId: source.guildId,
+        channelId: source.channelId,
+      });
+    }
+    const rows = Array.from(byChannelId.values());
+    rows.sort((a, b) => {
+      const guildCmp = renderGuildLabel(a.guildId).localeCompare(renderGuildLabel(b.guildId));
+      if (guildCmp !== 0) return guildCmp;
+      return renderChannelLabel(a.channelId).localeCompare(renderChannelLabel(b.channelId));
+    });
+    return rows;
+  }, [sources, guildNameById, channelNameById]);
+
+  const mappingChannelOptions = useMemo(() => {
+    if (!guildIdFilter) return availableChannels;
+    return availableChannels.filter((channel) => channel.guildId === guildIdFilter);
+  }, [availableChannels, guildIdFilter]);
+
+  useEffect(() => {
+    if (newMappingSource && !mappingChannelOptions.some((channel) => channel.channelId === newMappingSource)) {
+      setNewMappingSource("");
+    }
+    if (newMappingTarget && !mappingChannelOptions.some((channel) => channel.channelId === newMappingTarget)) {
+      setNewMappingTarget("");
+    }
+  }, [mappingChannelOptions, newMappingSource, newMappingTarget]);
 
   function renderGuildLabel(guildId: string) {
     return `${guildNameById.get(guildId) ?? "Unknown guild"} (${guildId})`;
@@ -357,7 +375,7 @@ export default function ConnectorDetailPage() {
 
         <div className="mt-10 grid gap-8 lg:grid-cols-2">
           <div>
-            <h2 className="text-sm font-semibold text-zinc-900">Sources</h2>
+            <h2 className="text-sm font-semibold text-zinc-900">Available Channels</h2>
 
             <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
               <div className="grid gap-3 sm:grid-cols-2">
@@ -420,7 +438,7 @@ export default function ConnectorDetailPage() {
                   onClick={onAddSource}
                   className="h-9 rounded-md border border-zinc-300 bg-white px-4 text-sm font-medium"
                 >
-                  Add / update
+                  Add / update available
                 </button>
               </div>
             </div>
@@ -430,7 +448,7 @@ export default function ConnectorDetailPage() {
                 <thead className="bg-zinc-50 text-xs font-semibold text-zinc-700">
                   <tr>
                     <th className="px-3 py-2">Guild</th>
-                    <th className="px-3 py-2">Channel</th>
+                    <th className="px-3 py-2">Available Channel</th>
                     <th className="px-3 py-2">Thread</th>
                     <th className="px-3 py-2">Enabled</th>
                     <th className="px-3 py-2">Remove</th>
@@ -466,7 +484,7 @@ export default function ConnectorDetailPage() {
                         className="px-3 py-3 text-sm text-zinc-600"
                         colSpan={5}
                       >
-                        No sources yet.
+                        No available channels yet.
                       </td>
                     </tr>
                   ) : null}
@@ -480,7 +498,7 @@ export default function ConnectorDetailPage() {
 
             <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
               <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
-                Filter channels by guild (optional)
+                Filter available channels by guild (optional)
                 <select
                   className="mt-1 h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm"
                   value={guildIdFilter}
@@ -497,36 +515,41 @@ export default function ConnectorDetailPage() {
 
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
-                  Source channel
+                  Source (available channel)
                   <select
                     className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm"
                     value={newMappingSource}
                     onChange={(e) => setNewMappingSource(e.target.value)}
                   >
                     <option value="">Select source</option>
-                    {mappingChannels.map((channel) => (
-                      <option key={channel._id} value={channel.channelId}>
-                        {channel.name} ({channel.channelId})
+                    {mappingChannelOptions.map((channel) => (
+                      <option key={`src-${channel.channelId}`} value={channel.channelId}>
+                        {renderChannelLabel(channel.channelId)}
                       </option>
                     ))}
                   </select>
                 </label>
                 <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
-                  Target channel
+                  Target (available channel)
                   <select
                     className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm"
                     value={newMappingTarget}
                     onChange={(e) => setNewMappingTarget(e.target.value)}
                   >
                     <option value="">Select target</option>
-                    {mappingChannels.map((channel) => (
-                      <option key={channel._id} value={channel.channelId}>
-                        {channel.name} ({channel.channelId})
+                    {mappingChannelOptions.map((channel) => (
+                      <option key={`dst-${channel.channelId}`} value={channel.channelId}>
+                        {renderChannelLabel(channel.channelId)}
                       </option>
                     ))}
                   </select>
                 </label>
               </div>
+              {availableChannels.length === 0 ? (
+                <p className="mt-3 text-xs text-zinc-600">
+                  Add enabled available channels on the left before creating mappings.
+                </p>
+              ) : null}
 
               <div className="mt-3 flex flex-wrap items-end gap-3">
                 <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
@@ -552,8 +575,8 @@ export default function ConnectorDetailPage() {
               <table className="w-full text-left text-sm">
                 <thead className="bg-zinc-50 text-xs font-semibold text-zinc-700">
                   <tr>
-                    <th className="px-3 py-2">Source</th>
-                    <th className="px-3 py-2">Target</th>
+                    <th className="px-3 py-2">Source (available)</th>
+                    <th className="px-3 py-2">Target (available)</th>
                     <th className="px-3 py-2">Priority</th>
                     <th className="px-3 py-2">Remove</th>
                   </tr>

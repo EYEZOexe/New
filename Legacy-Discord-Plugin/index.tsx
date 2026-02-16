@@ -171,6 +171,60 @@ const restChannelCache = new Map<string, { expiresAt: number; rows: DiscoveryCha
 let loggedRestAuthMissing = false;
 const loggedRestFailureGuilds = new Set<string>();
 let zeroChannelRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let discoveredChannelStore: any | null = null;
+let discoveredChannelStoreScanned = false;
+
+function getDiscoveredChannelStore() {
+    if (discoveredChannelStoreScanned) return discoveredChannelStore;
+    discoveredChannelStoreScanned = true;
+
+    try {
+        const chunk = (window as any).webpackChunkdiscord_app;
+        if (!Array.isArray(chunk) || typeof chunk.push !== "function") return null;
+
+        chunk.push([
+            [Math.random()],
+            {},
+            (req: any) => {
+                const modules = Object.values(req?.c ?? {}) as any[];
+                for (const mod of modules) {
+                    const candidate = mod?.exports?.default ?? mod?.exports;
+                    if (!candidate || typeof candidate !== "object") continue;
+
+                    const hasGuildChannelsApi =
+                        typeof candidate.getMutableGuildChannels === "function" ||
+                        typeof candidate.getGuildChannels === "function" ||
+                        typeof candidate.getChannelsForGuild === "function" ||
+                        typeof candidate.getMutableChannelsForGuild === "function" ||
+                        typeof candidate.getSelectableChannels === "function";
+
+                    const hasChannelGetter = typeof candidate.getChannel === "function";
+                    if (!hasGuildChannelsApi && !hasChannelGetter) continue;
+
+                    discoveredChannelStore = candidate;
+                    break;
+                }
+            },
+        ]);
+    } catch {
+        discoveredChannelStore = null;
+    }
+
+    return discoveredChannelStore;
+}
+
+function getChannelStoreCandidates() {
+    const stores: any[] = [];
+    const baseStore: any = ChannelStore as any;
+    const dynamicStore = getDiscoveredChannelStore();
+
+    if (baseStore && typeof baseStore === "object") stores.push(baseStore);
+    if (dynamicStore && typeof dynamicStore === "object" && dynamicStore !== baseStore) {
+        stores.push(dynamicStore);
+    }
+
+    return stores;
+}
 
 function getTransportConfig(): ConnectorTransportConfig {
     return {
@@ -214,7 +268,7 @@ function applyRuntimeConfig(config: ConnectorRuntimeConfig | undefined) {
 }
 
 function listAccessibleChannelsForGuild(guildId: string) {
-    const store: any = ChannelStore as any;
+    const stores = getChannelStoreCandidates();
 
     const out: DiscoveryChannelRow[] = [];
     const byId = new Map<string, (typeof out)[number]>();
@@ -284,12 +338,14 @@ function listAccessibleChannelsForGuild(guildId: string) {
     };
 
     const runMethod = (name: string, args: unknown[]) => {
-        if (typeof store?.[name] !== "function") return;
-        try {
-            const value = store[name](...args);
-            if (value) walk(value);
-        } catch {
-            // No-op: incompatible method signature in this Discord build.
+        for (const store of stores) {
+            if (typeof store?.[name] !== "function") continue;
+            try {
+                const value = store[name](...args);
+                if (value) walk(value);
+            } catch {
+                // No-op: incompatible method signature in this Discord build.
+            }
         }
     };
 
@@ -333,7 +389,7 @@ function listAccessibleChannelsForGuild(guildId: string) {
 }
 
 function listAllAccessibleGuildChannels() {
-    const store: any = ChannelStore as any;
+    const stores = getChannelStoreCandidates();
 
     const byId = new Map<string, DiscoveryChannelRow>();
     const seen = new WeakSet<object>();
@@ -389,12 +445,14 @@ function listAllAccessibleGuildChannels() {
     };
 
     const runMethod = (name: string, args: unknown[]) => {
-        if (typeof store?.[name] !== "function") return;
-        try {
-            const value = store[name](...args);
-            if (value) walk(value);
-        } catch {
-            // ignore incompatible signatures
+        for (const store of stores) {
+            if (typeof store?.[name] !== "function") continue;
+            try {
+                const value = store[name](...args);
+                if (value) walk(value);
+            } catch {
+                // ignore incompatible signatures
+            }
         }
     };
 
@@ -668,7 +726,7 @@ async function syncGuildChannelSnapshot() {
 
     if (!loggedChannelStoreDiagnostics) {
         loggedChannelStoreDiagnostics = true;
-        const store: any = ChannelStore as any;
+        const stores = getChannelStoreCandidates();
         const methodCandidates = [
             "getMutableGuildChannels",
             "getGuildChannels",
@@ -679,8 +737,13 @@ async function syncGuildChannelSnapshot() {
             "getAllChannels",
             "getChannel",
         ];
-        const available = methodCandidates.filter((name) => typeof store?.[name] === "function");
-        console.log(`[ChannelScraper] ChannelStore available methods: ${available.join(", ") || "(none detected)"}`);
+        const available = new Set<string>();
+        for (const store of stores) {
+            for (const name of methodCandidates) {
+                if (typeof store?.[name] === "function") available.add(name);
+            }
+        }
+        console.log(`[ChannelScraper] ChannelStore available methods: ${Array.from(available).join(", ") || "(none detected)"}`);
     }
     const guildNameById = new Map(accessibleGuilds.map((guild) => [guild.discord_guild_id, guild.name]));
     const discoveryGuildIds = accessibleGuilds.length > 0
