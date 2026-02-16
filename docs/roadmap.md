@@ -20,6 +20,7 @@ Backend is Convex.
 - Define migration steps and stop adding new backend features to legacy code paths.
 - Define and enforce realtime signal delivery targets (p95 < 100ms) across web, admin, and bot.
 - Implement Phase 1 signal pipeline in-repo (Convex HTTP ingest + admin connector config UI + website realtime feed + plugin bearer token). Pending deploy + end-to-end latency verification. (2026-02-16)
+- Fixed admin connector detail route param resolution/loading state so connector pages no longer hang on `Loading connector...` when params are missing/invalid. (2026-02-16)
 
 **Next**
 - Move payments and access gating to Convex as the source of truth.
@@ -119,6 +120,8 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
   Exit criteria: docs explicitly require `NEXT_PUBLIC_CONVEX_URL` without `/http` and `CONVEX_SITE_URL` with `/http` for self-hosted auth routes.
 - [x] Fix Convex Auth JWT header compatibility (`kid`/`typ`) for self-hosted Convex (2026-02-16)
   Exit criteria: website auth results in `useConvexAuth() === signed in` and backend `auth:isAuthenticated === true` after sign-in.
+- [x] Fix admin connector detail route params + not-found handling (2026-02-16)
+  Exit criteria: `/connectors/[tenantKey]/[connectorId]` renders resolved tenant/connector IDs, shows loading only while query is pending, and shows not-found when connector is absent.
 
 ## Decision Log
 

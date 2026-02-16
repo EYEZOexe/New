@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
@@ -33,13 +34,20 @@ type MappingRow = {
 type GuildRow = { _id: string; guildId: string; name: string };
 type ChannelRow = { _id: string; channelId: string; guildId: string; name: string };
 
-export default function ConnectorDetailPage({
-  params,
-}: {
-  params: { tenantKey: string; connectorId: string };
-}) {
-  const tenantKey = decodeURIComponent(params.tenantKey);
-  const connectorId = decodeURIComponent(params.connectorId);
+function decodeParam(value: string | string[] | undefined) {
+  if (typeof value !== "string") return "";
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+export default function ConnectorDetailPage() {
+  const params = useParams<{ tenantKey?: string | string[]; connectorId?: string | string[] }>();
+  const tenantKey = decodeParam(params.tenantKey);
+  const connectorId = decodeParam(params.connectorId);
+  const hasRouteParams = tenantKey !== "" && connectorId !== "";
 
   const getConnector = useMemo(
     () =>
@@ -155,19 +163,20 @@ export default function ConnectorDetailPage({
     [],
   );
 
-  const connector = useQuery(getConnector, { tenantKey, connectorId });
-  const sources = useQuery(listSources, { tenantKey, connectorId }) ?? [];
-  const mappings = useQuery(listMappings, { tenantKey, connectorId }) ?? [];
-  const guilds = useQuery(listGuilds, { tenantKey, connectorId }) ?? [];
+  const connectorArgs = hasRouteParams ? { tenantKey, connectorId } : "skip";
+  const connector = useQuery(getConnector, connectorArgs);
+  const sources = useQuery(listSources, connectorArgs) ?? [];
+  const mappings = useQuery(listMappings, connectorArgs) ?? [];
+  const guilds = useQuery(listGuilds, connectorArgs) ?? [];
 
   const [guildIdFilter, setGuildIdFilter] = useState<string>("");
+  const channelsArgs = !hasRouteParams
+    ? "skip"
+    : guildIdFilter
+      ? { tenantKey, connectorId, guildId: guildIdFilter }
+      : { tenantKey, connectorId };
   const channels =
-    useQuery(
-      listChannels,
-      guildIdFilter
-        ? { tenantKey, connectorId, guildId: guildIdFilter }
-        : { tenantKey, connectorId },
-    ) ?? [];
+    useQuery(listChannels, channelsArgs) ?? [];
 
   const doRotate = useMutation(rotateConnectorToken);
   const doSetStatus = useMutation(setStatus);
@@ -189,6 +198,7 @@ export default function ConnectorDetailPage({
   const [newMappingPriority, setNewMappingPriority] = useState<string>("");
 
   async function onRotate() {
+    if (!hasRouteParams) return;
     setIsRotating(true);
     setLastToken(null);
     try {
@@ -200,13 +210,13 @@ export default function ConnectorDetailPage({
   }
 
   async function onToggleStatus() {
-    if (!connector) return;
+    if (!hasRouteParams || !connector) return;
     const next = connector.status === "active" ? "paused" : "active";
     await doSetStatus({ tenantKey, connectorId, status: next });
   }
 
   async function onAddSource() {
-    if (!newSourceGuildId || !newSourceChannelId) return;
+    if (!hasRouteParams || !newSourceGuildId || !newSourceChannelId) return;
     await doUpsertSource({
       tenantKey,
       connectorId,
@@ -223,7 +233,7 @@ export default function ConnectorDetailPage({
   }
 
   async function onAddMapping() {
-    if (!newMappingSource || !newMappingTarget) return;
+    if (!hasRouteParams || !newMappingSource || !newMappingTarget) return;
     const prio =
       newMappingPriority.trim() === ""
         ? undefined
@@ -243,7 +253,7 @@ export default function ConnectorDetailPage({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
-              {tenantKey} / {connectorId}
+              {tenantKey || "unknown"} / {connectorId || "unknown"}
             </h1>
             <p className="mt-2 text-sm text-zinc-600">
               Runtime config and token management.
@@ -258,8 +268,16 @@ export default function ConnectorDetailPage({
           </Link>
         </div>
 
-        {!connector ? (
+        {!hasRouteParams ? (
+          <p className="mt-6 text-sm text-red-700">
+            Missing connector route params. Open this page from the connectors list.
+          </p>
+        ) : connector === undefined ? (
           <p className="mt-6 text-sm text-zinc-600">Loading connector...</p>
+        ) : connector === null ? (
+          <p className="mt-6 text-sm text-red-700">
+            Connector not found for this tenant/key pair.
+          </p>
         ) : (
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-800">
