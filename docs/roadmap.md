@@ -19,6 +19,7 @@ Backend is Convex.
 - Establish Convex data model and auth strategy for `website`; `admin` does not require customer signup/login.
 - Define migration steps and stop adding new backend features to legacy code paths.
 - Define and enforce realtime signal delivery targets (p95 < 100ms) across web, admin, and bot.
+- Implement Phase 1 signal pipeline in-repo (Convex HTTP ingest + admin connector config UI + website realtime feed + plugin bearer token). Pending deploy + end-to-end latency verification. (2026-02-16)
 
 **Next**
 - Move payments and access gating to Convex as the source of truth.
@@ -33,6 +34,7 @@ Backend is Convex.
 - Bun migration consistency. Build and CI/deploy tooling must stay aligned with Bun lockfiles/workspaces or deployments will fail before app startup.
 - Webhook idempotency and retries. We need to guarantee "at least once" delivery does not create duplicate state.
 - Performance. Sub-100ms p95 delivery requires careful schema/indexing and realtime subscriptions; polling is not acceptable on the critical path.
+- End-to-end latency verification. We need to measure ingestion -> Convex commit -> dashboard update p95 with a real Vencord client and configured connector sources.
 
 ## Milestones (Phases)
 
@@ -68,11 +70,11 @@ Goal: customers can link Discord and get the right role(s) in the customer guild
 
 Goal: signals show up in the dashboard quickly and consistently.
 
-- [ ] Collector ingestion writes normalized signal docs to Convex
+- [x] Collector ingestion writes normalized signal docs to Convex (2026-02-16)
   Exit criteria: new messages appear in Convex and are queryable by customer.
-- [ ] Dashboard feed reads signals and updates near realtime
+- [x] Dashboard feed reads signals and updates near realtime (2026-02-16)
   Exit criteria: paid user sees new signals with p95 end-to-end delivery < 100ms.
-- [ ] Idempotency + edit/delete semantics defined
+- [x] Idempotency + edit/delete semantics defined (2026-02-16)
   Exit criteria: edits/deletes converge correctly across dashboard + bot.
 
 ### Phase 4: Mirroring (bot -> customer guild)
