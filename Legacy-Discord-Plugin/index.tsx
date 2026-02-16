@@ -168,6 +168,9 @@ let runtimeConfigPollAbort = false;
 let loggedChannelStoreDiagnostics = false;
 const REST_CHANNEL_CACHE_TTL_MS = 2 * 60_000;
 const restChannelCache = new Map<string, { expiresAt: number; rows: DiscoveryChannelRow[] }>();
+let loggedRestAuthMissing = false;
+const loggedRestFailureGuilds = new Set<string>();
+let zeroChannelRetryTimer: ReturnType<typeof setTimeout> | null = null;
 
 function getTransportConfig(): ConnectorTransportConfig {
     return {
@@ -433,12 +436,55 @@ function listAllAccessibleGuildChannels() {
 }
 
 function readDiscordAuthToken() {
+    const readTokenFromStorage = (storage: Storage | undefined | null) => {
+        if (!storage) return null;
+        try {
+            const raw = storage.getItem("token");
+            if (!raw) return null;
+            const parsed = raw.startsWith("\"") ? JSON.parse(raw) : raw;
+            const token = String(parsed ?? "").trim();
+            return token || null;
+        } catch {
+            return null;
+        }
+    };
+
+    const tokenFromLocal = readTokenFromStorage(window.localStorage);
+    if (tokenFromLocal) return tokenFromLocal;
+
+    const tokenFromSession = readTokenFromStorage(window.sessionStorage);
+    if (tokenFromSession) return tokenFromSession;
+
     try {
-        const raw = window.localStorage?.getItem("token");
-        if (!raw) return null;
-        const parsed = raw.startsWith("\"") ? JSON.parse(raw) : raw;
-        const token = String(parsed ?? "").trim();
-        return token || null;
+        const chunk = (window as any).webpackChunkdiscord_app;
+        if (!Array.isArray(chunk) || typeof chunk.push !== "function") return null;
+
+        let token: string | null = null;
+        chunk.push([
+            [Math.random()],
+            {},
+            (req: any) => {
+                const modules = Object.values(req?.c ?? {}) as any[];
+                for (const mod of modules) {
+                    const tokenGetter =
+                        mod?.exports?.default?.getToken ??
+                        mod?.exports?.getToken ??
+                        null;
+                    if (typeof tokenGetter !== "function") continue;
+                    try {
+                        const value = tokenGetter.call(mod?.exports?.default ?? mod?.exports);
+                        const parsed = String(value ?? "").trim();
+                        if (!parsed) continue;
+                        token = parsed;
+                        break;
+                    } catch {
+                        // keep scanning modules
+                    }
+                }
+            },
+        ]);
+
+        return token;
     } catch {
         return null;
     }
@@ -476,7 +522,10 @@ async function fetchGuildChannelsViaRest(guildId: string): Promise<DiscoveryChan
     if (cached && cached.expiresAt > now) return cached.rows;
 
     const token = readDiscordAuthToken();
-    if (!token) return [];
+    if (!token && !loggedRestAuthMissing) {
+        loggedRestAuthMissing = true;
+        console.warn("[ChannelScraper] REST fallback: Discord token not found via storage/webpack. Trying cookie-auth requests.");
+    }
 
     const endpoints = [
         `/api/v10/guilds/${encodeURIComponent(guildId)}/channels`,
@@ -487,13 +536,18 @@ async function fetchGuildChannelsViaRest(guildId: string): Promise<DiscoveryChan
         try {
             const response = await fetch(endpoint, {
                 method: "GET",
+                credentials: "include",
                 headers: {
-                    Authorization: token,
                     "Content-Type": "application/json",
+                    ...(token ? { Authorization: token } : {}),
                 },
             });
 
             if (!response.ok) {
+                if (!loggedRestFailureGuilds.has(guildId)) {
+                    loggedRestFailureGuilds.add(guildId);
+                    console.warn(`[ChannelScraper] REST fallback failed for guild ${guildId} at ${endpoint}: HTTP ${response.status}`);
+                }
                 if (response.status === 401 || response.status === 403) break;
                 continue;
             }
@@ -632,6 +686,15 @@ async function syncGuildChannelSnapshot() {
     console.log(
         `[ChannelScraper] Discovery snapshot prepared: ${guilds.length} guild(s), ${channels.length} channel(s), allChannels=${allChannels.length}, restChannels=${restFallbackChannels}.`
     );
+
+    if (channels.length === 0 && guilds.length > 0 && !zeroChannelRetryTimer) {
+        zeroChannelRetryTimer = setTimeout(() => {
+            zeroChannelRetryTimer = null;
+            if (!runtimeConfigPollActive || runtimeConfigPollAbort) return;
+            void syncGuildChannelSnapshot();
+        }, 8_000);
+        console.log("[ChannelScraper] Discovery returned 0 channels; scheduled warmup retry in 8s.");
+    }
 
     await Native.enqueueChannelGuildSync({
         idempotency_key: buildIdempotencyKey(
@@ -876,6 +939,10 @@ export default definePlugin({
     async stop() {
         runtimeConfigPollActive = false;
         runtimeConfigPollAbort = true;
+        if (zeroChannelRetryTimer) {
+            clearTimeout(zeroChannelRetryTimer);
+            zeroChannelRetryTimer = null;
+        }
         await Native.flushConnectorQueue();
         await Native.shutdownConnectorTransport();
         console.log("[ChannelScraper] Plugin stopped.");
