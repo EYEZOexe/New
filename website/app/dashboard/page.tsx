@@ -139,8 +139,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (
       discordCallbackLinkState !== "complete" ||
-      !isAuthenticated ||
-      isCompletingDiscordLink
+      !isAuthenticated
     ) {
       return;
     }
@@ -193,10 +192,11 @@ export default function DashboardPage() {
           setDiscordErrorMessage(null);
           setDiscordCallbackError(null);
           setDiscordCallbackLinkState(null);
+          setIsCompletingDiscordLink(false);
           console.info(
             `[dashboard] discord link completed discord_user=${discordUserId}`,
           );
-          router.replace("/dashboard");
+          window.history.replaceState(null, "", "/dashboard");
         }
       } catch (error) {
         const message =
@@ -206,8 +206,9 @@ export default function DashboardPage() {
           setDiscordErrorMessage(message);
           setDiscordCallbackError(null);
           setDiscordCallbackLinkState(null);
+          setIsCompletingDiscordLink(false);
           console.error(`[dashboard] discord link completion failed: ${message}`);
-          router.replace("/dashboard");
+          window.history.replaceState(null, "", "/dashboard");
         }
       } finally {
         if (!cancelled) {
@@ -224,9 +225,7 @@ export default function DashboardPage() {
   }, [
     discordCallbackLinkState,
     isAuthenticated,
-    isCompletingDiscordLink,
     linkViewerDiscord,
-    router,
   ]);
 
   async function onLogout() {

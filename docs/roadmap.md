@@ -14,6 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Fixed dashboard Discord OAuth completion UI state so "Completing link..." no longer gets stuck: callback query cleanup now uses client history replacement and completion state resets reliably after `discord:linkViewerDiscord` success/failure. (2026-02-16)
 - Phase 3 Discord OAuth linking is now implemented in `website`: new Next.js auth routes (`/api/auth/discord/start`, `/api/auth/discord/callback`, `/api/auth/discord/complete`) validate OAuth state cookies, exchange code for Discord identity, and dashboard flow persists link/unlink state in Convex (`discord:linkViewerDiscord`, `discord:unlinkViewerDiscord`) with frontend/backend linkage logs. (2026-02-16)
 - Added an operator surface in `admin` for payment linkage visibility: `payments:listPaymentCustomers` query and `admin` route `/payments/customers` show Sell customer/subscription mappings, user email/status context, and searchable linkage metadata for support/debugging. (2026-02-16)
 - Added durable Sell payment identity tracking in Convex (`paymentCustomers`): webhook processing now resolves users by external subscription/customer IDs before email fallback, and stores provider linkage for subsequent events and operator visibility. (2026-02-16)
