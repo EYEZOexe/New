@@ -19,8 +19,6 @@ Backend is Convex.
 - Establish Convex data model and auth strategy for `website`; `admin` does not require customer signup/login.
 - Define migration steps and stop adding new backend features to legacy code paths.
 - Define and enforce realtime signal delivery targets (p95 < 100ms) across web, admin, and bot.
-- Implement Phase 1 signal pipeline in-repo (Convex HTTP ingest + admin connector config UI + website realtime feed + plugin bearer token). Pending deploy + end-to-end latency verification. (2026-02-16)
-- Fixed admin connector detail route param resolution/loading state so connector pages no longer hang on `Loading connector...` when params are missing/invalid. (2026-02-16)
 
 **Next**
 - Move payments and access gating to Convex as the source of truth.
@@ -35,18 +33,28 @@ Backend is Convex.
 - Bun migration consistency. Build and CI/deploy tooling must stay aligned with Bun lockfiles/workspaces or deployments will fail before app startup.
 - Webhook idempotency and retries. We need to guarantee "at least once" delivery does not create duplicate state.
 - Performance. Sub-100ms p95 delivery requires careful schema/indexing and realtime subscriptions; polling is not acceptable on the critical path.
-- End-to-end latency verification. We need to measure ingestion -> Convex commit -> dashboard update p95 with a real Vencord client and configured connector sources.
 
 ## Milestones (Phases)
 
 ### Phase 0: Foundations
 
-- [x] Convex project initialized for this repo (2026-02-16)
+- [x] Convex project initialized for this repo
   Exit criteria: `apps/web` and backend functions can read/write Convex in dev.
 - [x] Cut over website auth to Convex Auth (email + password) (2026-02-15)
   Exit criteria: `website` build includes Convex Auth login/signup and uses `NEXT_PUBLIC_CONVEX_URL`; admin is explicitly out of scope for signup/login.
 - [x] Schema defined for core entities (users, subscriptions, signals, discord linkage) (2026-02-15)
   Exit criteria: schema exists with indexes needed for critical queries (`website/convex/schema.ts`).
+
+  ### Phase 1: Signal Pipeline (ingestion -> Convex -> dashboard)
+
+Goal: signals show up in the dashboard quickly and consistently.
+
+- [ ] Collector ingestion writes normalized signal docs to Convex
+  Exit criteria: new messages appear in Convex and are queryable by customer.
+- [ ] Dashboard feed reads signals and updates near realtime
+  Exit criteria: paid user sees new signals with p95 end-to-end delivery < 100ms.
+- [ ] Idempotency + edit/delete semantics defined
+  Exit criteria: edits/deletes converge correctly across dashboard + bot.
 
 ### Phase 2: Payments + Access (Sell.app webhook)
 
@@ -66,17 +74,6 @@ Goal: customers can link Discord and get the right role(s) in the customer guild
   Exit criteria: user can link/unlink; linkage is stored and queryable.
 - [ ] Role assignment automation via job queue stored in Convex
   Exit criteria: paid users get correct role; revoked users lose role.
-
-### Phase 1: Signal Pipeline (ingestion -> Convex -> dashboard)
-
-Goal: signals show up in the dashboard quickly and consistently.
-
-- [x] Collector ingestion writes normalized signal docs to Convex (2026-02-16)
-  Exit criteria: new messages appear in Convex and are queryable by customer.
-- [x] Dashboard feed reads signals and updates near realtime (2026-02-16)
-  Exit criteria: paid user sees new signals with p95 end-to-end delivery < 100ms.
-- [x] Idempotency + edit/delete semantics defined (2026-02-16)
-  Exit criteria: edits/deletes converge correctly across dashboard + bot.
 
 ### Phase 4: Mirroring (bot -> customer guild)
 
@@ -120,8 +117,6 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
   Exit criteria: docs explicitly require `NEXT_PUBLIC_CONVEX_URL` without `/http` and `CONVEX_SITE_URL` with `/http` for self-hosted auth routes.
 - [x] Fix Convex Auth JWT header compatibility (`kid`/`typ`) for self-hosted Convex (2026-02-16)
   Exit criteria: website auth results in `useConvexAuth() === signed in` and backend `auth:isAuthenticated === true` after sign-in.
-- [x] Fix admin connector detail route params + not-found handling (2026-02-16)
-  Exit criteria: `/connectors/[tenantKey]/[connectorId]` renders resolved tenant/connector IDs, shows loading only while query is pending, and shows not-found when connector is absent.
 
 ## Decision Log
 
@@ -138,5 +133,3 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
 
 - Convex adoption design: `docs/plans/2026-02-14-convex-adoption-design.md`
 - Convex adoption plan: `docs/plans/2026-02-14-convex-adoption-plan.md`
-- Discord ingest design: `docs/plans/2026-02-16-discord-ingest-convex-design.md`
-- Discord ingest plan: `docs/plans/2026-02-16-discord-ingest-convex-plan.md`
