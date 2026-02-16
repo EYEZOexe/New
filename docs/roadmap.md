@@ -14,8 +14,8 @@ Backend is Convex.
 ## Current Status
 
 **Now**
-- Validate website signup/login end-to-end against self-hosted Convex (`https://convex-backend.g3netic.com`) with production env values (`CONVEX_SITE_URL`, JWT keys/JWKS, `NEXT_PUBLIC_CONVEX_URL`), using domain mapping:
-  `convex-backend.g3netic.com` = backend origin, `convex-backend.g3netic.com/http` = auth/OIDC routes, and `convex.g3netic.com` = dashboard origin.
+- Website signup/login is validated end-to-end against self-hosted Convex (`https://convex-backend.g3netic.com`) using domain mapping:
+  `convex-backend.g3netic.com` = backend origin, `convex-backend.g3netic.com/http` = auth/OIDC routes, and `convex.g3netic.com` = dashboard origin. (2026-02-16)
 - Establish Convex data model and auth strategy for `website`; `admin` does not require customer signup/login.
 - Define migration steps and stop adding new backend features to legacy code paths.
 - Define and enforce realtime signal delivery targets (p95 < 100ms) across web, admin, and bot.
@@ -28,7 +28,7 @@ Backend is Convex.
 - Data migration. We need a clear plan to migrate users/subscriptions/signals into Convex without downtime.
 - Auth and identity mapping. We need one stable user identifier across web, bot, and webhook processing.
 - Convex Auth configuration. Self-hosted Convex must be configured with signing keys/JWKS and correct site URL, otherwise auth flows will fail at runtime.
-- Convex Auth built-in site URL. Current self-hosted built-in `CONVEX_SITE_URL` resolves to `http://convex.g3netic.com` instead of `https://convex-backend.g3netic.com/http`, which causes sign-in success but authenticated queries to fail until infrastructure config is corrected.
+- Convex Auth issuer should be HTTPS. The current self-hosted issuer is `http://convex-backend.g3netic.com/http`; align `CONVEX_CLOUD_ORIGIN`/`CONVEX_SITE_ORIGIN` + proxy headers so OIDC metadata uses `https://...` to avoid mixed-scheme issues.
 - Convex deployment credentials. We need `CONVEX_SELF_HOSTED_ADMIN_KEY` available in CI/deploy to push schema/functions to self-hosted Convex.
 - Bun migration consistency. Build and CI/deploy tooling must stay aligned with Bun lockfiles/workspaces or deployments will fail before app startup.
 - Webhook idempotency and retries. We need to guarantee "at least once" delivery does not create duplicate state.
@@ -115,6 +115,8 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
   Exit criteria: `CONVEX_SITE_URL` examples point to backend `/http` origin where `/.well-known/*` endpoints are reachable.
 - [x] Clarify Convex client URL vs auth URL to prevent websocket 404s (2026-02-16)
   Exit criteria: docs explicitly require `NEXT_PUBLIC_CONVEX_URL` without `/http` and `CONVEX_SITE_URL` with `/http` for self-hosted auth routes.
+- [x] Fix Convex Auth JWT header compatibility (`kid`/`typ`) for self-hosted Convex (2026-02-16)
+  Exit criteria: website auth results in `useConvexAuth() === signed in` and backend `auth:isAuthenticated === true` after sign-in.
 
 ## Decision Log
 

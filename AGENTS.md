@@ -25,3 +25,4 @@ This file defines project-specific rules for Codex/agents working in this repo.
 - Update "Current Status" (Now/Next/Blockers) if it changed.
 - Add a link to any new `docs/plans/YYYY-MM-DD-*.md` documents, and optionally the PR/commit.
 - If a change introduces a new risk/blocker (e.g. infra/domain/SSL), add it to the "Blockers / Risks" section.
+- When implementing a new feature add adequent logs of the expected result/outcome in the backend and frontend UI/console.
