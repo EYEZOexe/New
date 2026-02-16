@@ -43,6 +43,20 @@ export class DiscordRoleManager {
       };
     }
 
+    const role = await guild.roles.fetch(job.roleId).catch((error: unknown) => {
+      const parsed = parseDiscordError(error);
+      if (parsed.code === RESTJSONErrorCodes.UnknownRole) {
+        return null;
+      }
+      throw error;
+    });
+    if (!role) {
+      return {
+        ok: false,
+        message: `role_not_found:${job.roleId}`,
+      };
+    }
+
     if (job.action === "grant") {
       return await this.grantRole(guild, job.discordUserId, job.roleId, job.jobId);
     }
@@ -55,7 +69,7 @@ export class DiscordRoleManager {
     roleId: string,
     jobId: string,
   ): Promise<RoleSyncExecutionResult> {
-    const member = await guild.members.fetch(discordUserId).catch((error: unknown) => {
+    const member = await guild.members.fetch({ user: discordUserId, force: true }).catch((error: unknown) => {
       const parsed = parseDiscordError(error);
       if (parsed.code === RESTJSONErrorCodes.UnknownMember) {
         return null;
@@ -78,6 +92,13 @@ export class DiscordRoleManager {
     }
 
     await member.roles.add(roleId, `role-sync grant job=${jobId}`);
+    const refreshed = await guild.members.fetch({ user: discordUserId, force: true });
+    if (!refreshed.roles.cache.has(roleId)) {
+      return {
+        ok: false,
+        message: `grant_verification_failed:${roleId}`,
+      };
+    }
     return {
       ok: true,
       message: "role_granted",
@@ -90,7 +111,7 @@ export class DiscordRoleManager {
     roleId: string,
     jobId: string,
   ): Promise<RoleSyncExecutionResult> {
-    const member = await guild.members.fetch(discordUserId).catch((error: unknown) => {
+    const member = await guild.members.fetch({ user: discordUserId, force: true }).catch((error: unknown) => {
       const parsed = parseDiscordError(error);
       if (parsed.code === RESTJSONErrorCodes.UnknownMember) {
         return null;
@@ -113,6 +134,13 @@ export class DiscordRoleManager {
     }
 
     await member.roles.remove(roleId, `role-sync revoke job=${jobId}`);
+    const refreshed = await guild.members.fetch({ user: discordUserId, force: true });
+    if (refreshed.roles.cache.has(roleId)) {
+      return {
+        ok: false,
+        message: `revoke_verification_failed:${roleId}`,
+      };
+    }
     return {
       ok: true,
       message: "role_revoked",

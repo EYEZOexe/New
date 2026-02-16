@@ -14,6 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Hardened Discord role-sync worker verification to prevent false-positive completes: worker now force-fetches guild member state, validates target role exists, and verifies post-condition after grant/revoke before ACKing `roleSync:completeRoleSyncJob`. (2026-02-16)
 - Added Sell billing enforcement for mixed payment models: Convex now supports admin-configured Sell access policies (`/payments/policies`) that map product/variant IDs to tier + billing mode (`recurring` / `fixed_term`), persists entitlement metadata on subscriptions (`tier`, `billingMode`, `variantId`, `endsAt`), and runs scheduled expiry to auto-revoke fixed-term access/roles after duration windows (30/60/90/etc). (2026-02-16)
 - Extended Phase 3 to tier-aware Discord role sync: Convex now supports admin-configured `basic`/`advanced`/`pro` product-to-role mappings (`discordTierRoleMappings` + `discordRoleConfig:*` functions), payment and link/unlink flows enqueue grant/revoke jobs against the desired tier role set, and admin has a new `/discord` surface to manage mappings and role-sync runtime status. Legacy env single-role sync remains as fallback when tier mappings are not configured. (2026-02-16)
 - Phase 3 role assignment automation is implemented end-to-end: Convex `roleSyncJobs` outbox table + claim/complete queue mutations (`roleSync:claimPendingRoleSyncJobs`, `roleSync:completeRoleSyncJob`) are live, Discord link/unlink and payment subscription transitions enqueue grant/revoke jobs, and a Bun-based worker bot was added in `Discord-Bot` to process jobs against Discord roles with retry/backoff semantics and structured logs. (2026-02-16)
@@ -112,6 +113,8 @@ Goal: customers can link Discord and get the right role(s) in the customer guild
   Exit criteria: paid users get correct role; revoked users lose role.
 - [x] Tier-based role mapping configurable in admin (2026-02-16)
   Exit criteria: operator can set tier->guild/role mapping for basic/advanced/pro and role sync converges Discord roles accordingly.
+- [x] Role sync worker post-condition verification for grant/revoke (2026-02-16)
+  Exit criteria: jobs only complete when target role state is confirmed on member after action; stale cache reads cannot produce false success.
 
 ### Phase 4: Mirroring (bot -> customer guild)
 
