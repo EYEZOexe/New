@@ -48,8 +48,8 @@ type VariantEditorCardProps = {
 
 export function VariantEditorCard(props: VariantEditorCardProps) {
   return (
-    <div className="admin-surface-soft space-y-4 border-slate-200/80 bg-white/85 shadow-sm">
-      <h2 className="text-sm font-semibold text-slate-900">Tier variants</h2>
+    <div className="admin-surface-soft space-y-4">
+      <h2 className="text-sm font-semibold text-slate-100">Tier variants</h2>
       <label className="admin-label">
         Edit existing variant
         <select
@@ -76,15 +76,15 @@ export function VariantEditorCard(props: VariantEditorCardProps) {
         />
       </label>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-3">
+      <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => props.onPolicyScopeChange("product")}
             className={`inline-flex h-8 items-center rounded-md px-3 text-xs font-semibold transition ${
               props.policyScope === "product"
-                ? "bg-slate-900 text-white"
-                : "bg-slate-100 text-slate-700"
+                ? "bg-cyan-500 text-slate-950"
+                : "bg-slate-800 text-slate-300"
             }`}
           >
             Product policy
@@ -94,8 +94,8 @@ export function VariantEditorCard(props: VariantEditorCardProps) {
             onClick={() => props.onPolicyScopeChange("variant")}
             className={`inline-flex h-8 items-center rounded-md px-3 text-xs font-semibold transition ${
               props.policyScope === "variant"
-                ? "bg-slate-900 text-white"
-                : "bg-slate-100 text-slate-700"
+                ? "bg-cyan-500 text-slate-950"
+                : "bg-slate-800 text-slate-300"
             }`}
           >
             Variant policy
@@ -124,11 +124,11 @@ export function VariantEditorCard(props: VariantEditorCardProps) {
           </select>
         </label>
         {props.selectedPolicy ? (
-          <p className="mt-2 text-xs text-slate-600">
+          <p className="mt-2 text-xs text-slate-400">
             Enforces {props.selectedPolicy.tier} for {props.selectedPolicy.durationDays ?? "n/a"}d.
           </p>
         ) : (
-          <p className="mt-2 text-xs text-amber-700">
+          <p className="mt-2 text-xs text-amber-300">
             No enabled policy selected. Configure one in{" "}
             <Link href="/payments/policies" className="underline">
               access policies
@@ -192,8 +192,8 @@ export function VariantEditorCard(props: VariantEditorCardProps) {
         </label>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-3">
-        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+      <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+        <label className="flex items-center gap-2 text-sm font-semibold text-slate-300">
           <input
             type="checkbox"
             checked={props.useCustomCheckoutUrl}
@@ -213,12 +213,12 @@ export function VariantEditorCard(props: VariantEditorCardProps) {
           </label>
         ) : (
           <div className="mt-3">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Auto checkout URL</p>
-            <p className="mt-1 break-all text-sm font-medium text-slate-700">
+            <p className="text-xs uppercase tracking-wide text-slate-400">Auto checkout URL</p>
+            <p className="mt-1 break-all text-sm font-medium text-slate-200">
               {props.checkoutPreview || "No auto URL available for the current setup."}
             </p>
             {props.policyScope === "variant" ? (
-              <p className="mt-2 text-xs text-amber-700">
+              <p className="mt-2 text-xs text-amber-300">
                 Variant policies need custom checkout URL override, or switch to product policy
                 for automatic checkout URL generation.
               </p>
@@ -236,7 +236,7 @@ export function VariantEditorCard(props: VariantEditorCardProps) {
             onChange={(event) => props.onVariantSortOrderChange(event.target.value)}
           />
         </label>
-        <label className="mt-6 flex items-center gap-2 text-sm font-medium text-slate-700">
+        <label className="mt-6 flex items-center gap-2 text-sm font-medium text-slate-300">
           <input
             type="checkbox"
             checked={props.isFeatured}
@@ -244,7 +244,7 @@ export function VariantEditorCard(props: VariantEditorCardProps) {
           />
           Featured
         </label>
-        <label className="mt-6 flex items-center gap-2 text-sm font-medium text-slate-700">
+        <label className="mt-6 flex items-center gap-2 text-sm font-medium text-slate-300">
           <input
             type="checkbox"
             checked={props.variantActive}

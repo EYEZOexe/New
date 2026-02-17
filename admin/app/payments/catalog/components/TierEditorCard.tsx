@@ -21,8 +21,8 @@ type TierEditorCardProps = {
 
 export function TierEditorCard(props: TierEditorCardProps) {
   return (
-    <div className="admin-surface-soft space-y-4 border-slate-200/80 bg-white/85 shadow-sm">
-      <h2 className="text-sm font-semibold text-slate-900">Tier cards</h2>
+    <div className="admin-surface-soft space-y-4">
+      <h2 className="text-sm font-semibold text-slate-100">Tier cards</h2>
       <label className="admin-label">
         Tier
         <select
@@ -79,7 +79,7 @@ export function TierEditorCard(props: TierEditorCardProps) {
             onChange={(event) => props.onTierSortOrderChange(event.target.value)}
           />
         </label>
-        <label className="mt-6 flex items-center gap-2 text-sm font-medium text-slate-700">
+        <label className="mt-6 flex items-center gap-2 text-sm font-medium text-slate-300">
           <input
             type="checkbox"
             checked={props.tierActive}
