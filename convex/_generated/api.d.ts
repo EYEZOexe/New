@@ -30,9 +30,13 @@ import type * as paymentsUtils from "../paymentsUtils.js";
 import type * as roleSync from "../roleSync.js";
 import type * as roleSyncQueue from "../roleSyncQueue.js";
 import type * as sellAccessPolicies from "../sellAccessPolicies.js";
+import type * as shopCatalog from "../shopCatalog.js";
+import type * as shopCatalogUtils from "../shopCatalogUtils.js";
 import type * as signals from "../signals.js";
 import type * as subscriptionAccess from "../subscriptionAccess.js";
+import type * as tierVisibility from "../tierVisibility.js";
 import type * as users from "../users.js";
+import type * as workerQueueWake from "../workerQueueWake.js";
 
 import type {
   ApiFromModules,
@@ -63,9 +67,13 @@ declare const fullApi: ApiFromModules<{
   roleSync: typeof roleSync;
   roleSyncQueue: typeof roleSyncQueue;
   sellAccessPolicies: typeof sellAccessPolicies;
+  shopCatalog: typeof shopCatalog;
+  shopCatalogUtils: typeof shopCatalogUtils;
   signals: typeof signals;
   subscriptionAccess: typeof subscriptionAccess;
+  tierVisibility: typeof tierVisibility;
   users: typeof users;
+  workerQueueWake: typeof workerQueueWake;
 }>;
 
 /**

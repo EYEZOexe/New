@@ -5,6 +5,13 @@ import { useConvexAuth, useQuery } from "convex/react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { PageFrame } from "@/components/site/page-frame";
+import { SectionHeader } from "@/components/site/section-header";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+
 type SubscriptionTier = "basic" | "advanced" | "pro";
 
 type ViewerRow = {
@@ -54,66 +61,68 @@ export default function CheckoutReturnPage() {
   }, [viewer, status, expectedTier]);
 
   return (
-    <main className="site-shell">
-      <section className="site-wrap">
-        <div className="site-surface">
-          <p className="site-chip">Checkout Return</p>
-          <h1 className="site-title mt-4">Validating your access...</h1>
-          <p className="site-subtitle">
-            This page updates in realtime as subscription state changes in Convex after checkout.
-          </p>
+    <PageFrame>
+      <SectionHeader
+        badge="Checkout Return"
+        title="Entitlement status in realtime."
+        subtitle="Keep this tab open while Convex confirms your subscription state from Sell webhook processing."
+        navLinks={[
+          { href: "/shop", label: "Shop" },
+          { href: "/dashboard", label: "Dashboard" },
+        ]}
+      />
 
-          <div className="mt-6 site-surface-soft">
-            {status === "pending" ? (
-              <>
-                <p className="text-sm font-semibold text-slate-900">Payment is being processed.</p>
-                <p className="mt-2 text-sm text-slate-600">
-                  Keep this page open. We’ll switch to success automatically when entitlement is
-                  active.
-                </p>
-              </>
-            ) : null}
+      <Card className="site-panel">
+        <CardContent className="space-y-4 px-0">
+          {status === "pending" ? (
+            <Alert>
+              <AlertTitle>Payment is still processing.</AlertTitle>
+              <AlertDescription>
+                Your access will switch to active automatically when entitlement updates.
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
-            {status === "success" ? (
-              <>
-                <p className="text-sm font-semibold text-emerald-700">
-                  Access activated successfully.
-                </p>
-                <p className="mt-2 text-sm text-slate-600">
+          {status === "success" ? (
+            <Alert className="border-emerald-400/40 bg-emerald-500/10">
+              <AlertTitle className="text-emerald-200">Access activated successfully.</AlertTitle>
+              <AlertDescription className="space-y-1 text-emerald-100/90">
+                <p>
                   Current tier: {viewer?.tier ?? "unknown"}
                   {expectedTier ? ` (checkout target: ${expectedTier})` : ""}.
                 </p>
                 {viewer?.subscriptionEndsAt ? (
-                  <p className="mt-1 text-sm text-slate-600">
-                    Expires: {new Date(viewer.subscriptionEndsAt).toLocaleString()}
-                  </p>
+                  <p>Expires: {new Date(viewer.subscriptionEndsAt).toLocaleString()}</p>
                 ) : null}
-              </>
-            ) : null}
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
-            {status === "failure" ? (
-              <>
-                <p className="text-sm font-semibold text-red-700">
-                  Access could not be activated.
-                </p>
-                <p className="mt-2 text-sm text-slate-600">
-                  Subscription status is currently {viewer?.subscriptionStatus ?? "unknown"}.
-                  Return to shop and verify your checkout details.
-                </p>
-              </>
-            ) : null}
+          {status === "failure" ? (
+            <Alert variant="destructive">
+              <AlertTitle>Access could not be activated.</AlertTitle>
+              <AlertDescription>
+                Subscription status is currently {viewer?.subscriptionStatus ?? "unknown"}.
+                Return to shop and verify checkout details.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Badge variant="outline">State: {status}</Badge>
+            {expectedTier ? <Badge variant="outline">Expected tier: {expectedTier}</Badge> : null}
           </div>
 
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link href="/shop" className="site-btn-secondary">
-              Back to shop
-            </Link>
-            <Link href="/dashboard" className="site-btn-primary">
-              Open dashboard
-            </Link>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <Link href="/shop">Back to shop</Link>
+            </Button>
+            <Button asChild>
+              <Link href="/dashboard">Open dashboard</Link>
+            </Button>
           </div>
-        </div>
-      </section>
-    </main>
+        </CardContent>
+      </Card>
+    </PageFrame>
   );
 }

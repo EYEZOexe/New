@@ -2,98 +2,118 @@
 
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth } from "convex/react";
+import { Bolt, ShieldCheck, TimerReset } from "lucide-react";
 import Link from "next/link";
+
+import { PageFrame } from "@/components/site/page-frame";
+import { SectionHeader } from "@/components/site/section-header";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 
 export default function Home() {
   const { signOut } = useAuthActions();
   const { isAuthenticated, isLoading } = useConvexAuth();
 
   return (
-    <main className="site-shell">
-      <section className="site-wrap">
-        <div className="site-surface">
-          <p className="site-chip">G3netic Signals</p>
-          <h1 className="site-title mt-4">Premium crypto signal intelligence.</h1>
-          <p className="site-subtitle">
-            Tiered, realtime signal delivery with strict policy-backed access controls and
-            Discord-ready operations. Choose your tier, launch checkout, and unlock your dashboard
-            instantly when entitlement activates.
-          </p>
+    <PageFrame>
+      <SectionHeader
+        badge="Sleep Crypto Console"
+        title="Quiet signal intelligence for serious traders."
+        subtitle="Dark, low-noise, realtime signal delivery across web and Discord. Pick a plan, sync entitlement, and track gated feed visibility without leaving the console."
+        navLinks={[
+          { href: "/shop", label: "Shop" },
+          { href: "/dashboard", label: "Dashboard" },
+        ]}
+        actions={
+          isAuthenticated ? (
+            <Button size="sm" onClick={() => void signOut()}>
+              Log out
+            </Button>
+          ) : (
+            <Button size="sm" asChild>
+              <Link href="/signup">Create account</Link>
+            </Button>
+          )
+        }
+      />
 
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Link href="/shop" className="site-btn-primary">
-              View plans
-            </Link>
+      <Card className="site-panel">
+        <CardContent className="space-y-6 px-0">
+          <div className="flex flex-wrap gap-3">
+            <Button asChild>
+              <Link href="/shop">View plans</Link>
+            </Button>
             {isAuthenticated ? (
-              <Link href="/dashboard" className="site-btn-secondary">
-                Open dashboard
-              </Link>
+              <Button asChild variant="outline">
+                <Link href="/dashboard">Open dashboard</Link>
+              </Button>
             ) : (
-              <Link href="/signup" className="site-btn-secondary">
-                Create account
-              </Link>
+              <Button asChild variant="outline">
+                <Link href="/login">Log in</Link>
+              </Button>
             )}
           </div>
 
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            <article className="site-surface-soft">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                Realtime
-              </p>
-              <p className="mt-2 text-sm text-slate-800">
-                Live Convex-powered updates from shop catalog changes through dashboard entitlement.
-              </p>
-            </article>
-            <article className="site-surface-soft">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                Tiered access
-              </p>
-              <p className="mt-2 text-sm text-slate-800">
-                Basic, advanced, and pro visibility controls for dashboard channel intelligence.
-              </p>
-            </article>
-            <article className="site-surface-soft">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                Policy-safe
-              </p>
-              <p className="mt-2 text-sm text-slate-800">
-                Checkout variants are linked to enabled Sell access policies before publish.
-              </p>
-            </article>
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card className="site-soft bg-cyan-500/10">
+              <CardContent className="space-y-2 px-0">
+                <Badge variant="outline">
+                  <Bolt className="size-3" /> Realtime
+                </Badge>
+                <p className="text-sm text-muted-foreground">
+                  Convex subscriptions keep catalog, entitlement, and feed updates synchronized.
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="site-soft bg-indigo-500/10">
+              <CardContent className="space-y-2 px-0">
+                <Badge variant="outline">
+                  <TimerReset className="size-3" /> Tier-gated
+                </Badge>
+                <p className="text-sm text-muted-foreground">
+                  Channel visibility obeys subscription tier with hidden-by-default mapping rules.
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="site-soft bg-emerald-500/10">
+              <CardContent className="space-y-2 px-0">
+                <Badge variant="outline">
+                  <ShieldCheck className="size-3" /> Policy-linked
+                </Badge>
+                <p className="text-sm text-muted-foreground">
+                  Checkout variants remain anchored to enabled Sell access policies.
+                </p>
+              </CardContent>
+            </Card>
           </div>
-        </div>
 
-        <div className="site-surface flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">Session status</p>
-            <p className="mt-1 text-sm text-slate-600">
-              {isLoading && "Checking session..."}
-              {!isLoading && isAuthenticated && "Signed in and ready to view dashboard."}
-              {!isLoading && !isAuthenticated && "Signed out. Sign in to access dashboard feeds."}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            {!isAuthenticated ? (
-              <>
-                <Link href="/login" className="site-link">
-                  Log in
-                </Link>
-                <Link href="/signup" className="site-link">
-                  Sign up
-                </Link>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={() => void signOut()}
-                className="site-btn-secondary h-10"
-              >
-                Log out
-              </button>
-            )}
-          </div>
-        </div>
-      </section>
-    </main>
+          <Card className="site-soft">
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 px-0">
+              <div>
+                <p className="text-sm font-semibold">Session status</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {isLoading && "Checking session..."}
+                  {!isLoading && isAuthenticated && "Signed in and ready to view dashboard."}
+                  {!isLoading &&
+                    !isAuthenticated &&
+                    "Signed out. Sign in to access dashboard feeds."}
+                </p>
+              </div>
+              {!isAuthenticated ? (
+                <div className="flex gap-2">
+                  <Button asChild size="sm" variant="ghost">
+                    <Link href="/login">Log in</Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="/signup">Sign up</Link>
+                  </Button>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        </CardContent>
+      </Card>
+    </PageFrame>
   );
 }

@@ -32,22 +32,22 @@
 
 :root {
   --radius: 0.875rem;
-  --background: oklch(0.985 0.008 210);
-  --foreground: oklch(0.2 0.03 245);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.03 245);
-  --primary: oklch(0.47 0.11 240);
-  --primary-foreground: oklch(0.98 0.01 260);
-  --secondary: oklch(0.95 0.018 225);
-  --secondary-foreground: oklch(0.24 0.04 245);
-  --muted: oklch(0.96 0.01 230);
-  --muted-foreground: oklch(0.52 0.03 245);
-  --accent: oklch(0.9 0.03 200);
-  --accent-foreground: oklch(0.23 0.04 245);
+  --background: oklch(0.18 0.02 260);
+  --foreground: oklch(0.95 0.01 245);
+  --card: oklch(0.23 0.02 255 / 0.88);
+  --card-foreground: oklch(0.95 0.012 245);
+  --primary: oklch(0.68 0.16 220);
+  --primary-foreground: oklch(0.16 0.02 260);
+  --secondary: oklch(0.3 0.02 255);
+  --secondary-foreground: oklch(0.92 0.01 245);
+  --muted: oklch(0.27 0.02 255);
+  --muted-foreground: oklch(0.76 0.02 245);
+  --accent: oklch(0.35 0.04 210);
+  --accent-foreground: oklch(0.94 0.012 245);
   --destructive: oklch(0.62 0.22 27);
-  --border: oklch(0.9 0.015 230);
-  --input: oklch(0.93 0.014 230);
-  --ring: oklch(0.53 0.08 240);
+  --border: oklch(0.36 0.02 250 / 0.8);
+  --input: oklch(0.3 0.02 255 / 0.82);
+  --ring: oklch(0.72 0.15 215);
 }
 
 @layer base {
@@ -58,55 +58,52 @@
   body {
     @apply bg-background text-foreground antialiased;
     background-image:
-      radial-gradient(circle at 0% 0%, oklch(0.92 0.055 230 / 0.45), transparent 38%),
-      radial-gradient(circle at 100% 20%, oklch(0.9 0.038 255 / 0.35), transparent 42%),
-      linear-gradient(180deg, oklch(0.99 0.004 250), oklch(0.975 0.01 230));
+      radial-gradient(circle at 0% 0%, oklch(0.52 0.11 220 / 0.2), transparent 38%),
+      radial-gradient(circle at 100% 0%, oklch(0.62 0.16 190 / 0.12), transparent 44%),
+      radial-gradient(circle at 40% 100%, oklch(0.42 0.08 265 / 0.16), transparent 42%),
+      linear-gradient(180deg, oklch(0.16 0.015 260), oklch(0.2 0.02 255));
     min-height: 100vh;
   }
 }
 
 @layer components {
-  .site-shell {
-    @apply min-h-screen px-6 py-10 md:px-10;
+  .site-page {
+    @apply relative min-h-screen overflow-hidden px-4 py-8 md:px-8 md:py-10;
   }
 
   .site-wrap {
-    @apply mx-auto w-full max-w-6xl space-y-8;
+    @apply relative z-10 mx-auto w-full max-w-7xl space-y-6;
   }
 
-  .site-surface {
-    @apply rounded-3xl border bg-white/90 p-6 shadow-sm backdrop-blur-md md:p-8;
-  }
-
-  .site-surface-soft {
-    @apply rounded-2xl border bg-slate-50/80 p-4;
+  .site-panel {
+    @apply rounded-2xl border border-border/70 bg-card/75 p-5 shadow-[0_24px_80px_-50px_rgba(6,182,212,0.65)] backdrop-blur-xl md:p-6;
   }
 
   .site-title {
-    @apply text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl;
+    @apply text-3xl font-semibold tracking-tight text-foreground md:text-5xl;
   }
 
   .site-subtitle {
-    @apply mt-3 max-w-2xl text-sm text-slate-600 md:text-base;
+    @apply mt-3 max-w-3xl text-sm text-muted-foreground md:text-base;
   }
 
-  .site-chip {
-    @apply inline-flex items-center rounded-full border bg-white px-3 py-1 text-xs font-semibold text-slate-700;
+  .site-stat {
+    @apply rounded-xl border border-border/70 bg-background/45 p-3;
   }
 
-  .site-btn-primary {
-    @apply inline-flex h-11 items-center justify-center rounded-xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60;
+  .site-grid-pattern {
+    background-image:
+      linear-gradient(to right, oklch(0.62 0.08 220 / 0.08) 1px, transparent 1px),
+      linear-gradient(to bottom, oklch(0.62 0.08 220 / 0.08) 1px, transparent 1px);
+    background-size: 28px 28px;
+    mask-image: radial-gradient(circle at center, black 30%, transparent 90%);
   }
 
-  .site-btn-secondary {
-    @apply inline-flex h-11 items-center justify-center rounded-xl border bg-white px-5 text-sm font-semibold text-slate-800 transition hover:bg-slate-100 disabled:opacity-60;
+  .site-soft {
+    @apply rounded-xl border border-border/70 bg-background/45 p-4;
   }
 
-  .site-link {
-    @apply text-sm font-semibold text-slate-700 underline-offset-2 transition hover:text-slate-900 hover:underline;
-  }
-
-  .site-input {
-    @apply h-10 rounded-xl border bg-white px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200 disabled:opacity-60;
+  .site-signal-text {
+    @apply whitespace-pre-wrap text-sm leading-relaxed text-foreground/95;
   }
 }
