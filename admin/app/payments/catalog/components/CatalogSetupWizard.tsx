@@ -146,6 +146,15 @@ export function CatalogSetupWizard({
       >("sellProducts:createSellProduct"),
     [],
   );
+  const listSellPaymentMethodsRef = useMemo(
+    () =>
+      makeFunctionReference<
+        "action",
+        { productId?: number; productSlug?: string; productUniqid?: string },
+        { items: string[] }
+      >("sellProducts:listSellPaymentMethods"),
+    [],
+  );
   const upsertPolicyRef = useMemo(
     () =>
       makeFunctionReference<
@@ -235,6 +244,7 @@ export function CatalogSetupWizard({
 
   const listSellProducts = useAction(listSellProductsRef);
   const createSellProduct = useAction(createSellProductRef);
+  const listSellPaymentMethods = useAction(listSellPaymentMethodsRef);
   const upsertSellProductVariant = useAction(upsertSellProductVariantRef);
   const upsertPolicy = useMutation(upsertPolicyRef);
   const upsertTier = useMutation(upsertTierRef);
@@ -247,6 +257,10 @@ export function CatalogSetupWizard({
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [productsMessage, setProductsMessage] = useState<string | null>(null);
   const [productsError, setProductsError] = useState<string | null>(null);
+  const [availablePaymentMethods, setAvailablePaymentMethods] = useState<string[]>([]);
+  const [selectedPaymentMethods, setSelectedPaymentMethods] = useState<string[]>([]);
+  const [isLoadingPaymentMethods, setIsLoadingPaymentMethods] = useState(false);
+  const [paymentMethodsError, setPaymentMethodsError] = useState<string | null>(null);
 
   const [productTitle, setProductTitle] = useState("");
   const [productDescription, setProductDescription] = useState("");
@@ -354,6 +368,36 @@ export function CatalogSetupWizard({
   useEffect(() => {
     void loadSellProducts();
   }, [loadSellProducts]);
+
+  const loadSellPaymentMethods = useCallback(async () => {
+    setIsLoadingPaymentMethods(true);
+    setPaymentMethodsError(null);
+    try {
+      const result = await listSellPaymentMethods({
+        productId: selectedProduct?.id,
+        productSlug: selectedProduct?.slug ?? undefined,
+        productUniqid: selectedProduct?.uniqid ?? undefined,
+      });
+      const methods = result.items;
+      setAvailablePaymentMethods(methods);
+      setSelectedPaymentMethods((current) => {
+        const filtered = current.filter((method) => methods.includes(method));
+        if (filtered.length > 0) return filtered;
+        return methods;
+      });
+      console.info(`[admin/shop-wizard] payment methods loaded count=${methods.length}`);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Failed to load payment methods";
+      setPaymentMethodsError(text);
+      console.error(`[admin/shop-wizard] payment methods load failed: ${text}`);
+    } finally {
+      setIsLoadingPaymentMethods(false);
+    }
+  }, [listSellPaymentMethods, selectedProduct]);
+
+  useEffect(() => {
+    void loadSellPaymentMethods();
+  }, [loadSellPaymentMethods]);
 
   async function onCreateProduct() {
     setIsCreatingProduct(true);
@@ -491,7 +535,7 @@ export function CatalogSetupWizard({
           tierSubtitle.trim() || `${variantTier.toUpperCase()} plan for ${parsedDuration} days`,
         priceCents,
         currency: "USD",
-        paymentMethods: ["STRIPE"],
+        paymentMethods: selectedPaymentMethods.length > 0 ? selectedPaymentMethods : undefined,
         minimumPurchaseQuantity: 1,
         manualComment:
           "Access is delivered automatically after payment confirmation in the dashboard.",
@@ -763,6 +807,55 @@ export function CatalogSetupWizard({
                 placeholder="https://g3netic.sell.app"
               />
             </label>
+            <div className="admin-label md:col-span-2">
+              Payment methods
+              <div className="mt-2 rounded-xl border border-slate-800 bg-slate-900/55 p-3">
+                <div className="flex flex-wrap gap-2">
+                  {availablePaymentMethods.map((method) => {
+                    const checked = selectedPaymentMethods.includes(method);
+                    return (
+                      <label
+                        key={method}
+                        className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1 text-xs font-medium text-slate-200"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(event) => {
+                            const nextChecked = event.target.checked;
+                            setSelectedPaymentMethods((current) => {
+                              if (nextChecked) {
+                                return Array.from(new Set([...current, method]));
+                              }
+                              return current.filter((value) => value !== method);
+                            });
+                          }}
+                        />
+                        {method}
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void loadSellPaymentMethods()}
+                    className="admin-btn-secondary"
+                  >
+                    {isLoadingPaymentMethods ? "Refreshing..." : "Refresh payment methods"}
+                  </button>
+                </div>
+                {availablePaymentMethods.length === 0 ? (
+                  <p className="mt-2 text-xs text-slate-400">
+                    No payment methods discovered from Sell product variants yet. Saving without an
+                    explicit list lets Sell apply store defaults.
+                  </p>
+                ) : null}
+                {paymentMethodsError ? (
+                  <p className="mt-2 text-xs text-rose-400">{paymentMethodsError}</p>
+                ) : null}
+              </div>
+            </div>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <label className="flex items-center gap-2 text-xs font-medium text-slate-300">

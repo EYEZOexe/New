@@ -6,6 +6,7 @@ type SellPaymentMethod =
   | "PAYPAL"
   | "STRIPE"
   | "CASHAPP"
+  | "COINBASE"
   | "PADDLE"
   | "AUTHNET"
   | "SQUARE"
@@ -64,6 +65,33 @@ type SellApiResponse<T> = {
   data: T;
 };
 
+const SELL_PAYMENT_METHOD_ORDER: SellPaymentMethod[] = [
+  "PAYPAL",
+  "STRIPE",
+  "CASHAPP",
+  "COINBASE",
+  "PADDLE",
+  "AUTHNET",
+  "SQUARE",
+  "BTC",
+  "LTC",
+  "ETH",
+  "XMR",
+  "BNB",
+  "TRX",
+  "MATIC",
+  "ETH_USDT",
+  "ETH_USDC",
+  "ETH_UNI",
+  "ETH_SHIB",
+  "ETH_DAI",
+  "BNB_USDT",
+  "BNB_USDC",
+  "TRX_USDT",
+  "TRX_USDC",
+];
+const SELL_PAYMENT_METHOD_SET = new Set<string>(SELL_PAYMENT_METHOD_ORDER);
+
 function normalizeRequired(value: string, fieldName: string): string {
   const trimmed = value.trim();
   if (!trimmed) throw new Error(`${fieldName}_required`);
@@ -88,8 +116,20 @@ function normalizePositiveInteger(value: number, fieldName: string): number {
 function normalizeSellPaymentMethods(methods: string[] | undefined): SellPaymentMethod[] {
   const cleaned = (methods ?? [])
     .map((method) => method.trim().toUpperCase())
-    .filter((method) => method.length > 0);
+    .filter((method) => method.length > 0 && SELL_PAYMENT_METHOD_SET.has(method));
   return cleaned as SellPaymentMethod[];
+}
+
+function sortSellPaymentMethods(methods: SellPaymentMethod[]): SellPaymentMethod[] {
+  const unique = Array.from(new Set(methods));
+  return unique.sort((a, b) => {
+    const left = SELL_PAYMENT_METHOD_ORDER.indexOf(a);
+    const right = SELL_PAYMENT_METHOD_ORDER.indexOf(b);
+    if (left === -1 && right === -1) return a.localeCompare(b);
+    if (left === -1) return 1;
+    if (right === -1) return -1;
+    return left - right;
+  });
 }
 
 async function parseSellError(response: Response): Promise<string> {
@@ -211,8 +251,44 @@ function toSellProductVariantRow(raw: Record<string, unknown>): SellProductVaria
   };
 }
 
-async function inferStorePaymentMethods(): Promise<SellPaymentMethod[]> {
-  const products = await sellRequest<Record<string, unknown>[]>("/products?page=1&limit=25", {
+async function collectPaymentMethodsForProductToken(token: string): Promise<SellPaymentMethod[]> {
+  const variantRows = await sellRequest<Record<string, unknown>[]>(
+    `/products/${token}/variants?page=1&limit=100`,
+    { method: "GET" },
+  );
+  const discovered: SellPaymentMethod[] = [];
+  for (const variantRaw of variantRows) {
+    const variant = toSellProductVariantRow(variantRaw);
+    discovered.push(...variant.payment_methods);
+  }
+  return sortSellPaymentMethods(discovered);
+}
+
+async function discoverStorePaymentMethods(args?: {
+  productId?: number;
+  productSlug?: string;
+  productUniqid?: string;
+}): Promise<SellPaymentMethod[]> {
+  const discovered = new Set<SellPaymentMethod>();
+  const preferredCandidates = [
+    args?.productUniqid?.trim() ?? "",
+    typeof args?.productId === "number" && args.productId > 0 ? String(args.productId) : "",
+    args?.productSlug?.trim() ?? "",
+  ].filter((value, index, list) => value && list.indexOf(value) === index);
+
+  for (const token of preferredCandidates) {
+    try {
+      const methods = await collectPaymentMethodsForProductToken(token);
+      for (const method of methods) discovered.add(method);
+      if (discovered.size > 0) {
+        return sortSellPaymentMethods(Array.from(discovered));
+      }
+    } catch {
+      // Try next candidate token.
+    }
+  }
+
+  const products = await sellRequest<Record<string, unknown>[]>("/products?page=1&limit=100", {
     method: "GET",
   });
   for (const productRaw of products) {
@@ -222,22 +298,14 @@ async function inferStorePaymentMethods(): Promise<SellPaymentMethod[]> {
     );
     for (const token of candidates) {
       try {
-        const variantRows = await sellRequest<Record<string, unknown>[]>(
-          `/products/${token}/variants?page=1&limit=10`,
-          { method: "GET" },
-        );
-        for (const variantRaw of variantRows) {
-          const variant = toSellProductVariantRow(variantRaw);
-          if (variant.payment_methods.length > 0) {
-            return variant.payment_methods;
-          }
-        }
+        const methods = await collectPaymentMethodsForProductToken(token);
+        for (const method of methods) discovered.add(method);
       } catch {
         // Continue probing additional products/tokens.
       }
     }
   }
-  return ["STRIPE"];
+  return sortSellPaymentMethods(Array.from(discovered));
 }
 
 async function resolveProductVariantToken(args: {
@@ -353,6 +421,25 @@ export const createSellProduct = action({
   },
 });
 
+export const listSellPaymentMethods = action({
+  args: {
+    productId: v.optional(v.number()),
+    productSlug: v.optional(v.string()),
+    productUniqid: v.optional(v.string()),
+  },
+  handler: async (_ctx, args) => {
+    const items = await discoverStorePaymentMethods({
+      productId: args.productId,
+      productSlug: args.productSlug,
+      productUniqid: args.productUniqid,
+    });
+    console.info(
+      `[admin/sell-products] listed payment methods count=${items.length} preferred_product_id=${args.productId ?? "none"}`,
+    );
+    return { items };
+  },
+});
+
 export const updateSellProduct = action({
   args: {
     productId: v.number(),
@@ -429,7 +516,11 @@ export const upsertSellProductVariant = action({
       const paymentMethods =
         providedPaymentMethods.length > 0
           ? providedPaymentMethods
-          : await inferStorePaymentMethods();
+          : await discoverStorePaymentMethods({
+              productId,
+              productSlug,
+              productUniqid: args.productUniqid,
+            });
       const minimumPurchaseQuantity = normalizePositiveInteger(
         args.minimumPurchaseQuantity ?? 1,
         "minimum_purchase_quantity",
@@ -466,8 +557,10 @@ export const upsertSellProductVariant = action({
           },
         },
         minimum_purchase_quantity: minimumPurchaseQuantity,
-        payment_methods: paymentMethods,
       };
+      if (paymentMethods.length > 0) {
+        payload.payment_methods = paymentMethods;
+      }
       if (maximumPurchaseQuantity !== null) {
         payload.maximum_purchase_quantity = maximumPurchaseQuantity;
       }
