@@ -2,15 +2,61 @@ import { v } from "convex/values";
 import { action } from "./_generated/server";
 
 type SellProductVisibility = "PUBLIC" | "ON_HOLD" | "HIDDEN" | "PRIVATE";
+type SellPaymentMethod =
+  | "PAYPAL"
+  | "STRIPE"
+  | "CASHAPP"
+  | "PADDLE"
+  | "AUTHNET"
+  | "SQUARE"
+  | "BTC"
+  | "LTC"
+  | "ETH"
+  | "XMR"
+  | "BNB"
+  | "TRX"
+  | "MATIC"
+  | "ETH_USDT"
+  | "ETH_USDC"
+  | "ETH_UNI"
+  | "ETH_SHIB"
+  | "ETH_DAI"
+  | "BNB_USDT"
+  | "BNB_USDC"
+  | "TRX_USDT"
+  | "TRX_USDC";
 
 type SellProductRow = {
   id: number;
+  uniqid: string | null;
   title: string;
   slug: string;
   description: string | null;
   visibility: SellProductVisibility;
   url: string | null;
   created_at: string | null;
+  updated_at: string | null;
+};
+
+type SellProductVariantRow = {
+  id: number | null;
+  product_id: number | null;
+  uniqid: string | null;
+  product_uniqid: string | null;
+  title: string;
+  description: string | null;
+  minimum_purchase_quantity: number | null;
+  maximum_purchase_quantity: number | null;
+  payment_methods: SellPaymentMethod[];
+  pricing: {
+    type: string | null;
+    humble: boolean | null;
+    price: { price: number | null; currency: string | null };
+  };
+  deliverable: {
+    types: string[];
+    data: { comment: string | null; stock: number | null };
+  };
   updated_at: string | null;
 };
 
@@ -30,6 +76,20 @@ function getSellApiToken(): string {
     throw new Error("sell_api_token_missing");
   }
   return token;
+}
+
+function normalizePositiveInteger(value: number, fieldName: string): number {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${fieldName}_invalid`);
+  }
+  return value;
+}
+
+function normalizeSellPaymentMethods(methods: string[] | undefined): SellPaymentMethod[] {
+  const cleaned = (methods ?? [])
+    .map((method) => method.trim().toUpperCase())
+    .filter((method) => method.length > 0);
+  return cleaned as SellPaymentMethod[];
 }
 
 async function parseSellError(response: Response): Promise<string> {
@@ -65,8 +125,15 @@ async function sellRequest<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 function toSellProductRow(raw: Record<string, unknown>): SellProductRow {
+  const uniqid =
+    (typeof raw.uniqid === "string" && raw.uniqid.trim()) ||
+    (typeof raw.unique_id === "string" && raw.unique_id.trim()) ||
+    (typeof raw.uniqueId === "string" && raw.uniqueId.trim()) ||
+    (typeof raw.product_uniqid === "string" && raw.product_uniqid.trim()) ||
+    null;
   return {
     id: Number(raw.id),
+    uniqid,
     title: typeof raw.title === "string" ? raw.title : "",
     slug: typeof raw.slug === "string" ? raw.slug : "",
     description: typeof raw.description === "string" ? raw.description : null,
@@ -81,6 +148,149 @@ function toSellProductRow(raw: Record<string, unknown>): SellProductRow {
     created_at: typeof raw.created_at === "string" ? raw.created_at : null,
     updated_at: typeof raw.updated_at === "string" ? raw.updated_at : null,
   };
+}
+
+function toSellProductVariantRow(raw: Record<string, unknown>): SellProductVariantRow {
+  const pricing = raw.pricing as Record<string, unknown> | undefined;
+  const pricingPrice = pricing?.price as Record<string, unknown> | undefined;
+  const deliverable = raw.deliverable as Record<string, unknown> | undefined;
+  const deliverableData = deliverable?.data as Record<string, unknown> | undefined;
+  const paymentMethods = Array.isArray(raw.payment_methods)
+    ? raw.payment_methods.filter((value): value is SellPaymentMethod => typeof value === "string")
+    : [];
+  return {
+    id: typeof raw.id === "number" ? raw.id : Number.isFinite(Number(raw.id)) ? Number(raw.id) : null,
+    product_id:
+      typeof raw.product_id === "number"
+        ? raw.product_id
+        : Number.isFinite(Number(raw.product_id))
+          ? Number(raw.product_id)
+          : null,
+    uniqid:
+      typeof raw.uniqid === "string"
+        ? raw.uniqid
+        : typeof raw.unique_id === "string"
+          ? raw.unique_id
+          : null,
+    product_uniqid:
+      typeof raw.product_uniqid === "string" ? raw.product_uniqid : null,
+    title: typeof raw.title === "string" ? raw.title : "",
+    description: typeof raw.description === "string" ? raw.description : null,
+    minimum_purchase_quantity:
+      typeof raw.minimum_purchase_quantity === "number"
+        ? raw.minimum_purchase_quantity
+        : null,
+    maximum_purchase_quantity:
+      typeof raw.maximum_purchase_quantity === "number"
+        ? raw.maximum_purchase_quantity
+        : null,
+    payment_methods: paymentMethods,
+    pricing: {
+      type: typeof pricing?.type === "string" ? pricing.type : null,
+      humble: typeof pricing?.humble === "boolean" ? pricing.humble : null,
+      price: {
+        price:
+          typeof pricingPrice?.price === "number"
+            ? pricingPrice.price
+            : typeof pricingPrice?.price === "string"
+              ? Number.parseInt(pricingPrice.price, 10)
+              : null,
+        currency: typeof pricingPrice?.currency === "string" ? pricingPrice.currency : null,
+      },
+    },
+    deliverable: {
+      types: Array.isArray(deliverable?.types)
+        ? deliverable.types.filter((value): value is string => typeof value === "string")
+        : [],
+      data: {
+        comment: typeof deliverableData?.comment === "string" ? deliverableData.comment : null,
+        stock: typeof deliverableData?.stock === "number" ? deliverableData.stock : null,
+      },
+    },
+    updated_at: typeof raw.updated_at === "string" ? raw.updated_at : null,
+  };
+}
+
+async function inferStorePaymentMethods(): Promise<SellPaymentMethod[]> {
+  const products = await sellRequest<Record<string, unknown>[]>("/products?page=1&limit=25", {
+    method: "GET",
+  });
+  for (const productRaw of products) {
+    const product = toSellProductRow(productRaw);
+    const candidates = [product.uniqid ?? "", String(product.id), product.slug].filter(
+      (value, index, list) => value && list.indexOf(value) === index,
+    );
+    for (const token of candidates) {
+      try {
+        const variantRows = await sellRequest<Record<string, unknown>[]>(
+          `/products/${token}/variants?page=1&limit=10`,
+          { method: "GET" },
+        );
+        for (const variantRaw of variantRows) {
+          const variant = toSellProductVariantRow(variantRaw);
+          if (variant.payment_methods.length > 0) {
+            return variant.payment_methods;
+          }
+        }
+      } catch {
+        // Continue probing additional products/tokens.
+      }
+    }
+  }
+  return ["STRIPE"];
+}
+
+async function resolveProductVariantToken(args: {
+  productId: number;
+  productSlug?: string;
+  productUniqid?: string;
+}): Promise<string> {
+  const candidates = [args.productUniqid?.trim() ?? ""].filter(Boolean);
+  try {
+    const products = await sellRequest<Record<string, unknown>[]>(
+      "/products?page=1&limit=100",
+      {
+        method: "GET",
+      },
+    );
+    const slug = args.productSlug?.trim() ?? "";
+    const match = products.map((raw) => toSellProductRow(raw)).find((row) => {
+      if (row.id === args.productId) return true;
+      if (slug && row.slug === slug) return true;
+      return false;
+    });
+    if (match?.uniqid) {
+      candidates.push(match.uniqid);
+    }
+  } catch {
+    // Ignore discovery failures and fall back to id/slug probes.
+  }
+  candidates.push(String(args.productId));
+  if (args.productSlug?.trim()) {
+    candidates.push(args.productSlug.trim());
+  }
+  const uniqueCandidates = candidates.filter(
+    (value, index, list) => value && list.indexOf(value) === index,
+  );
+
+  let lastError = "product_variant_token_not_found";
+  for (const token of uniqueCandidates) {
+    try {
+      await sellRequest<Record<string, unknown>[]>(
+        `/products/${token}/variants?page=1&limit=1`,
+        { method: "GET" },
+      );
+      return token;
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "unknown_token_probe_error";
+      lastError = text;
+      if (!text.includes("No query results for model [App\\Models\\Listing].")) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error(lastError);
 }
 
 export const listSellProducts = action({
@@ -185,5 +395,108 @@ export const updateSellProduct = action({
       `[admin/sell-products] updated product id=${row.id} slug=${row.slug} visibility=${row.visibility}`,
     );
     return { product: row };
+  },
+});
+
+export const upsertSellProductVariant = action({
+  args: {
+    productId: v.number(),
+    productSlug: v.optional(v.string()),
+    productUniqid: v.optional(v.string()),
+    title: v.string(),
+    description: v.string(),
+    priceCents: v.number(),
+    currency: v.optional(v.string()),
+    paymentMethods: v.optional(v.array(v.string())),
+    minimumPurchaseQuantity: v.optional(v.number()),
+    maximumPurchaseQuantity: v.optional(v.number()),
+    manualComment: v.optional(v.string()),
+  },
+  handler: async (_ctx, args) => {
+    try {
+      const productId = normalizePositiveInteger(args.productId, "product_id");
+      const productSlug = args.productSlug?.trim() ?? "";
+      const productToken = await resolveProductVariantToken({
+        productId,
+        productSlug,
+        productUniqid: args.productUniqid,
+      });
+      const title = normalizeRequired(args.title, "title");
+      const description = normalizeRequired(args.description, "description");
+      const priceCents = normalizePositiveInteger(args.priceCents, "price_cents");
+      const currency = (args.currency ?? "USD").trim().toUpperCase();
+      const providedPaymentMethods = normalizeSellPaymentMethods(args.paymentMethods);
+      const paymentMethods =
+        providedPaymentMethods.length > 0
+          ? providedPaymentMethods
+          : await inferStorePaymentMethods();
+      const minimumPurchaseQuantity = normalizePositiveInteger(
+        args.minimumPurchaseQuantity ?? 1,
+        "minimum_purchase_quantity",
+      );
+      const maximumPurchaseQuantity =
+        typeof args.maximumPurchaseQuantity === "number"
+          ? normalizePositiveInteger(args.maximumPurchaseQuantity, "maximum_purchase_quantity")
+          : null;
+      const manualComment =
+        args.manualComment?.trim() ||
+        "Delivery is fulfilled manually after purchase confirmation.";
+      const existingRows = await sellRequest<Record<string, unknown>[]>(
+        `/products/${productToken}/variants?page=1&limit=100`,
+        { method: "GET" },
+      );
+      const existing = existingRows
+        .map((row) => toSellProductVariantRow(row))
+        .find((row) => row.title.toLowerCase() === title.toLowerCase());
+
+      const payload: Record<string, unknown> = {
+        title,
+        description,
+        deliverable: {
+          data: {
+            comment: manualComment,
+          },
+          types: ["MANUAL"],
+        },
+        pricing: {
+          humble: false,
+          price: {
+            price: String(priceCents),
+            currency,
+          },
+        },
+        minimum_purchase_quantity: minimumPurchaseQuantity,
+        payment_methods: paymentMethods,
+      };
+      if (maximumPurchaseQuantity !== null) {
+        payload.maximum_purchase_quantity = maximumPurchaseQuantity;
+      }
+
+      const existingId =
+        typeof existing?.id === "number" && existing.id > 0 ? existing.id : null;
+      const method = existingId ? "PATCH" : "POST";
+      const path = existingId
+        ? `/products/${productToken}/variants/${existingId}`
+        : `/products/${productToken}/variants`;
+      console.info(
+        `[admin/sell-products] variant request method=${method} path=${path} payload=${JSON.stringify(payload)}`,
+      );
+      const raw = await sellRequest<Record<string, unknown>>(path, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      const variant = toSellProductVariantRow(raw);
+      console.info(
+        `[admin/sell-products] upsert variant mode=${existing ? "update" : "create"} product=${productId} product_token=${productToken} variant_uniqid=${variant.uniqid ?? "none"} title=${variant.title} price_cents=${priceCents}`,
+      );
+      return { ok: true as const, variant };
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "unknown_sell_variant_error";
+      console.error(`[admin/sell-products] upsert variant failed: ${text}`);
+      return { ok: false as const, error: text };
+    }
   },
 });

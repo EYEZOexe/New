@@ -8,9 +8,22 @@ import type { CatalogQueryResult, SubscriptionTier } from "../types";
 import { buildAutoCheckoutUrl, formatCatalogError, normalizeStorefrontUrl } from "../utils";
 
 type SellProductVisibility = "PUBLIC" | "ON_HOLD" | "HIDDEN" | "PRIVATE";
+type SellProductVariantRow = {
+  id: number;
+  product_id: number;
+  title: string;
+  description: string | null;
+  pricing: {
+    type: string | null;
+    humble: boolean | null;
+    price: { price: number | null; currency: string | null };
+  };
+  payment_methods: string[];
+};
 
 type SellProductRow = {
   id: number;
+  uniqid: string | null;
   title: string;
   slug: string;
   description: string | null;
@@ -72,6 +85,7 @@ function deriveProductFromPolicyExternalId(
   const url = origin && slug ? `${origin}/product/${encodeURIComponent(slug)}` : null;
   return {
     id: parsedId,
+    uniqid: null,
     slug,
     title: slug ? titleFromSlug(slug) : `Product ${parsedId}`,
     description: null,
@@ -86,6 +100,27 @@ function defaultTierTitle(tier: SubscriptionTier): string {
   if (tier === "basic") return "Starter";
   if (tier === "advanced") return "Advanced";
   return "Pro";
+}
+
+function parseProductIdFromExternalId(externalId: string): number | null {
+  const [idPart] = externalId.split("|");
+  const parsed = Number.parseInt((idPart ?? "").trim(), 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+function parseProductSlugFromExternalId(externalId: string): string | null {
+  const [, slugPart] = externalId.split("|");
+  const slug = (slugPart ?? "").trim();
+  return slug.length > 0 ? slug : null;
+}
+
+function parseDisplayPriceToCents(displayPrice: string): number | null {
+  const normalized = displayPrice.trim().replace(/[^0-9.]/g, "");
+  if (!normalized) return null;
+  const value = Number.parseFloat(normalized);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return Math.round(value * 100);
 }
 
 export function CatalogSetupWizard({
@@ -124,6 +159,28 @@ export function CatalogSetupWizard({
         },
         { ok: true }
       >("sellAccessPolicies:upsertSellAccessPolicy"),
+    [],
+  );
+  const upsertSellProductVariantRef = useMemo(
+    () =>
+      makeFunctionReference<
+        "action",
+        {
+          productId: number;
+          productSlug?: string;
+          productUniqid?: string;
+          title: string;
+          description: string;
+          priceCents: number;
+          currency?: string;
+          paymentMethods?: string[];
+          minimumPurchaseQuantity?: number;
+          maximumPurchaseQuantity?: number;
+          manualComment?: string;
+        },
+        | { ok: true; variant: SellProductVariantRow }
+        | { ok: false; error: string }
+      >("sellProducts:upsertSellProductVariant"),
     [],
   );
   const listPoliciesRef = useMemo(
@@ -178,6 +235,7 @@ export function CatalogSetupWizard({
 
   const listSellProducts = useAction(listSellProductsRef);
   const createSellProduct = useAction(createSellProductRef);
+  const upsertSellProductVariant = useAction(upsertSellProductVariantRef);
   const upsertPolicy = useMutation(upsertPolicyRef);
   const upsertTier = useMutation(upsertTierRef);
   const upsertVariant = useMutation(upsertVariantRef);
@@ -388,6 +446,16 @@ export function CatalogSetupWizard({
       if (!Number.isInteger(parsedDuration) || parsedDuration <= 0) {
         throw new Error("Variant duration days must be a positive integer.");
       }
+      const productId = parseProductIdFromExternalId(selectedPolicyExternalId);
+      const productSlug = parseProductSlugFromExternalId(selectedPolicyExternalId);
+      const productUniqid = selectedProduct?.uniqid ?? null;
+      if (!productId) {
+        throw new Error("Could not resolve product ID from selected policy key.");
+      }
+      const priceCents = parseDisplayPriceToCents(variantPrice);
+      if (!priceCents) {
+        throw new Error("Display price must contain a positive number.");
+      }
       const checkoutUrl = buildAutoCheckoutUrl({
         storefrontUrl,
         policyScope: "product",
@@ -414,6 +482,24 @@ export function CatalogSetupWizard({
         .map((line) => line.trim())
         .filter((line) => line.length > 0);
 
+      const sellVariantResult = await upsertSellProductVariant({
+        productId,
+        productSlug: productSlug ?? undefined,
+        productUniqid: productUniqid ?? undefined,
+        title: `${parsedDuration}d`,
+        description:
+          tierSubtitle.trim() || `${variantTier.toUpperCase()} plan for ${parsedDuration} days`,
+        priceCents,
+        currency: "USD",
+        paymentMethods: ["STRIPE"],
+        minimumPurchaseQuantity: 1,
+        manualComment:
+          "Access is delivered automatically after payment confirmation in the dashboard.",
+      });
+      if (!sellVariantResult.ok) {
+        throw new Error(sellVariantResult.error);
+      }
+
       const variantResult = await upsertVariant({
         tier: variantTier,
         durationDays: parsedDuration,
@@ -431,10 +517,10 @@ export function CatalogSetupWizard({
       }
 
       setVariantMessage(
-        `Saved catalog variant ${variantTier}/${parsedDuration}d with checkout link from ${selectedPolicyExternalId}.`,
+        `Saved catalog variant ${variantTier}/${parsedDuration}d and Sell checkout variant #${sellVariantResult.variant.id}.`,
       );
       console.info(
-        `[admin/shop-wizard] catalog variant saved variant=${variantResult.variantId} tier=${variantTier} duration_days=${parsedDuration} policy_id=${selectedPolicyExternalId}`,
+        `[admin/shop-wizard] catalog variant saved variant=${variantResult.variantId} sell_variant=${sellVariantResult.variant.id} tier=${variantTier} duration_days=${parsedDuration} policy_id=${selectedPolicyExternalId} price_cents=${priceCents}`,
       );
     } catch (error) {
       const text = error instanceof Error ? error.message : "Failed to save catalog variant";
