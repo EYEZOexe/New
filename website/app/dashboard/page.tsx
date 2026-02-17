@@ -24,6 +24,13 @@ type SignalRow = {
   }>;
 };
 
+type MappingRow = {
+  _id: string;
+  sourceChannelId: string;
+  dashboardEnabled?: boolean;
+  minimumTier?: "basic" | "advanced" | "pro";
+};
+
 type ViewerRow = {
   userId: string;
   email: string | null;
@@ -69,6 +76,17 @@ const BLOCKED_ATTACHMENT_MIME_PREFIXES = [
   "application/x-msi",
   "application/vnd.microsoft.portable-executable",
 ];
+
+const TIER_ORDER: Array<"basic" | "advanced" | "pro"> = [
+  "basic",
+  "advanced",
+  "pro",
+];
+
+function tierRank(tier: "basic" | "advanced" | "pro" | null | undefined): number {
+  if (!tier) return -1;
+  return TIER_ORDER.indexOf(tier);
+}
 
 function formatRemainingMs(remainingMs: number): string {
   const totalSeconds = Math.max(0, Math.floor(remainingMs / 1000));
@@ -160,6 +178,11 @@ export default function DashboardPage() {
     { tenantKey: string; connectorId: string; limit?: number },
     SignalRow[]
   >("signals:listRecent");
+  const listMappings = makeFunctionReference<
+    "query",
+    { tenantKey: string; connectorId: string },
+    MappingRow[]
+  >("connectors:listMappings");
   const viewerDiscordLinkRef = makeFunctionReference<
     "query",
     Record<string, never>,
@@ -188,6 +211,10 @@ export default function DashboardPage() {
     listRecentSignals,
     isAuthenticated && hasSignalAccess ? { tenantKey, connectorId, limit: 50 } : "skip",
   );
+  const mappings = useQuery(
+    listMappings,
+    isAuthenticated && hasSignalAccess ? { tenantKey, connectorId } : "skip",
+  );
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -205,6 +232,19 @@ export default function DashboardPage() {
       `[dashboard] realtime signals update: tenant=${tenantKey} connector=${connectorId} count=${signals.length} attachment_refs=${attachmentRefs}`,
     );
   }, [signals, tenantKey, connectorId]);
+
+  useEffect(() => {
+    if (!mappings || !viewer) return;
+    const configuredVisible = mappings.filter(
+      (mapping) => mapping.dashboardEnabled === true && mapping.minimumTier,
+    );
+    const visibleForTier = configuredVisible.filter(
+      (mapping) => tierRank(viewer.tier) >= tierRank(mapping.minimumTier ?? null),
+    );
+    console.info(
+      `[dashboard] mapping visibility tenant=${tenantKey} connector=${connectorId} tier=${viewer.tier ?? "none"} mappings_total=${mappings.length} configured_visible=${configuredVisible.length} visible_for_tier=${visibleForTier.length}`,
+    );
+  }, [mappings, viewer, tenantKey, connectorId]);
 
   useEffect(() => {
     if (!viewer) return;
@@ -373,10 +413,12 @@ export default function DashboardPage() {
 
   if (isLoading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-zinc-100 p-6">
-        <section className="w-full max-w-xl rounded-xl bg-white p-8 shadow-sm">
-          <h1 className="text-2xl font-semibold text-zinc-900">Dashboard</h1>
-          <p className="mt-2 text-sm text-zinc-600">Checking session...</p>
+      <main className="site-shell">
+        <section className="site-wrap">
+          <div className="site-surface">
+            <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
+            <p className="mt-2 text-sm text-slate-600">Checking session...</p>
+          </div>
         </section>
       </main>
     );
@@ -392,47 +434,62 @@ export default function DashboardPage() {
   const hasRemainingTime = typeof remainingMs === "number" && remainingMs > 0;
   const remainingText =
     typeof remainingMs === "number" ? formatRemainingMs(remainingMs) : null;
+  const configuredVisibleMappings = (mappings ?? []).filter(
+    (mapping) => mapping.dashboardEnabled === true && mapping.minimumTier,
+  );
+  const visibleMappingsForTier = configuredVisibleMappings.filter(
+    (mapping) => tierRank(viewer?.tier ?? null) >= tierRank(mapping.minimumTier ?? null),
+  );
+  const lockedMappings = Math.max(
+    0,
+    configuredVisibleMappings.length - visibleMappingsForTier.length,
+  );
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-zinc-100 p-6">
-      <section className="w-full max-w-xl rounded-xl bg-white p-8 shadow-sm">
+    <main className="site-shell">
+      <section className="site-wrap">
+        <div className="site-surface">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-zinc-900">Dashboard</h1>
-            <p className="mt-2 text-sm text-zinc-600">You are signed in.</p>
+            <p className="site-chip">Dashboard</p>
+            <h1 className="mt-3 text-3xl font-semibold text-slate-900">Signal Feed</h1>
+            <p className="mt-2 text-sm text-slate-600">Realtime subscription + channel visibility.</p>
           </div>
 
           <button
             type="button"
             onClick={onLogout}
             disabled={isLoggingOut}
-            className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-900 disabled:opacity-60"
+            className="site-btn-secondary h-10"
           >
             {isLoggingOut ? "Logging out..." : "Log out"}
           </button>
         </div>
 
-        <div className="mt-6">
-          <Link href="/" className="text-sm font-medium text-zinc-900 underline">
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <Link href="/" className="site-link">
             Back to home
+          </Link>
+          <Link href="/shop" className="site-link">
+            Open shop
           </Link>
         </div>
 
-        <div className="mt-6 rounded-md border border-zinc-200 bg-zinc-50 p-3">
-          <p className="text-xs font-medium text-zinc-700">Subscription status</p>
-          <p className="mt-1 text-sm text-zinc-900">
+        <div className="mt-6 site-surface-soft">
+          <p className="text-xs font-medium text-slate-700">Subscription status</p>
+          <p className="mt-1 text-sm text-slate-900">
             {viewer?.subscriptionStatus ?? "inactive"}
           </p>
-          <p className="mt-1 text-xs text-zinc-600">
+          <p className="mt-1 text-xs text-slate-600">
             Tier: {viewer?.tier ?? "none"}
           </p>
-          <p className="mt-1 text-xs text-zinc-600">
+          <p className="mt-1 text-xs text-slate-600">
             Expires:{" "}
             {viewer?.subscriptionEndsAt
               ? new Date(viewer.subscriptionEndsAt).toLocaleString()
               : "n/a"}
           </p>
-          <p className="mt-1 text-xs text-zinc-600">
+          <p className="mt-1 text-xs text-slate-600">
             Time left:{" "}
             {hasRemainingTime
               ? remainingText
@@ -447,15 +504,34 @@ export default function DashboardPage() {
           ) : null}
         </div>
 
-        <div className="mt-6 rounded-md border border-zinc-200 bg-zinc-50 p-3">
-          <p className="text-xs font-medium text-zinc-700">Discord account</p>
-          <p className="mt-1 text-sm text-zinc-900">
+        <div className="mt-4 site-surface-soft">
+          <p className="text-xs font-medium text-slate-700">Dashboard visibility</p>
+          <p className="mt-1 text-sm text-slate-900">
+            Configured visible channels: {configuredVisibleMappings.length}
+          </p>
+          <p className="mt-1 text-xs text-slate-600">
+            Available for your tier: {visibleMappingsForTier.length}
+            {lockedMappings > 0 ? ` (locked: ${lockedMappings})` : ""}
+          </p>
+          {lockedMappings > 0 ? (
+            <p className="mt-2 text-xs text-amber-700">
+              Some channels are gated above your current tier.{" "}
+              <Link href="/shop" className="underline">
+                Upgrade to unlock more.
+              </Link>
+            </p>
+          ) : null}
+        </div>
+
+        <div className="mt-4 site-surface-soft">
+          <p className="text-xs font-medium text-slate-700">Discord account</p>
+          <p className="mt-1 text-sm text-slate-900">
             {isDiscordLinked
               ? `${viewerDiscordLink?.username ?? "Linked"} (${viewerDiscordLink?.discordUserId})`
               : "Not linked"}
           </p>
           {viewerDiscordLink?.linkedAt ? (
-            <p className="mt-1 text-xs text-zinc-500">
+            <p className="mt-1 text-xs text-slate-500">
               Linked {new Date(viewerDiscordLink.linkedAt).toLocaleString()}
             </p>
           ) : null}
@@ -470,7 +546,7 @@ export default function DashboardPage() {
               type="button"
               onClick={onStartDiscordLink}
               disabled={isCompletingDiscordLink || isUnlinkingDiscord}
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-900 disabled:opacity-60"
+              className="site-btn-secondary h-9 px-3 text-xs"
             >
               {isCompletingDiscordLink ? "Completing link..." : "Connect Discord"}
             </button>
@@ -480,35 +556,35 @@ export default function DashboardPage() {
               disabled={
                 !isDiscordLinked || isUnlinkingDiscord || isCompletingDiscordLink
               }
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-900 disabled:opacity-60"
+              className="site-btn-secondary h-9 px-3 text-xs"
             >
               {isUnlinkingDiscord ? "Unlinking..." : "Unlink Discord"}
             </button>
           </div>
         </div>
 
-        <div className="mt-8 border-t border-zinc-200 pt-6">
-          <h2 className="text-base font-semibold text-zinc-900">Signals</h2>
+        <div className="mt-8 border-t border-slate-200 pt-6">
+          <h2 className="text-base font-semibold text-slate-900">Signals</h2>
 
           <form
             className="mt-3 flex flex-wrap items-end gap-3"
             onSubmit={(e) => e.preventDefault()}
           >
-            <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
+            <label className="flex flex-col gap-1 text-xs font-medium text-slate-700">
               Tenant
               <input
                 value={tenantKey}
                 onChange={(e) => setTenantKey(e.target.value)}
-                className="h-9 w-40 rounded-md border border-zinc-300 px-3 text-sm text-zinc-900"
+                className="site-input h-9 w-40"
                 placeholder="t1"
               />
             </label>
-            <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
+            <label className="flex flex-col gap-1 text-xs font-medium text-slate-700">
               Connector
               <input
                 value={connectorId}
                 onChange={(e) => setConnectorId(e.target.value)}
-                className="h-9 w-40 rounded-md border border-zinc-300 px-3 text-sm text-zinc-900"
+                className="site-input h-9 w-40"
                 placeholder="conn_01"
               />
             </label>
@@ -516,35 +592,49 @@ export default function DashboardPage() {
 
           <div className="mt-4 space-y-3">
             {isAuthenticated && !hasSignalAccess && (
-              <p className="text-sm text-zinc-600">
+              <p className="text-sm text-slate-600">
                 Access is currently gated by subscription status.
               </p>
             )}
             {!signals && hasSignalAccess && (
-              <p className="text-sm text-zinc-600">Loading signals...</p>
+              <p className="text-sm text-slate-600">Loading signals...</p>
             )}
-            {signals?.length === 0 && (
-              <p className="text-sm text-zinc-600">No signals yet.</p>
+            {signals?.length === 0 && hasSignalAccess && configuredVisibleMappings.length === 0 && (
+              <p className="text-sm text-slate-600">
+                No channels are configured for dashboard visibility yet.
+              </p>
+            )}
+            {signals?.length === 0 && hasSignalAccess && configuredVisibleMappings.length > 0 && visibleMappingsForTier.length === 0 && (
+              <p className="text-sm text-amber-700">
+                Your tier does not include the currently visible channels.{" "}
+                <Link href="/shop" className="underline">
+                  Upgrade in shop
+                </Link>{" "}
+                to unlock more feed coverage.
+              </p>
+            )}
+            {signals?.length === 0 && hasSignalAccess && visibleMappingsForTier.length > 0 && (
+              <p className="text-sm text-slate-600">No recent signals in channels visible to your tier.</p>
             )}
             {signals?.map((signal) => (
               <article
                 key={signal._id}
-                className="rounded-lg border border-zinc-200 bg-zinc-50 p-4"
+                className="site-surface-soft"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs font-medium text-zinc-700">
+                  <p className="text-xs font-medium text-slate-700">
                     {new Date(signal.createdAt).toLocaleString()}
                   </p>
-                  <p className="text-[11px] text-zinc-500">
+                  <p className="text-[11px] text-slate-500">
                     {signal.sourceGuildId} / {signal.sourceChannelId}
                   </p>
                 </div>
-                <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-900">
+                <p className="mt-2 whitespace-pre-wrap text-sm text-slate-900">
                   {signal.content}
                 </p>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
                   {signal.editedAt ? (
-                    <span className="rounded bg-zinc-200 px-2 py-0.5">
+                    <span className="rounded bg-slate-200 px-2 py-0.5">
                       Edited {new Date(signal.editedAt).toLocaleString()}
                     </span>
                   ) : null}
@@ -568,14 +658,14 @@ export default function DashboardPage() {
                       return (
                         <li
                           key={key}
-                          className="rounded border border-zinc-200 bg-white p-2 text-xs text-zinc-700"
+                          className="rounded border border-slate-200 bg-white p-2 text-xs text-slate-700"
                         >
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-medium text-zinc-900">{displayName}</span>
-                            <span className="rounded bg-zinc-100 px-2 py-0.5 text-[10px] text-zinc-600">
+                            <span className="font-medium text-slate-900">{displayName}</span>
+                            <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">
                               {typeText}
                             </span>
-                            <span className="rounded bg-zinc-100 px-2 py-0.5 text-[10px] text-zinc-600">
+                            <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">
                               {sizeText}
                             </span>
                           </div>
@@ -591,7 +681,7 @@ export default function DashboardPage() {
                           ) : null}
                           {!hideLink ? (
                             <a
-                              className="mt-1 inline-block text-zinc-900 underline"
+                              className="mt-1 inline-block text-slate-900 underline"
                               href={a.url}
                               target="_blank"
                               rel="noreferrer"
@@ -605,7 +695,7 @@ export default function DashboardPage() {
                               alt={displayName}
                               loading="lazy"
                               referrerPolicy="no-referrer"
-                              className="mt-2 max-h-64 rounded border border-zinc-200 object-contain"
+                              className="mt-2 max-h-64 rounded border border-slate-200 object-contain"
                             />
                           ) : null}
                         </li>
@@ -616,6 +706,7 @@ export default function DashboardPage() {
               </article>
             ))}
           </div>
+        </div>
         </div>
       </section>
     </main>
