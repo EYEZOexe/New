@@ -26,6 +26,8 @@ DISCORD_REDIRECT_URI=https://convex.g3netic.com/api/auth/discord/callback
 SELLAPP_WEBHOOK_SECRET=__SET_ME__
 SELLAPP_REPLAY_TOKEN=__SET_ME__
 SELLAPP_API_TOKEN=__SET_ME__
+# Optional fallback if payment methods cannot be discovered from Sell variants
+SELLAPP_DEFAULT_PAYMENT_METHODS=STRIPE,PAYPAL
 
 # Discord role sync queue (Convex backend + Discord-Bot worker)
 ROLE_SYNC_BOT_TOKEN=__SET_ME__
@@ -81,6 +83,12 @@ bunx convex dev --once
 For self-hosted deployments, Convex CLI requires both:
 - `CONVEX_SELF_HOSTED_URL`
 - `CONVEX_SELF_HOSTED_ADMIN_KEY`
+
+To configure fallback Sell payment methods from terminal:
+
+```bash
+npx convex env set SELLAPP_DEFAULT_PAYMENT_METHODS STRIPE,PAYPAL
+```
 
 If auth signs in but the app immediately shows signed out, verify issuer/jwks:
 

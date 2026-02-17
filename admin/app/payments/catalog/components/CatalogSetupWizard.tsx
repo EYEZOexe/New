@@ -388,6 +388,8 @@ export function CatalogSetupWizard({
       console.info(`[admin/shop-wizard] payment methods loaded count=${methods.length}`);
     } catch (error) {
       const text = error instanceof Error ? error.message : "Failed to load payment methods";
+      setAvailablePaymentMethods([]);
+      setSelectedPaymentMethods([]);
       setPaymentMethodsError(text);
       console.error(`[admin/shop-wizard] payment methods load failed: ${text}`);
     } finally {
@@ -848,7 +850,10 @@ export function CatalogSetupWizard({
                 {availablePaymentMethods.length === 0 ? (
                   <p className="mt-2 text-xs text-slate-400">
                     No payment methods discovered from Sell product variants yet. Saving without an
-                    explicit list lets Sell apply store defaults.
+                    explicit list lets Sell apply store defaults. To force defaults from terminal:
+                    <span className="ml-1 font-mono text-cyan-300">
+                      npx convex env set SELLAPP_DEFAULT_PAYMENT_METHODS STRIPE,PAYPAL
+                    </span>
                   </p>
                 ) : null}
                 {paymentMethodsError ? (

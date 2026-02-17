@@ -120,6 +120,16 @@ function normalizeSellPaymentMethods(methods: string[] | undefined): SellPayment
   return cleaned as SellPaymentMethod[];
 }
 
+function getConfiguredDefaultPaymentMethods(): SellPaymentMethod[] {
+  const raw = process.env.SELLAPP_DEFAULT_PAYMENT_METHODS?.trim() ?? "";
+  if (!raw) return [];
+  const items = raw
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  return sortSellPaymentMethods(normalizeSellPaymentMethods(items));
+}
+
 function sortSellPaymentMethods(methods: SellPaymentMethod[]): SellPaymentMethod[] {
   const unique = Array.from(new Set(methods));
   return unique.sort((a, b) => {
@@ -428,15 +438,34 @@ export const listSellPaymentMethods = action({
     productUniqid: v.optional(v.string()),
   },
   handler: async (_ctx, args) => {
-    const items = await discoverStorePaymentMethods({
-      productId: args.productId,
-      productSlug: args.productSlug,
-      productUniqid: args.productUniqid,
-    });
-    console.info(
-      `[admin/sell-products] listed payment methods count=${items.length} preferred_product_id=${args.productId ?? "none"}`,
-    );
-    return { items };
+    const configuredDefaults = getConfiguredDefaultPaymentMethods();
+    try {
+      const discovered = await discoverStorePaymentMethods({
+        productId: args.productId,
+        productSlug: args.productSlug,
+        productUniqid: args.productUniqid,
+      });
+      const items = discovered.length > 0 ? discovered : configuredDefaults;
+      const source =
+        discovered.length > 0
+          ? "api"
+          : configuredDefaults.length > 0
+            ? "env_default"
+            : "none";
+      console.info(
+        `[admin/sell-products] listed payment methods count=${items.length} source=${source} preferred_product_id=${args.productId ?? "none"}`,
+      );
+      return { items };
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "unknown_sell_payment_methods_error";
+      console.error(`[admin/sell-products] list payment methods failed: ${text}`);
+      if (configuredDefaults.length > 0) {
+        console.info(
+          `[admin/sell-products] using configured default payment methods count=${configuredDefaults.length}`,
+        );
+      }
+      return { items: configuredDefaults };
+    }
   },
 });
 
@@ -513,14 +542,27 @@ export const upsertSellProductVariant = action({
       const priceCents = normalizePositiveInteger(args.priceCents, "price_cents");
       const currency = (args.currency ?? "USD").trim().toUpperCase();
       const providedPaymentMethods = normalizeSellPaymentMethods(args.paymentMethods);
+      const configuredDefaults = getConfiguredDefaultPaymentMethods();
+      let discoveredPaymentMethods: SellPaymentMethod[] = [];
+      if (providedPaymentMethods.length === 0) {
+        try {
+          discoveredPaymentMethods = await discoverStorePaymentMethods({
+            productId,
+            productSlug,
+            productUniqid: args.productUniqid,
+          });
+        } catch (error) {
+          const text =
+            error instanceof Error ? error.message : "unknown_sell_payment_discovery_error";
+          console.error(`[admin/sell-products] payment methods discovery failed: ${text}`);
+        }
+      }
       const paymentMethods =
         providedPaymentMethods.length > 0
           ? providedPaymentMethods
-          : await discoverStorePaymentMethods({
-              productId,
-              productSlug,
-              productUniqid: args.productUniqid,
-            });
+          : discoveredPaymentMethods.length > 0
+            ? discoveredPaymentMethods
+            : configuredDefaults;
       const minimumPurchaseQuantity = normalizePositiveInteger(
         args.minimumPurchaseQuantity ?? 1,
         "minimum_purchase_quantity",
