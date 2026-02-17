@@ -288,3 +288,5 @@ export function useDashboardController() {
     signalState,
   };
 }
+
+export type DashboardControllerState = ReturnType<typeof useDashboardController>;

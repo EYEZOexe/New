@@ -14,6 +14,8 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Executed initial trader workspace expansion in `website`: added authenticated `/workspace/*` IA (`overview`, `markets`, `live-intel`, `signals`, `indicators`, `strategies`, `journal`, `news`), shared sidebar/topbar shell primitives, `/dashboard` compatibility redirect, module adapters with tests, and modal workflows for symbol/trade/strategy details plus trade logging schema validation. (2026-02-17)
+- Approved trader workspace expansion design + implementation plan for `website`: introduces authenticated `/workspace/*` route IA (overview, markets, live-intel, signals, indicators, strategies, journal, news), shared sidebar/topbar shell, modal workflow patterns, and phased adapter-first data integration to incorporate high-density trading UI elements while preserving existing Convex entitlement/Discord flows. (2026-02-17)
 - Completed SaaS website layout polish across home/login/signup/dashboard: introduced stronger header IA with metric callouts, cleaner responsive content hierarchy (including two-column auth layouts), improved visual rhythm/typography tokens, and refined dashboard signal-card readability for long IDs/content/attachments. (2026-02-17)
 - Fixed intermittent signal attachment drops in Convex ingest dedupe/update flow: sparse non-delete events (empty attachment arrays) now preserve previously stored attachment refs instead of overwriting them, with backend diagnostics (`[ingest] preserved existing attachment refs...`) plus regression tests in `website/tests/ingestAttachmentMerge.test.js`. (2026-02-17)
 - Hardened Sell payment-method loading in admin wizard: `sellProducts:listSellPaymentMethods` now fails soft (no client-thrown server error) and supports terminal-configured fallback methods via `SELLAPP_DEFAULT_PAYMENT_METHODS` when API discovery returns none/errors; wizard Step 3 now shows the terminal command hint for setting fallback defaults. (2026-02-17)
@@ -73,6 +75,7 @@ Backend is Convex.
 - Phase 1 signal pipeline is now hardened end-to-end: message ingest normalizes update/delete timestamps with fallbacks, stale post-delete updates are ignored server-side, plugin emits message delete events, and dashboard feed surfaces edited/deleted state with realtime update logs. (2026-02-16)
 
 **Next**
+- Replace mock adapter-backed workspace module datasets with live Convex-backed feeds per module (`markets`, `live-intel`, `strategies`, `journal`, `news`) and add module-specific backend observability.
 - Add scheduled payment reconciliation and alerting for webhook drift/failure spikes.
 - Monitor queue-wake rollout metrics (`wake source`, `empty/non-empty claim outcomes`, pickup latency) and tune bounded fallback ranges if websocket quality degrades in production.
 - Add operational dashboards/alerts for shop catalog publish validation failures (`policy_link_required`, `policy_link_disabled`, checkout URL validation).
@@ -181,6 +184,8 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
   Exit criteria: canonical admin routes use shared workspace shell + breadcrumbs/header/table primitives, legacy paths redirect, and admin route helper tests pass.
 - [x] Polish website layout hierarchy and responsive UX for home/auth/dashboard surfaces (2026-02-17)
   Exit criteria: shared page/header primitives enforce clearer visual hierarchy and spacing, auth pages use split informational + form layout on desktop, and dashboard feed cards remain readable for long metadata/content.
+- [x] Introduce workspace route-group shell and multi-module member UI surfaces in `website` (`/workspace/*`) with compatibility redirect from `/dashboard` (2026-02-17)
+  Exit criteria: workspace routes build/typecheck pass, sidebar/topbar shell is shared, module adapter tests pass, and journal trade schema validation test coverage is present.
 
 ## Checklists / Hygiene
 
@@ -259,6 +264,8 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
 | 2026-02-17 | Approve full admin workspace route rewrite centered on sidebar IA (`Mappings`, `Discord Bot`, `Shop`) with route migrations + redirects | `docs/plans/2026-02-17-admin-workspace-refactor-design.md` |
 | 2026-02-17 | Define implementation task plan for admin workspace refactor with verification gates (`typecheck`, `build`, smoke checks) | `docs/plans/2026-02-17-admin-workspace-refactor-plan.md` |
 | 2026-02-17 | Apply website UI layout polish pass focused on hierarchy, responsive composition, and feed readability across home/auth/dashboard | N/A |
+| 2026-02-17 | Approve trader workspace expansion IA for `website` using `/workspace/*` modules + shared shell with phased execution plan | `docs/plans/2026-02-17-trader-workspace-expansion-design.md` |
+| 2026-02-17 | Execute workspace expansion implementation tasks for shared shell, module routes, adapters/tests, and modal workflows in `website` | `docs/plans/2026-02-17-trader-workspace-expansion-plan.md` |
 
 ## Links
 
@@ -268,3 +275,5 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
 - Shop/admin redesign implementation plan: `docs/plans/2026-02-17-shop-admin-redesign-plan.md`
 - Admin workspace refactor design: `docs/plans/2026-02-17-admin-workspace-refactor-design.md`
 - Admin workspace refactor implementation plan: `docs/plans/2026-02-17-admin-workspace-refactor-plan.md`
+- Trader workspace expansion design: `docs/plans/2026-02-17-trader-workspace-expansion-design.md`
+- Trader workspace expansion implementation plan: `docs/plans/2026-02-17-trader-workspace-expansion-plan.md`
