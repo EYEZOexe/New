@@ -13,6 +13,26 @@ function assertBotTokenOrThrow(token: string) {
   }
 }
 
+function parseRetryAfterMs(error: string | undefined): number | null {
+  if (!error) return null;
+  const match = error.match(/retry_after_ms:(\d+)/i);
+  if (!match) return null;
+  const value = Number.parseInt(match[1], 10);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return Math.min(15 * 60 * 1000, Math.max(250, value));
+}
+
+function isTerminalError(error: string | undefined): boolean {
+  if (!error) return false;
+  return error.startsWith("terminal:");
+}
+
+function normalizeStoredError(error: string): string {
+  return error
+    .replace(/^terminal:/, "")
+    .replace(/^retry_after_ms:\d+:/, "");
+}
+
 export const claimPendingSignalMirrorJobs = mutation({
   args: {
     botToken: v.string(),
@@ -219,18 +239,21 @@ export const completeSignalMirrorJob = mutation({
     }
 
     const error = args.error?.trim() || "unknown_error";
+    const normalizedError = normalizeStoredError(error);
     const attemptCount = job.attemptCount ?? 0;
-    if (attemptCount >= job.maxAttempts) {
+    const retryAfterMs = parseRetryAfterMs(error);
+    const terminal = isTerminalError(error);
+    if (terminal || attemptCount >= job.maxAttempts) {
       await ctx.db.patch(job._id, {
         status: "failed",
         updatedAt: now,
         claimToken: undefined,
         claimWorkerId: undefined,
         claimedAt: undefined,
-        lastError: error,
+        lastError: normalizedError,
       });
       console.error(
-        `[mirror] failed job=${job._id} event=${job.eventType} attempts=${attemptCount}/${job.maxAttempts} error=${error}`,
+        `[mirror] failed job=${job._id} event=${job.eventType} attempts=${attemptCount}/${job.maxAttempts} terminal=${terminal} error=${normalizedError}`,
       );
       return {
         ok: true,
@@ -242,20 +265,96 @@ export const completeSignalMirrorJob = mutation({
     await ctx.db.patch(job._id, {
       status: "pending",
       updatedAt: now,
-      runAfter: nextMirrorRetryAt(now, attemptCount),
+      runAfter:
+        typeof retryAfterMs === "number"
+          ? now + retryAfterMs
+          : nextMirrorRetryAt(now, attemptCount),
       claimToken: undefined,
       claimWorkerId: undefined,
       claimedAt: undefined,
-      lastError: error,
+      lastError: normalizedError,
     });
 
     console.warn(
-      `[mirror] requeued job=${job._id} event=${job.eventType} attempts=${attemptCount}/${job.maxAttempts} error=${error}`,
+      `[mirror] requeued job=${job._id} event=${job.eventType} attempts=${attemptCount}/${job.maxAttempts} retry_after_ms=${retryAfterMs ?? -1} error=${normalizedError}`,
     );
     return {
       ok: true,
       ignored: false,
       status: "pending" as const,
+    };
+  },
+});
+
+export const getSignalMirrorLatencyStats = query({
+  args: {
+    tenantKey: v.string(),
+    connectorId: v.string(),
+    windowMinutes: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const windowMinutes = Math.max(1, Math.min(24 * 60, args.windowMinutes ?? 60));
+    const cutoff = Date.now() - windowMinutes * 60_000;
+    const rows = await ctx.db
+      .query("signalMirrorJobs")
+      .withIndex("by_tenant_connector", (q) =>
+        q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+      )
+      .order("desc")
+      .take(2000);
+
+    const createLatencies: number[] = [];
+    const updateLatencies: number[] = [];
+    const deleteLatencies: number[] = [];
+
+    for (const row of rows) {
+      if (row.status !== "completed") continue;
+      if (row.updatedAt < cutoff) continue;
+
+      const baseEventAt =
+        row.eventType === "delete" && typeof row.sourceDeletedAt === "number"
+          ? row.sourceDeletedAt
+          : row.eventType === "update" && typeof row.sourceEditedAt === "number"
+            ? row.sourceEditedAt
+            : row.sourceCreatedAt;
+      const latencyMs = Math.max(0, row.updatedAt - baseEventAt);
+
+      if (row.eventType === "create") {
+        createLatencies.push(latencyMs);
+      } else if (row.eventType === "update") {
+        updateLatencies.push(latencyMs);
+      } else {
+        deleteLatencies.push(latencyMs);
+      }
+    }
+
+    const summarize = (samples: number[]) => {
+      if (samples.length === 0) {
+        return {
+          count: 0,
+          p50Ms: null as number | null,
+          p95Ms: null as number | null,
+          maxMs: null as number | null,
+        };
+      }
+
+      const sorted = [...samples].sort((a, b) => a - b);
+      const atPercentile = (p: number) =>
+        sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * p) - 1))];
+
+      return {
+        count: sorted.length,
+        p50Ms: atPercentile(0.5),
+        p95Ms: atPercentile(0.95),
+        maxMs: sorted[sorted.length - 1],
+      };
+    };
+
+    return {
+      windowMinutes,
+      create: summarize(createLatencies),
+      update: summarize(updateLatencies),
+      delete: summarize(deleteLatencies),
     };
   },
 });

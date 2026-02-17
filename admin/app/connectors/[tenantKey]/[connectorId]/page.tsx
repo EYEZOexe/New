@@ -50,6 +50,18 @@ type MirrorQueueStatsRow = {
   total: number;
   updatedAt: number;
 };
+type MirrorLatencySummaryRow = {
+  count: number;
+  p50Ms: number | null;
+  p95Ms: number | null;
+  maxMs: number | null;
+};
+type MirrorLatencyStatsRow = {
+  windowMinutes: number;
+  create: MirrorLatencySummaryRow;
+  update: MirrorLatencySummaryRow;
+  delete: MirrorLatencySummaryRow;
+};
 type MirrorJobRow = {
   jobId: string;
   sourceMessageId: string;
@@ -240,6 +252,15 @@ export default function ConnectorDetailPage() {
       >("mirror:listSignalMirrorJobs"),
     [],
   );
+  const getMirrorLatencyStats = useMemo(
+    () =>
+      makeFunctionReference<
+        "query",
+        { tenantKey: string; connectorId: string; windowMinutes?: number },
+        MirrorLatencyStatsRow
+      >("mirror:getSignalMirrorLatencyStats"),
+    [],
+  );
 
   const connectorArgs = hasRouteParams ? { tenantKey, connectorId } : "skip";
   const connector = useQuery(getConnector, connectorArgs);
@@ -248,6 +269,10 @@ export default function ConnectorDetailPage() {
   const guilds = useQuery(listGuilds, connectorArgs) ?? [];
   const mirrorRuntime = useQuery(getMirrorRuntimeStatus, {});
   const mirrorQueueStats = useQuery(getMirrorQueueStats, connectorArgs);
+  const mirrorLatencyStats = useQuery(
+    getMirrorLatencyStats,
+    hasRouteParams ? { tenantKey, connectorId, windowMinutes: 60 } : "skip",
+  );
   const mirrorJobs = useQuery(
     listMirrorJobs,
     hasRouteParams ? { tenantKey, connectorId, limit: 10 } : "skip",
@@ -359,12 +384,24 @@ export default function ConnectorDetailPage() {
     );
   }, [mirrorQueueStats, hasRouteParams, tenantKey, connectorId]);
 
+  useEffect(() => {
+    if (!mirrorLatencyStats || !hasRouteParams) return;
+    console.info(
+      `[admin/connectors] mirror latency tenant=${tenantKey} connector=${connectorId} window_min=${mirrorLatencyStats.windowMinutes} create_p95_ms=${mirrorLatencyStats.create.p95Ms ?? -1} update_p95_ms=${mirrorLatencyStats.update.p95Ms ?? -1} delete_p95_ms=${mirrorLatencyStats.delete.p95Ms ?? -1}`,
+    );
+  }, [mirrorLatencyStats, hasRouteParams, tenantKey, connectorId]);
+
   function renderGuildLabel(guildId: string) {
     return `${guildNameById.get(guildId) ?? "Unknown guild"} (${guildId})`;
   }
 
   function renderChannelLabel(channelId: string) {
     return `${channelNameById.get(channelId) ?? "Unknown channel"} (${channelId})`;
+  }
+
+  function renderLatency(value: number | null) {
+    if (value === null) return "n/a";
+    return `${Math.round(value)}ms`;
   }
 
   async function onRotate() {
@@ -569,6 +606,15 @@ export default function ConnectorDetailPage() {
             <strong>{mirrorQueueStats?.processing ?? 0}</strong>, failed{" "}
             <strong>{mirrorQueueStats?.failed ?? 0}</strong>, total{" "}
             <strong>{mirrorQueueStats?.total ?? 0}</strong>.
+          </p>
+          <p className="mt-2">
+            Latency (last {mirrorLatencyStats?.windowMinutes ?? 60}m): create p95{" "}
+            <strong>{renderLatency(mirrorLatencyStats?.create.p95Ms ?? null)}</strong> (n=
+            <strong>{mirrorLatencyStats?.create.count ?? 0}</strong>), update p95{" "}
+            <strong>{renderLatency(mirrorLatencyStats?.update.p95Ms ?? null)}</strong> (n=
+            <strong>{mirrorLatencyStats?.update.count ?? 0}</strong>), delete p95{" "}
+            <strong>{renderLatency(mirrorLatencyStats?.delete.p95Ms ?? null)}</strong> (n=
+            <strong>{mirrorLatencyStats?.delete.count ?? 0}</strong>).
           </p>
         </div>
 

@@ -14,6 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Closed Phase 4 mirror reliability/observability gaps: Convex mirror completion now distinguishes terminal vs retryable Discord failures (including retry-after aware requeue), stores mirrored extra image message IDs for deterministic cleanup, and admin connector detail now shows mirror latency stats (`create`/`update`/`delete` p95 over last 60m) alongside queue/runtime status to enforce the `<100ms` target. (2026-02-17)
 - Upgraded mirror message formatting for customer channels: bot now posts signal content as Discord embeds, includes non-image attachments in embed fields, and posts multi-image attachments as sequential raw image messages below the embed, with extra mirrored message IDs tracked for update/delete cleanup. (2026-02-16)
 - Reduced Phase 4 mirror path latency by removing fixed queue waits: Vencord plugin outbox now fast-flushes message events immediately (with async disk persistence) and lowers fallback flush cadence from 250ms to 25ms, while Discord-Bot now runs a dedicated low-latency mirror queue loop (`MIRROR_POLL_INTERVAL_MS`, default 25ms) with immediate drain when work is present and per-job latency logs. (2026-02-16)
 - Started Phase 4 mirroring implementation end-to-end: Convex now persists signal mirror queue + message linkage state (`signalMirrorJobs`, `mirroredSignals`), ingest enqueues create/update/delete mirror jobs from admin-configured source->target mappings when connector forwarding is enabled, Discord-Bot worker now claims mirror jobs and posts/edits/deletes messages in target channels, and admin connector config now includes mirroring toggle + bot runtime/queue visibility. (2026-02-16)
@@ -56,7 +57,7 @@ Backend is Convex.
 - Phase 1 signal pipeline is now hardened end-to-end: message ingest normalizes update/delete timestamps with fallbacks, stale post-delete updates are ignored server-side, plugin emits message delete events, and dashboard feed surfaces edited/deleted state with realtime update logs. (2026-02-16)
 
 **Next**
-- Validate Phase 4 mirroring in staging (Discord permissions, queue throughput, p95 ingest->mirror latency) and close any drift gaps.
+- Begin Phase 5 attachments work: persist attachment metadata + references and render safely in dashboard.
 - Add scheduled payment reconciliation and alerting for webhook drift/failure spikes.
 
 **Blockers / Risks**
@@ -127,11 +128,11 @@ Goal: customers can link Discord and get the right role(s) in the customer guild
 
 Goal: signals are mirrored to the customer guild with mapping for updates/deletes.
 
-- [ ] Bot posts new signals into mapped channels
+- [x] Bot posts new signals into mapped channels (2026-02-17)
   Exit criteria: new signal results in one mirrored message with p95 ingestion -> bot receive < 100ms.
-- [ ] Bot handles edits/deletes
+- [x] Bot handles edits/deletes (2026-02-17)
   Exit criteria: mirrored messages update/delete consistently.
-- [ ] Rate-limit handling and retry strategy
+- [x] Rate-limit handling and retry strategy (2026-02-17)
   Exit criteria: bot survives transient Discord/API failures without drifting state.
 
 ### Phase 5: Attachments (Discord -> storage -> dashboard/mirror)

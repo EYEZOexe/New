@@ -23,6 +23,13 @@ type MessageCapableChannel = Channel & {
   guildId?: string | null;
 };
 
+class MirrorOperationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MirrorOperationError";
+  }
+}
+
 export class DiscordSignalMirrorManager {
   private readonly client: Client;
 
@@ -38,20 +45,20 @@ export class DiscordSignalMirrorManager {
         if (parsed.code === RESTJSONErrorCodes.UnknownChannel) {
           return null;
         }
-        throw error;
+        throw new MirrorOperationError(classifyDiscordError(parsed, "channel_fetch_failed"));
       });
 
     if (!channel) {
       return {
         ok: false,
-        message: `target_channel_not_found:${job.targetChannelId}`,
+        message: `terminal:target_channel_not_found:${job.targetChannelId}`,
       };
     }
 
     if (!supportsMessageOps(channel)) {
       return {
         ok: false,
-        message: `unsupported_target_channel:${job.targetChannelId}`,
+        message: `terminal:unsupported_target_channel:${job.targetChannelId}`,
       };
     }
 
@@ -82,10 +89,13 @@ export class DiscordSignalMirrorManager {
             if (parsed.code === RESTJSONErrorCodes.UnknownMessage) {
               return null;
             }
-            throw error;
+            throw new MirrorOperationError(classifyDiscordError(parsed, "message_fetch_failed"));
           });
         if (!existingMessage) continue;
-        await existingMessage.delete();
+        await existingMessage.delete().catch((error: unknown) => {
+          const parsed = parseDiscordError(error);
+          throw new MirrorOperationError(classifyDiscordError(parsed, "message_delete_failed"));
+        });
       }
       return {
         ok: true,
@@ -110,16 +120,22 @@ export class DiscordSignalMirrorManager {
           if (parsed.code === RESTJSONErrorCodes.UnknownMessage) {
             return null;
           }
-          throw error;
+          throw new MirrorOperationError(classifyDiscordError(parsed, "message_fetch_failed"));
         });
 
       if (existingMessage) {
-        upsertedMessage = await existingMessage.edit(sendOrEditPayload);
+        upsertedMessage = await existingMessage.edit(sendOrEditPayload).catch((error: unknown) => {
+          const parsed = parseDiscordError(error);
+          throw new MirrorOperationError(classifyDiscordError(parsed, "message_edit_failed"));
+        });
       }
     }
 
     if (!upsertedMessage) {
-      upsertedMessage = await channel.send(sendOrEditPayload);
+      upsertedMessage = await channel.send(sendOrEditPayload).catch((error: unknown) => {
+        const parsed = parseDiscordError(error);
+        throw new MirrorOperationError(classifyDiscordError(parsed, "message_send_failed"));
+      });
     }
 
     for (const messageId of existingExtraMessageIds) {
@@ -130,15 +146,21 @@ export class DiscordSignalMirrorManager {
           if (parsed.code === RESTJSONErrorCodes.UnknownMessage) {
             return null;
           }
-          throw error;
+          throw new MirrorOperationError(classifyDiscordError(parsed, "message_fetch_failed"));
         });
       if (!oldMessage) continue;
-      await oldMessage.delete();
+      await oldMessage.delete().catch((error: unknown) => {
+        const parsed = parseDiscordError(error);
+        throw new MirrorOperationError(classifyDiscordError(parsed, "message_delete_failed"));
+      });
     }
 
     const mirroredExtraMessageIds: string[] = [];
     for (const imageUrl of payload.extraImageUrls) {
-      const imageMessage = await channel.send({ content: imageUrl });
+      const imageMessage = await channel.send({ content: imageUrl }).catch((error: unknown) => {
+        const parsed = parseDiscordError(error);
+        throw new MirrorOperationError(classifyDiscordError(parsed, "image_send_failed"));
+      });
       mirroredExtraMessageIds.push(imageMessage.id);
     }
 
@@ -237,6 +259,7 @@ function isLikelyImage(url: string, contentType?: string): boolean {
 function parseDiscordError(error: unknown): {
   code: number | null;
   status: number | null;
+  retryAfterMs: number | null;
   message: string;
 } {
   const normalizeCode = (value: unknown): number | null => {
@@ -247,11 +270,20 @@ function parseDiscordError(error: unknown): {
     }
     return null;
   };
+  const normalizeRetryAfterMs = (value: unknown): number | null => {
+    if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+      return null;
+    }
+    // discord.js may expose retryAfter in ms (large) or seconds (small).
+    const ms = value > 300 ? value : value * 1000;
+    return Math.ceil(ms);
+  };
 
   if (error instanceof DiscordAPIError) {
     return {
       code: normalizeCode(error.code),
       status: error.status,
+      retryAfterMs: normalizeRetryAfterMs((error as unknown as { retryAfter?: unknown }).retryAfter),
       message: error.message,
     };
   }
@@ -265,6 +297,7 @@ function parseDiscordError(error: unknown): {
     return {
       code: maybeCode,
       status: maybeStatus,
+      retryAfterMs: normalizeRetryAfterMs((error as { retryAfter?: unknown }).retryAfter),
       message: error.message,
     };
   }
@@ -272,6 +305,36 @@ function parseDiscordError(error: unknown): {
   return {
     code: null,
     status: null,
+    retryAfterMs: null,
     message: String(error),
   };
+}
+
+function classifyDiscordError(
+  parsed: { code: number | null; status: number | null; retryAfterMs: number | null; message: string },
+  fallback: string,
+): string {
+  const retryAfterMs =
+    typeof parsed.retryAfterMs === "number" && Number.isFinite(parsed.retryAfterMs)
+      ? Math.min(15 * 60 * 1000, Math.max(250, parsed.retryAfterMs))
+      : null;
+  if (parsed.status === 429 || retryAfterMs !== null) {
+    return `retry_after_ms:${retryAfterMs ?? 1000}:${fallback}:${parsed.message}`;
+  }
+
+  const terminalCodes = new Set<number>([
+    RESTJSONErrorCodes.MissingAccess,
+    RESTJSONErrorCodes.MissingPermissions,
+    RESTJSONErrorCodes.UnknownChannel,
+    RESTJSONErrorCodes.UnknownGuild,
+  ]);
+  if (
+    parsed.status === 401 ||
+    parsed.status === 403 ||
+    terminalCodes.has(parsed.code ?? Number.NaN)
+  ) {
+    return `terminal:${fallback}:${parsed.message}`;
+  }
+
+  return `${fallback}:${parsed.message}`;
 }
