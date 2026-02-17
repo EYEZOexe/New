@@ -333,7 +333,7 @@ export function useCatalogEditor(defaultStorefrontUrl: string) {
           );
         }
         throw new Error(
-          "Checkout URL could not be generated. Set a valid https storefront URL or enable custom checkout URL override.",
+          "Checkout URL could not be generated. Use a product slug/path (or productId|slug) in policy external ID, set a valid https storefront URL, or enable custom checkout URL override.",
         );
       }
 

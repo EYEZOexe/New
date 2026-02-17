@@ -16,25 +16,49 @@ export function normalizeStorefrontUrl(url: string): string | null {
   }
 }
 
+function splitPolicyExternalIdForCheckout(externalId: string): {
+  matchExternalId: string;
+  checkoutHint: string;
+} {
+  const [first, ...rest] = externalId.split("|");
+  return {
+    matchExternalId: (first ?? "").trim(),
+    checkoutHint: rest.join("|").trim(),
+  };
+}
+
+function buildStorefrontCheckoutUrl(origin: string, checkoutToken: string): string | null {
+  if (!checkoutToken) return null;
+
+  if (checkoutToken.startsWith("https://")) {
+    return checkoutToken;
+  }
+  if (checkoutToken.startsWith("/")) {
+    return `${origin}${checkoutToken}`;
+  }
+  if (checkoutToken.includes("/")) {
+    return `${origin}/${checkoutToken.replace(/^\/+/, "")}`;
+  }
+
+  // Sell storefront product links are slug-based, not numeric ID-based.
+  if (/^\d+$/.test(checkoutToken)) {
+    return null;
+  }
+  return `${origin}/product/${encodeURIComponent(checkoutToken)}`;
+}
+
 export function buildAutoCheckoutUrl(args: {
   storefrontUrl: string;
   policyScope: PolicyScope;
   policyExternalId: string;
 }): string | null {
   const origin = normalizeStorefrontUrl(args.storefrontUrl);
-  const policyExternalId = args.policyExternalId.trim();
-  if (!origin || !policyExternalId) return null;
+  const parsed = splitPolicyExternalIdForCheckout(args.policyExternalId.trim());
+  if (!origin || !parsed.matchExternalId) return null;
   if (args.policyScope !== "product") return null;
-  if (policyExternalId.startsWith("https://")) {
-    return policyExternalId;
-  }
-  if (policyExternalId.startsWith("/")) {
-    return `${origin}${policyExternalId}`;
-  }
-  if (policyExternalId.includes("/")) {
-    return `${origin}/${policyExternalId.replace(/^\/+/, "")}`;
-  }
-  return `${origin}/product/${encodeURIComponent(policyExternalId)}`;
+
+  const checkoutToken = parsed.checkoutHint || parsed.matchExternalId;
+  return buildStorefrontCheckoutUrl(origin, checkoutToken);
 }
 
 export function formatPolicyOptionValue(scope: PolicyScope, externalId: string): string {

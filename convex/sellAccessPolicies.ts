@@ -16,6 +16,11 @@ type AccessPolicy = {
   updatedAt: number;
 };
 
+function extractPolicyMatchExternalId(externalId: string): string {
+  const [first] = externalId.split("|");
+  return (first ?? "").trim();
+}
+
 function normalizeRequired(value: string, field: string): string {
   const normalized = value.trim();
   if (!normalized) {
@@ -62,6 +67,15 @@ export async function resolveEnabledSellAccessPolicy(
       )
       .first();
     if (byVariant?.enabled) return toRow(byVariant);
+
+    const variantPolicies = await ctx.db.query("sellAccessPolicies").collect();
+    const byVariantAlias = variantPolicies.find(
+      (row) =>
+        row.scope === "variant" &&
+        row.enabled &&
+        extractPolicyMatchExternalId(row.externalId) === variantId,
+    );
+    if (byVariantAlias) return toRow(byVariantAlias);
   }
 
   const productId = args.productId?.trim() ?? "";
@@ -73,6 +87,15 @@ export async function resolveEnabledSellAccessPolicy(
       )
       .first();
     if (byProduct?.enabled) return toRow(byProduct);
+
+    const productPolicies = await ctx.db.query("sellAccessPolicies").collect();
+    const byProductAlias = productPolicies.find(
+      (row) =>
+        row.scope === "product" &&
+        row.enabled &&
+        extractPolicyMatchExternalId(row.externalId) === productId,
+    );
+    if (byProductAlias) return toRow(byProductAlias);
   }
 
   return null;

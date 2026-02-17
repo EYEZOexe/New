@@ -148,7 +148,7 @@ export default function ShopPoliciesPage() {
               value={externalId}
               onChange={(e) => setExternalId(e.target.value)}
               className="admin-input"
-              placeholder={scope === "variant" ? "sell variant id" : "sell product id"}
+              placeholder={scope === "variant" ? "sell variant id" : "sell product id or productId|slug"}
             />
           </label>
 
@@ -184,6 +184,12 @@ export default function ShopPoliciesPage() {
           {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
           {error ? <p className="text-sm text-red-700">{error}</p> : null}
         </div>
+        {scope === "product" ? (
+          <p className="mt-3 text-xs text-slate-600">
+            For auto checkout URLs, you can use <code>productId|slug</code> (for example{" "}
+            <code>349820|basic-plan</code>).
+          </p>
+        ) : null}
       </AdminSectionCard>
 
       <AdminTableShell

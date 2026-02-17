@@ -136,6 +136,11 @@ export function VariantEditorCard(props: VariantEditorCardProps) {
             .
           </p>
         )}
+        <p className="mt-2 text-xs text-slate-500">
+          Tip: product policy external IDs can use <code>productId|slug</code> (for example{" "}
+          <code>349820|basic-plan</code>) so webhook matching keeps the numeric ID while checkout
+          URLs use the storefront slug.
+        </p>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
