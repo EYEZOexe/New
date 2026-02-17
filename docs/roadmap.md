@@ -14,6 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Completed Phase 6 storefront/admin redesign rollout: Convex now includes admin-managed shop catalog domain (`shopTiers`, `shopVariants`) with strict policy-link validation and consistent mutation error shapes, connector mappings now support explicit dashboard visibility + minimum-tier rules, website dashboard feed now applies hidden-by-default tier visibility filtering per mapping, admin now includes redesigned home/payments surfaces plus realtime catalog management, website now ships redesigned home/shop/dashboard and realtime checkout-return state, and Discord-Bot queue workers now use event-driven Convex wake subscriptions with bounded fallback polling instead of fixed ultra-low claim loops. (2026-02-17)
 - Approved Phase 6 product/UX design for website/admin modernization: tier-first shop with admin-managed catalog, realtime checkout-return/dashboard state, website-only tier-gated dashboard signal visibility (default hidden until explicitly configured), and worker queue architecture upgrade from fixed ultra-low polling to event-driven wakeups with bounded fallback polling to reduce empty claim spam while preserving low-latency mirroring targets. (2026-02-17)
 - Completed Phase 5 attachment hardening across ingest, dashboard, and mirror paths: ingest now normalizes/stores Discord attachment references with IDs (`attachmentId`) and URL/type/size sanitization, signal queries expose sanitized attachment refs with backend attachment-count diagnostics, dashboard now enforces safe attachment rendering (type/size-aware image preview limits + blocked executable-type handling) while preserving stable attachment links, and mirror payload attachment contracts are aligned end-to-end. (2026-02-17)
 - Closed Phase 4 mirror reliability/observability gaps: Convex mirror completion now distinguishes terminal vs retryable Discord failures (including retry-after aware requeue), stores mirrored extra image message IDs for deterministic cleanup, and admin connector detail now shows mirror latency stats (`create`/`update`/`delete` p95 over last 60m) alongside queue/runtime status to enforce the `<100ms` target. (2026-02-17)
@@ -60,8 +61,8 @@ Backend is Convex.
 
 **Next**
 - Add scheduled payment reconciliation and alerting for webhook drift/failure spikes.
-- Implement Phase 6 storefront/admin redesign and tier-gated dashboard visibility per approved design.
-- Replace high-frequency mirror/role claim polling loops with event-driven worker wakeups to reduce backend mutation noise without regressing mirror latency.
+- Monitor queue-wake rollout metrics (`wake source`, `empty/non-empty claim outcomes`, pickup latency) and tune bounded fallback ranges if websocket quality degrades in production.
+- Add operational dashboards/alerts for shop catalog publish validation failures (`policy_link_required`, `policy_link_disabled`, checkout URL validation).
 
 **Blockers / Risks**
 - Data migration. We need a clear plan to migrate users/subscriptions/signals into Convex without downtime.
@@ -77,7 +78,6 @@ Backend is Convex.
 - Bun migration consistency. Build and CI/deploy tooling must stay aligned with Bun lockfiles/workspaces or deployments will fail before app startup.
 - Webhook idempotency and retries. We need to guarantee "at least once" delivery does not create duplicate state.
 - Performance. Sub-100ms p95 delivery requires careful schema/indexing and realtime subscriptions; polling is not acceptable on the critical path.
-- Worker queue claim noise. Current fixed-interval claim loops can generate frequent empty claim mutations when queues are idle/misconfigured; migrate to event-driven wakeups to avoid unnecessary load and noisy observability streams.
 
 ## Milestones (Phases)
 
@@ -154,13 +154,13 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
 
 Goal: deliver a conversion-focused shop/admin experience and enforce tier-based dashboard signal visibility.
 
-- [ ] Add admin-managed shop catalog domain (tiers + per-tier duration variants + policy linkage)
+- [x] Add admin-managed shop catalog domain (tiers + per-tier duration variants + policy linkage) (2026-02-17)
   Exit criteria: operator can manage presentation variants without modifying enforcement policy logic.
-- [ ] Add website tier-first shop + checkout-return state powered by realtime Convex data
+- [x] Add website tier-first shop + checkout-return state powered by realtime Convex data (2026-02-17)
   Exit criteria: customer can select tier/duration and launch external Sell checkout from a polished storefront.
-- [ ] Enforce website-only dashboard visibility by mapping/channel minimum tier rules
+- [x] Enforce website-only dashboard visibility by mapping/channel minimum tier rules (2026-02-17)
   Exit criteria: signal feed content is filtered by subscription tier with hidden-by-default mapping behavior.
-- [ ] Replace worker fixed low-interval claim loops with event-driven queue wakeups
+- [x] Replace worker fixed low-interval claim loops with event-driven queue wakeups (2026-02-17)
   Exit criteria: idle queue claim mutation spam is significantly reduced while maintaining low-latency processing when jobs arrive.
 
 ## Checklists / Hygiene
@@ -235,6 +235,7 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
 | 2026-02-16 | Self-hosted Convex auth routes are served under `/http`; `CONVEX_SITE_URL` must use backend `/http` origin | N/A |
 | 2026-02-16 | `NEXT_PUBLIC_CONVEX_URL` must not include `/http` to avoid websocket sync 404s (`/http/api/*`) | N/A |
 | 2026-02-17 | Adopt split-domain Phase 6 architecture (policy enforcement separated from shop catalog), website-only tier-gated dashboard visibility, and event-driven worker queue wakeups replacing fixed ultra-low polling | `docs/plans/2026-02-17-shop-admin-redesign-design.md` |
+| 2026-02-17 | Execute Phase 6 implementation plan across Convex/admin/website/Discord-Bot with verification and roadmap sync | `docs/plans/2026-02-17-shop-admin-redesign-plan.md` |
 
 ## Links
 

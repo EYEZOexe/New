@@ -5,7 +5,7 @@ import {
   mapSellLifecycleToSubscriptionStatus,
   projectSellWebhookPayload,
   verifySellWebhookSignature,
-} from "../convex/paymentsUtils";
+} from "../../convex/paymentsUtils";
 
 describe("paymentsUtils", () => {
   it("extracts event metadata with header fallback", () => {

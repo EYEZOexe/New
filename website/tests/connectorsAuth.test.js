@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { parseBearerToken, sha256Hex } from "../convex/connectorsAuth";
+import { parseBearerToken, sha256Hex } from "../../convex/connectorsAuth";
 
 describe("connectorsAuth", () => {
   it("computes sha256 hex for known input", async () => {
