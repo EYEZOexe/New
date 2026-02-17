@@ -3,7 +3,7 @@ import {
   DiscordAPIError,
   RESTJSONErrorCodes,
 } from "discord.js";
-import type { Channel, Message } from "discord.js";
+import type { APIEmbed, Channel, Message } from "discord.js";
 
 import type { ClaimedSignalMirrorJob } from "./convexSignalMirrorClient";
 
@@ -11,11 +11,12 @@ export type SignalMirrorExecutionResult = {
   ok: boolean;
   message: string;
   mirroredMessageId?: string;
+  mirroredExtraMessageIds?: string[];
   mirroredGuildId?: string;
 };
 
 type MessageCapableChannel = Channel & {
-  send: (payload: { content: string }) => Promise<Message>;
+  send: (payload: { content?: string; embeds?: APIEmbed[] }) => Promise<Message>;
   messages: {
     fetch: (messageId: string) => Promise<Message>;
   };
@@ -56,43 +57,51 @@ export class DiscordSignalMirrorManager {
 
     const guildId = channel.guildId ?? undefined;
     const existingMessageId = job.existingMirroredMessageId?.trim() || "";
-    const content = buildMirroredContent(job.content, job.attachments);
+    const existingExtraMessageIds = (job.existingMirroredExtraMessageIds ?? [])
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
 
     if (job.eventType === "delete") {
-      if (!existingMessageId) {
+      const idsToDelete = [
+        ...(existingMessageId ? [existingMessageId] : []),
+        ...existingExtraMessageIds,
+      ];
+      if (idsToDelete.length === 0) {
         return {
           ok: true,
-          message: "delete_no_existing_message",
+          message: "delete_no_existing_messages",
+          mirroredExtraMessageIds: [],
           mirroredGuildId: guildId,
         };
       }
-      const existingMessage = await channel.messages
-        .fetch(existingMessageId)
-        .catch((error: unknown) => {
-          const parsed = parseDiscordError(error);
-          if (parsed.code === RESTJSONErrorCodes.UnknownMessage) {
-            return null;
-          }
-          throw error;
-        });
-
-      if (!existingMessage) {
-        return {
-          ok: true,
-          message: "delete_target_message_missing",
-          mirroredGuildId: guildId,
-        };
+      for (const messageId of idsToDelete) {
+        const existingMessage = await channel.messages
+          .fetch(messageId)
+          .catch((error: unknown) => {
+            const parsed = parseDiscordError(error);
+            if (parsed.code === RESTJSONErrorCodes.UnknownMessage) {
+              return null;
+            }
+            throw error;
+          });
+        if (!existingMessage) continue;
+        await existingMessage.delete();
       }
-
-      await existingMessage.delete();
       return {
         ok: true,
-        message: "message_deleted",
-        mirroredMessageId: existingMessage.id,
+        message: "messages_deleted",
+        mirroredMessageId: existingMessageId || undefined,
+        mirroredExtraMessageIds: [],
         mirroredGuildId: guildId,
       };
     }
 
+    const payload = buildMirroredPayload(job.content, job.attachments);
+    const sendOrEditPayload: { content?: string; embeds?: APIEmbed[] } = {
+      embeds: [payload.embed],
+    };
+
+    let upsertedMessage: Message | null = null;
     if (existingMessageId) {
       const existingMessage = await channel.messages
         .fetch(existingMessageId)
@@ -105,21 +114,39 @@ export class DiscordSignalMirrorManager {
         });
 
       if (existingMessage) {
-        const edited = await existingMessage.edit({ content });
-        return {
-          ok: true,
-          message: "message_updated",
-          mirroredMessageId: edited.id,
-          mirroredGuildId: guildId,
-        };
+        upsertedMessage = await existingMessage.edit(sendOrEditPayload);
       }
     }
 
-    const created = await channel.send({ content });
+    if (!upsertedMessage) {
+      upsertedMessage = await channel.send(sendOrEditPayload);
+    }
+
+    for (const messageId of existingExtraMessageIds) {
+      const oldMessage = await channel.messages
+        .fetch(messageId)
+        .catch((error: unknown) => {
+          const parsed = parseDiscordError(error);
+          if (parsed.code === RESTJSONErrorCodes.UnknownMessage) {
+            return null;
+          }
+          throw error;
+        });
+      if (!oldMessage) continue;
+      await oldMessage.delete();
+    }
+
+    const mirroredExtraMessageIds: string[] = [];
+    for (const imageUrl of payload.extraImageUrls) {
+      const imageMessage = await channel.send({ content: imageUrl });
+      mirroredExtraMessageIds.push(imageMessage.id);
+    }
+
     return {
       ok: true,
-      message: "message_created",
-      mirroredMessageId: created.id,
+      message: existingMessageId ? "message_updated" : "message_created",
+      mirroredMessageId: upsertedMessage.id,
+      mirroredExtraMessageIds,
       mirroredGuildId: guildId,
     };
   }
@@ -133,29 +160,78 @@ function supportsMessageOps(channel: Channel): channel is MessageCapableChannel 
   );
 }
 
-function buildMirroredContent(
+function buildMirroredPayload(
   content: string,
-  attachments: Array<{ url: string }>,
-): string {
-  const normalized = content.trim();
-  const attachmentUrls = attachments
-    .map((attachment) => attachment.url.trim())
-    .filter((url) => url.length > 0);
+  attachments: Array<{
+    url: string;
+    name?: string;
+    contentType?: string;
+  }>,
+): {
+  embed: APIEmbed;
+  extraImageUrls: string[];
+} {
+  const normalizedContent = content.trim();
+  const safeContent = normalizedContent || "(empty signal)";
+  const description =
+    safeContent.length > 4096 ? `${safeContent.slice(0, 4093)}...` : safeContent;
 
-  let combined = normalized;
-  if (attachmentUrls.length > 0) {
-    const attachmentBlock = attachmentUrls.join("\n");
-    combined = combined
-      ? `${combined}\n\nAttachments:\n${attachmentBlock}`
-      : `Attachments:\n${attachmentBlock}`;
+  const imageUrls: string[] = [];
+  const nonImageLines: string[] = [];
+  for (const attachment of attachments) {
+    const url = attachment.url?.trim();
+    if (!url) continue;
+    if (isLikelyImage(url, attachment.contentType)) {
+      imageUrls.push(url);
+      continue;
+    }
+    const name = attachment.name?.trim();
+    nonImageLines.push(name ? `[${name}](${url})` : url);
   }
 
-  if (!combined) {
-    combined = "(empty signal)";
+  const embed: APIEmbed = {
+    title: "Signal",
+    description,
+    color: 0x2f3136,
+  };
+
+  if (nonImageLines.length > 0) {
+    const value = nonImageLines.join("\n");
+    embed.fields = [
+      {
+        name: "Attachments",
+        value: value.length > 1024 ? `${value.slice(0, 1021)}...` : value,
+      },
+    ];
   }
 
-  // Discord message content hard limit is 2000 characters.
-  return combined.length > 2000 ? `${combined.slice(0, 1997)}...` : combined;
+  if (imageUrls.length === 1) {
+    embed.image = { url: imageUrls[0] };
+    return { embed, extraImageUrls: [] };
+  }
+
+  if (imageUrls.length > 1) {
+    embed.footer = { text: `${imageUrls.length} images posted below` };
+  }
+
+  return { embed, extraImageUrls: imageUrls };
+}
+
+function isLikelyImage(url: string, contentType?: string): boolean {
+  const normalizedType = contentType?.toLowerCase().trim();
+  if (normalizedType?.startsWith("image/")) {
+    return true;
+  }
+
+  const lower = url.toLowerCase();
+  return (
+    lower.endsWith(".png") ||
+    lower.endsWith(".jpg") ||
+    lower.endsWith(".jpeg") ||
+    lower.endsWith(".webp") ||
+    lower.endsWith(".gif") ||
+    lower.endsWith(".bmp")
+  );
 }
 
 function parseDiscordError(error: unknown): {

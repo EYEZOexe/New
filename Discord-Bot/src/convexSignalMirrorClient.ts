@@ -26,6 +26,7 @@ export type ClaimedSignalMirrorJob = {
   runAfter: number;
   createdAt: number;
   existingMirroredMessageId: string | null;
+  existingMirroredExtraMessageIds: string[];
   existingMirroredGuildId: string | null;
 };
 
@@ -44,6 +45,7 @@ const completeSignalMirrorJobRef = makeFunctionReference<
     success: boolean;
     error?: string;
     mirroredMessageId?: string;
+    mirroredExtraMessageIds?: string[];
     mirroredGuildId?: string;
   },
   {
@@ -86,6 +88,7 @@ export class ConvexSignalMirrorClient {
     success: boolean;
     error?: string;
     mirroredMessageId?: string;
+    mirroredExtraMessageIds?: string[];
     mirroredGuildId?: string;
   }): Promise<{
     ok: boolean;
@@ -100,6 +103,7 @@ export class ConvexSignalMirrorClient {
       success: args.success,
       error: args.error,
       mirroredMessageId: args.mirroredMessageId,
+      mirroredExtraMessageIds: args.mirroredExtraMessageIds,
       mirroredGuildId: args.mirroredGuildId,
     });
   }

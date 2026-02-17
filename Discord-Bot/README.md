@@ -66,3 +66,4 @@ DISCORD_CUSTOMER_ROLE_ID=__SET_ME__
 - Failed jobs are retried with exponential backoff until max attempts
 - Bot also claims `mirror:claimPendingSignalMirrorJobs` to post/edit/delete mirrored signal messages
 - Signal mirror queue results are acknowledged via `mirror:completeSignalMirrorJob`
+- Mirrored signal format: embed for signal text + non-image attachments, with multi-image attachments posted as sequential raw image messages for better Discord image rendering.

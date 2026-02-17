@@ -59,6 +59,7 @@ export const claimPendingSignalMirrorJobs = mutation({
       runAfter: number;
       createdAt: number;
       existingMirroredMessageId: string | null;
+      existingMirroredExtraMessageIds: string[];
       existingMirroredGuildId: string | null;
     }> = [];
 
@@ -108,6 +109,7 @@ export const claimPendingSignalMirrorJobs = mutation({
         runAfter: job.runAfter,
         createdAt: job.createdAt,
         existingMirroredMessageId: existingMirror?.mirroredMessageId ?? null,
+        existingMirroredExtraMessageIds: existingMirror?.mirroredExtraMessageIds ?? [],
         existingMirroredGuildId: existingMirror?.mirroredGuildId ?? null,
       });
     }
@@ -130,6 +132,7 @@ export const completeSignalMirrorJob = mutation({
     success: v.boolean(),
     error: v.optional(v.string()),
     mirroredMessageId: v.optional(v.string()),
+    mirroredExtraMessageIds: v.optional(v.array(v.string())),
     mirroredGuildId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -179,10 +182,14 @@ export const completeSignalMirrorJob = mutation({
         .first();
 
       const mirroredMessageId = args.mirroredMessageId?.trim() ?? "";
+      const mirroredExtraMessageIds = (args.mirroredExtraMessageIds ?? [])
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0);
       const mirroredGuildId = args.mirroredGuildId?.trim() ?? "";
       if (existingMirror) {
         await ctx.db.patch(existingMirror._id, {
           mirroredMessageId: mirroredMessageId || existingMirror.mirroredMessageId,
+          mirroredExtraMessageIds,
           mirroredGuildId: mirroredGuildId || existingMirror.mirroredGuildId,
           lastMirroredAt: now,
           deletedAt: job.eventType === "delete" ? now : undefined,
@@ -194,6 +201,7 @@ export const completeSignalMirrorJob = mutation({
           sourceMessageId: job.sourceMessageId,
           targetChannelId: job.targetChannelId,
           mirroredMessageId,
+          mirroredExtraMessageIds,
           mirroredGuildId: mirroredGuildId || undefined,
           lastMirroredAt: now,
           deletedAt: job.eventType === "delete" ? now : undefined,

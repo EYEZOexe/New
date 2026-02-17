@@ -159,6 +159,7 @@ async function main() {
             claimToken: job.claimToken,
             success: true,
             mirroredMessageId: result.mirroredMessageId,
+            mirroredExtraMessageIds: result.mirroredExtraMessageIds,
             mirroredGuildId: result.mirroredGuildId,
           });
         } catch (error) {

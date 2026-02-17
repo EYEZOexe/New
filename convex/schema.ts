@@ -264,6 +264,7 @@ export default defineSchema({
     sourceMessageId: v.string(),
     targetChannelId: v.string(),
     mirroredMessageId: v.string(),
+    mirroredExtraMessageIds: v.optional(v.array(v.string())),
     mirroredGuildId: v.optional(v.string()),
     lastMirroredAt: v.number(),
     deletedAt: v.optional(v.number()),
