@@ -59,7 +59,7 @@ export function AdminNavigation({ pathname, onNavigate, className }: AdminNaviga
 
       {shopGroup ? (
         <div className="pt-3">
-          <p className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Shop</p>
+          <p className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Shop</p>
           <div className="mt-2 space-y-1">
             {shopGroup.children.map((item) => (
               <NavLink
@@ -87,8 +87,8 @@ export function AdminSidebar({ pathname }: AdminSidebarProps) {
     <aside className="admin-workspace-sidebar hidden lg:flex">
       <div className="admin-workspace-sidebar-inner">
         <p className="admin-chip">Admin Workspace</p>
-        <h2 className="mt-3 text-base font-semibold text-slate-900">Control Plane</h2>
-        <p className="mt-2 text-sm text-slate-600">
+        <h2 className="mt-3 text-base font-semibold text-slate-100">Control Plane</h2>
+        <p className="mt-2 text-sm text-slate-400">
           Mappings, bot operations, and shop configuration in one workspace.
         </p>
         <AdminNavigation pathname={pathname} className="mt-6" />

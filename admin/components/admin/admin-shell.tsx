@@ -22,10 +22,10 @@ export function AdminShell({ children, headerSlot }: AdminShellProps) {
             <div className="flex items-center gap-3">
               <AdminMobileNav pathname={pathname} />
               <div className="space-y-0.5">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                   Operations
                 </p>
-                <p className="text-sm font-semibold text-slate-900">Admin Workspace</p>
+                <p className="text-sm font-semibold text-slate-100">Admin Workspace</p>
               </div>
             </div>
             {headerSlot}

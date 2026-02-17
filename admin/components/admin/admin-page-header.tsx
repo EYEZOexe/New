@@ -33,12 +33,12 @@ export function AdminPageHeader({
                 {crumb.href ? (
                   <Link
                     href={crumb.href}
-                    className="font-medium text-slate-600 hover:text-slate-900"
+                    className="font-medium text-slate-300 hover:text-slate-100"
                   >
                     {crumb.label}
                   </Link>
                 ) : (
-                  <span className="font-medium text-slate-900">{crumb.label}</span>
+                  <span className="font-medium text-slate-100">{crumb.label}</span>
                 )}
                 {index < breadcrumbs.length - 1 ? <span>/</span> : null}
               </span>

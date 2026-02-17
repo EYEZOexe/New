@@ -14,6 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Added Sell product lifecycle management directly inside admin policies: operators can list/create/update Sell products via API-backed Convex actions (`sellProducts:*`), reuse product IDs in policy mappings (`productId|slug`), and monitor frontend/backend logs for product sync outcomes. Also completed an admin dark-theme pass across workspace shell surfaces and reworked mappings UX with editable available-channel/mapping rows, scrollable sticky-header tables, and richer recent mirror-job status/error visibility. (2026-02-17)
 - Fixed Sell checkout URL generation mismatch causing 404 storefront links when product policies used numeric IDs: admin catalog auto-checkout now treats numeric-only product IDs as non-resolvable, supports `productId|slug` policy format (for example `349820|basic-plan`) so entitlement matching still uses webhook IDs while checkout links resolve to slug-based storefront URLs, and Convex policy resolution now accepts alias-formatted IDs during webhook matching. (2026-02-17)
 - Completed admin workspace route refactor implementation: admin now uses unified sidebar workspace IA (`/mappings`, `/discord-bot`, `/shop/*`), shared shell/page primitives, canonical route migrations with legacy redirects (`/connectors`, `/discord`, `/payments/*`), and verified route helpers/breadcrumbs coverage in `admin/tests/adminRoutes.test.ts`. (2026-02-17)
 - Completed full `website` dark-theme redesign and componentization pass: home/shop/dashboard/checkout-return/login/signup now share a unified nocturnal visual system, use `shadcn` UI primitives (`Card`, `Button`, `Badge`, `Input`, `Alert`) with reusable site shell components, and dashboard logic is split from a monolithic page into dedicated hook/types/utils/component modules for maintainability. (2026-02-17)
@@ -71,6 +72,7 @@ Backend is Convex.
 - Add operational dashboards/alerts for shop catalog publish validation failures (`policy_link_required`, `policy_link_disabled`, checkout URL validation).
 
 **Blockers / Risks**
+- Sell product CRUD in admin depends on `SELLAPP_API_TOKEN` being configured in Convex runtime env; missing token causes product list/create/update actions to fail (`sell_api_token_missing`).
 - Data migration. We need a clear plan to migrate users/subscriptions/signals into Convex without downtime.
 - Auth and identity mapping. We need one stable user identifier across web, bot, and webhook processing.
 - Convex Auth configuration. Self-hosted Convex must be configured with signing keys/JWKS and correct site URL, otherwise auth flows will fail at runtime.

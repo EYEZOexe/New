@@ -281,7 +281,7 @@ export function ConnectorWorkspace({
   );
   const mirrorJobs = useQuery(
     listMirrorJobs,
-    hasRouteParams ? { tenantKey, connectorId, limit: 10 } : "skip",
+    hasRouteParams ? { tenantKey, connectorId, limit: 50 } : "skip",
   ) ?? [];
 
   const [guildIdFilter, setGuildIdFilter] = useState<string>("");
@@ -291,6 +291,9 @@ export function ConnectorWorkspace({
   const [newSourceIsTarget, setNewSourceIsTarget] = useState(true);
   const [newSourceThreadMode, setNewSourceThreadMode] = useState("");
   const [newSourceEnabled, setNewSourceEnabled] = useState(true);
+  const [editingSourceChannelId, setEditingSourceChannelId] = useState<string | null>(null);
+  const [sourceFormMessage, setSourceFormMessage] = useState<string | null>(null);
+  const [sourceFormError, setSourceFormError] = useState<string | null>(null);
 
   const sourceChannelsArgs = !hasRouteParams
     ? "skip"
@@ -322,13 +325,19 @@ export function ConnectorWorkspace({
   const [newMappingDashboardEnabled, setNewMappingDashboardEnabled] = useState(false);
   const [newMappingMinimumTier, setNewMappingMinimumTier] =
     useState<SubscriptionTier>("basic");
+  const [editingMappingSourceChannelId, setEditingMappingSourceChannelId] = useState<string | null>(
+    null,
+  );
+  const [mappingFormMessage, setMappingFormMessage] = useState<string | null>(null);
+  const [mappingFormError, setMappingFormError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!newSourceGuildId || !newSourceChannelId) return;
+    if (editingSourceChannelId === newSourceChannelId) return;
     if (!sourceChannels.some((channel) => channel.channelId === newSourceChannelId)) {
       setNewSourceChannelId("");
     }
-  }, [newSourceGuildId, newSourceChannelId, sourceChannels]);
+  }, [newSourceGuildId, newSourceChannelId, sourceChannels, editingSourceChannelId]);
 
   const guildNameById = useMemo(
     () => new Map(guilds.map((guild) => [guild.guildId, guild.name])),
@@ -378,13 +387,20 @@ export function ConnectorWorkspace({
   );
 
   useEffect(() => {
+    if (editingMappingSourceChannelId && newMappingSource === editingMappingSourceChannelId) return;
     if (newMappingSource && !mappingSourceOptions.some((channel) => channel.channelId === newMappingSource)) {
       setNewMappingSource("");
     }
     if (newMappingTarget && !mappingTargetOptions.some((channel) => channel.channelId === newMappingTarget)) {
       setNewMappingTarget("");
     }
-  }, [mappingSourceOptions, mappingTargetOptions, newMappingSource, newMappingTarget]);
+  }, [
+    mappingSourceOptions,
+    mappingTargetOptions,
+    newMappingSource,
+    newMappingTarget,
+    editingMappingSourceChannelId,
+  ]);
 
   useEffect(() => {
     if (!mirrorQueueStats || !hasRouteParams) return;
@@ -411,6 +427,98 @@ export function ConnectorWorkspace({
   function renderLatency(value: number | null) {
     if (value === null) return "n/a";
     return `${Math.round(value)}ms`;
+  }
+
+  function formatDateTime(value: number | null | undefined) {
+    if (!value) return "n/a";
+    return new Date(value).toLocaleString();
+  }
+
+  function resetSourceForm() {
+    setEditingSourceChannelId(null);
+    setNewSourceGuildId("");
+    setNewSourceChannelId("");
+    setNewSourceIsSource(true);
+    setNewSourceIsTarget(true);
+    setNewSourceThreadMode("");
+    setNewSourceEnabled(true);
+  }
+
+  function startEditSource(source: SourceRow) {
+    setEditingSourceChannelId(source.channelId);
+    setNewSourceGuildId(source.guildId);
+    setNewSourceChannelId(source.channelId);
+    setNewSourceIsSource(source.isSource ?? true);
+    setNewSourceIsTarget(source.isTarget ?? true);
+    setNewSourceThreadMode(source.threadMode ?? "");
+    setNewSourceEnabled(source.isEnabled);
+    setSourceFormMessage(null);
+    setSourceFormError(null);
+  }
+
+  function cancelEditSource() {
+    resetSourceForm();
+    setSourceFormMessage(null);
+    setSourceFormError(null);
+  }
+
+  function resetMappingForm() {
+    setEditingMappingSourceChannelId(null);
+    setNewMappingSource("");
+    setNewMappingTarget("");
+    setNewMappingPriority("");
+    setNewMappingDashboardEnabled(false);
+    setNewMappingMinimumTier("basic");
+  }
+
+  function startEditMapping(mapping: MappingRow) {
+    setEditingMappingSourceChannelId(mapping.sourceChannelId);
+    setNewMappingSource(mapping.sourceChannelId);
+    setNewMappingTarget(mapping.targetChannelId);
+    setNewMappingPriority(
+      typeof mapping.priority === "number" && Number.isFinite(mapping.priority)
+        ? String(mapping.priority)
+        : "",
+    );
+    setNewMappingDashboardEnabled(mapping.dashboardEnabled === true);
+    setNewMappingMinimumTier(mapping.minimumTier ?? "basic");
+    setMappingFormMessage(null);
+    setMappingFormError(null);
+  }
+
+  function cancelEditMapping() {
+    resetMappingForm();
+    setMappingFormMessage(null);
+    setMappingFormError(null);
+  }
+
+  function renderJobStatusBadge(status: MirrorJobRow["status"]) {
+    if (status === "completed") {
+      return (
+        <span className="rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-300">
+          completed
+        </span>
+      );
+    }
+    if (status === "failed") {
+      return (
+        <span className="rounded-full border border-rose-400/30 bg-rose-500/15 px-2 py-0.5 text-xs font-semibold text-rose-300">
+          failed
+        </span>
+      );
+    }
+    if (status === "processing") {
+      return (
+        <span className="rounded-full border border-amber-400/30 bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-300">
+          processing
+        </span>
+      );
+    }
+    return (
+      <span className="rounded-full border border-slate-500/30 bg-slate-500/20 px-2 py-0.5 text-xs font-semibold text-slate-200">
+        pending
+      </span>
+    );
   }
 
   async function onRotate() {
@@ -449,44 +557,89 @@ export function ConnectorWorkspace({
     }
   }
 
-  async function onAddSource() {
+  async function onSubmitSource() {
     if (!hasRouteParams || !newSourceGuildId || !newSourceChannelId) return;
     if (!newSourceIsSource && !newSourceIsTarget) return;
-    await doUpsertSource({
-      tenantKey,
-      connectorId,
-      guildId: newSourceGuildId,
-      channelId: newSourceChannelId,
-      isSource: newSourceIsSource,
-      isTarget: newSourceIsTarget,
-      threadMode:
-        newSourceThreadMode === "include" ||
-        newSourceThreadMode === "exclude" ||
-        newSourceThreadMode === "only"
-          ? newSourceThreadMode
-          : undefined,
-      isEnabled: newSourceEnabled,
-    });
+    setSourceFormMessage(null);
+    setSourceFormError(null);
+    try {
+      await doUpsertSource({
+        tenantKey,
+        connectorId,
+        guildId: newSourceGuildId,
+        channelId: newSourceChannelId,
+        isSource: newSourceIsSource,
+        isTarget: newSourceIsTarget,
+        threadMode:
+          newSourceThreadMode === "include" ||
+          newSourceThreadMode === "exclude" ||
+          newSourceThreadMode === "only"
+            ? newSourceThreadMode
+            : undefined,
+        isEnabled: newSourceEnabled,
+      });
+      setSourceFormMessage(
+        editingSourceChannelId
+          ? `Updated available channel ${renderChannelLabel(newSourceChannelId)}.`
+          : `Added available channel ${renderChannelLabel(newSourceChannelId)}.`,
+      );
+      console.info(
+        `[admin/connectors] source upsert tenant=${tenantKey} connector=${connectorId} channel=${newSourceChannelId} source=${newSourceIsSource} target=${newSourceIsTarget} enabled=${newSourceEnabled}`,
+      );
+      if (editingSourceChannelId) {
+        setEditingSourceChannelId(null);
+      } else {
+        resetSourceForm();
+      }
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Failed to save available channel";
+      setSourceFormError(text);
+      console.error(`[admin/connectors] source upsert failed: ${text}`);
+    }
   }
 
-  async function onAddMapping() {
+  async function onSubmitMapping() {
     if (!hasRouteParams || !newMappingSource || !newMappingTarget) return;
+    setMappingFormMessage(null);
+    setMappingFormError(null);
     const prio =
       newMappingPriority.trim() === ""
         ? undefined
         : Number(newMappingPriority.trim());
-    await doUpsertMapping({
-      tenantKey,
-      connectorId,
-      sourceChannelId: newMappingSource,
-      targetChannelId: newMappingTarget,
-      dashboardEnabled: newMappingDashboardEnabled,
-      minimumTier: newMappingDashboardEnabled ? newMappingMinimumTier : undefined,
-      priority: Number.isFinite(prio) ? prio : undefined,
-    });
-    console.info(
-      `[admin/connectors] mapping updated tenant=${tenantKey} connector=${connectorId} source=${newMappingSource} target=${newMappingTarget} dashboard_enabled=${newMappingDashboardEnabled} minimum_tier=${newMappingDashboardEnabled ? newMappingMinimumTier : "none"}`,
-    );
+    try {
+      await doUpsertMapping({
+        tenantKey,
+        connectorId,
+        sourceChannelId: newMappingSource,
+        targetChannelId: newMappingTarget,
+        dashboardEnabled: newMappingDashboardEnabled,
+        minimumTier: newMappingDashboardEnabled ? newMappingMinimumTier : undefined,
+        priority: Number.isFinite(prio) ? prio : undefined,
+      });
+      if (
+        editingMappingSourceChannelId &&
+        editingMappingSourceChannelId !== newMappingSource
+      ) {
+        await doRemoveMapping({
+          tenantKey,
+          connectorId,
+          sourceChannelId: editingMappingSourceChannelId,
+        });
+      }
+      setMappingFormMessage(
+        editingMappingSourceChannelId
+          ? `Updated mapping ${renderChannelLabel(newMappingSource)} -> ${renderChannelLabel(newMappingTarget)}.`
+          : `Added mapping ${renderChannelLabel(newMappingSource)} -> ${renderChannelLabel(newMappingTarget)}.`,
+      );
+      console.info(
+        `[admin/connectors] mapping upsert tenant=${tenantKey} connector=${connectorId} source=${newMappingSource} target=${newMappingTarget} dashboard_enabled=${newMappingDashboardEnabled} minimum_tier=${newMappingDashboardEnabled ? newMappingMinimumTier : "none"} priority=${Number.isFinite(prio) ? prio : -1}`,
+      );
+      resetMappingForm();
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Failed to save mapping";
+      setMappingFormError(text);
+      console.error(`[admin/connectors] mapping upsert failed: ${text}`);
+    }
   }
 
   async function onRequestChannels() {
@@ -528,36 +681,36 @@ export function ConnectorWorkspace({
 
       {!hasRouteParams ? (
         <AdminSectionCard>
-          <p className="text-sm text-red-700">
+          <p className="text-sm text-rose-400">
             Missing connector route params. Open this page from the connectors list.
           </p>
         </AdminSectionCard>
       ) : connector === undefined ? (
         <AdminSectionCard>
-          <p className="text-sm text-zinc-600">Loading connector...</p>
+          <p className="text-sm text-slate-400">Loading connector...</p>
         </AdminSectionCard>
       ) : connector === null ? (
         <AdminSectionCard>
-          <p className="text-sm text-red-700">
+          <p className="text-sm text-rose-400">
             Connector not found for this tenant/key pair.
           </p>
         </AdminSectionCard>
       ) : (
         <AdminSectionCard>
           <div className="flex flex-wrap items-center gap-3">
-            <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-800">
+            <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-semibold text-slate-200">
               status: {connector.status}
             </span>
-            <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-800">
+            <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-semibold text-slate-200">
               mirroring: {connector.forwardEnabled === true ? "enabled" : "disabled"}
             </span>
-            <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-800">
+            <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-semibold text-slate-200">
               config: v{connector.configVersion}
             </span>
             <button
               type="button"
               onClick={onToggleStatus}
-              className="h-9 rounded-md border border-zinc-300 bg-white px-4 text-sm font-medium"
+              className="admin-btn-secondary"
             >
               Toggle status
             </button>
@@ -565,7 +718,7 @@ export function ConnectorWorkspace({
               type="button"
               onClick={onRotate}
               disabled={isRotating}
-              className="h-9 rounded-md border border-zinc-300 bg-white px-4 text-sm font-medium disabled:opacity-60"
+              className="admin-btn-secondary"
             >
               {isRotating ? "Rotating..." : "Rotate token"}
             </button>
@@ -573,7 +726,7 @@ export function ConnectorWorkspace({
               type="button"
               onClick={onToggleForwarding}
               disabled={isUpdatingForwarding}
-              className="h-9 rounded-md border border-zinc-300 bg-white px-4 text-sm font-medium disabled:opacity-60"
+              className="admin-btn-secondary"
             >
               {isUpdatingForwarding
                 ? "Updating..."
@@ -587,7 +740,7 @@ export function ConnectorWorkspace({
 
       {lastToken ? (
         <AdminSectionCard title="Connector token">
-          <p className="text-xs font-medium text-zinc-700">Shown once after rotation:</p>
+          <p className="text-xs font-medium text-slate-300">Shown once after rotation:</p>
           <pre className="mt-2 overflow-x-auto rounded-md bg-zinc-900 p-3 text-xs text-zinc-100">
             {lastToken}
           </pre>
@@ -595,7 +748,7 @@ export function ConnectorWorkspace({
       ) : null}
 
       <AdminSectionCard title="Mirror runtime">
-        <div className="text-xs text-zinc-700">
+        <div className="text-xs text-slate-300">
           <p>
             Mirror bot token configured:{" "}
             <strong>{mirrorRuntime?.hasMirrorBotToken ? "yes" : "no"}</strong>
@@ -630,13 +783,12 @@ export function ConnectorWorkspace({
       <div className="grid gap-8 lg:grid-cols-2">
         <div>
           <AdminSectionCard title="Available Channels">
-
-            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+            <div className="admin-surface-soft">
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
+                <label className="admin-label">
                   Guild
                   <select
-                    className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm"
+                    className="admin-input"
                     value={newSourceGuildId}
                     onChange={(e) => setNewSourceGuildId(e.target.value)}
                   >
@@ -648,12 +800,13 @@ export function ConnectorWorkspace({
                     ))}
                   </select>
                 </label>
-                <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
+                <label className="admin-label">
                   Channel
                   <select
-                    className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm"
+                    className="admin-input"
                     value={newSourceChannelId}
                     onChange={(e) => setNewSourceChannelId(e.target.value)}
+                    disabled={Boolean(editingSourceChannelId)}
                   >
                     <option value="">Select channel</option>
                     {sourceChannels.map((channel) => (
@@ -666,10 +819,10 @@ export function ConnectorWorkspace({
               </div>
 
               <div className="mt-3 flex flex-wrap items-end gap-3">
-                <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
+                <label className="admin-label">
                   Thread mode
                   <select
-                    className="h-9 w-40 rounded-md border border-zinc-300 bg-white px-3 text-sm"
+                    className="admin-input w-40"
                     value={newSourceThreadMode}
                     onChange={(e) => setNewSourceThreadMode(e.target.value)}
                   >
@@ -679,7 +832,7 @@ export function ConnectorWorkspace({
                     <option value="only">only</option>
                   </select>
                 </label>
-                <label className="flex items-center gap-2 text-xs font-medium text-zinc-700">
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-300">
                   <input
                     type="checkbox"
                     checked={newSourceEnabled}
@@ -687,7 +840,7 @@ export function ConnectorWorkspace({
                   />
                   Enabled
                 </label>
-                <label className="flex items-center gap-2 text-xs font-medium text-zinc-700">
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-300">
                   <input
                     type="checkbox"
                     checked={newSourceIsSource}
@@ -695,7 +848,7 @@ export function ConnectorWorkspace({
                   />
                   Source
                 </label>
-                <label className="flex items-center gap-2 text-xs font-medium text-zinc-700">
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-300">
                   <input
                     type="checkbox"
                     checked={newSourceIsTarget}
@@ -707,81 +860,110 @@ export function ConnectorWorkspace({
                   type="button"
                   onClick={onRequestChannels}
                   disabled={!newSourceGuildId || isRequestingChannels}
-                  className="h-9 rounded-md border border-zinc-300 bg-white px-4 text-sm font-medium disabled:opacity-60"
+                  className="admin-btn-secondary"
                 >
                   {isRequestingChannels ? "Requesting..." : "Fetch channels"}
                 </button>
-                <button
-                  type="button"
-                  onClick={onAddSource}
-                  className="h-9 rounded-md border border-zinc-300 bg-white px-4 text-sm font-medium"
-                >
-                  Add / update available
+                <button type="button" onClick={onSubmitSource} className="admin-btn-primary">
+                  {editingSourceChannelId ? "Save source" : "Add source"}
                 </button>
+                {editingSourceChannelId ? (
+                  <button type="button" onClick={cancelEditSource} className="admin-btn-secondary">
+                    Cancel
+                  </button>
+                ) : null}
               </div>
-              <p className="mt-3 text-xs text-zinc-600">
+              <p className="mt-3 text-xs text-slate-400">
                 Guilds sync automatically from the plugin. Select a guild, click{" "}
                 <strong>Fetch channels</strong>, pick a channel, and save it as available.
                 Mark whether the channel is usable as a source, target, or both.
                 {lastDiscoveryRequestVersion
                   ? ` Last fetch request: v${lastDiscoveryRequestVersion}.`
                   : ""}
+                {editingSourceChannelId
+                  ? " While editing, channel ID is locked to preserve mapping references."
+                  : ""}
               </p>
+              {sourceFormMessage ? <p className="mt-3 text-sm text-emerald-400">{sourceFormMessage}</p> : null}
+              {sourceFormError ? <p className="mt-3 text-sm text-rose-400">{sourceFormError}</p> : null}
             </div>
           </AdminSectionCard>
 
-          <AdminTableShell title="Configured available channels" isEmpty={sources.length === 0} emptyMessage="No available channels yet.">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-zinc-50 text-xs font-semibold text-zinc-700">
-                  <tr>
-                    <th className="px-3 py-2">Guild</th>
-                    <th className="px-3 py-2">Available Channel</th>
-                    <th className="px-3 py-2">Thread</th>
-                    <th className="px-3 py-2">Enabled</th>
-                    <th className="px-3 py-2">Source</th>
-                    <th className="px-3 py-2">Target</th>
-                    <th className="px-3 py-2">Remove</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sources.map((s) => (
-                    <tr key={s._id} className="border-t border-zinc-200">
-                      <td className="px-3 py-2">{renderGuildLabel(s.guildId)}</td>
-                      <td className="px-3 py-2">{renderChannelLabel(s.channelId)}</td>
-                      <td className="px-3 py-2">{s.threadMode ?? "-"}</td>
-                      <td className="px-3 py-2">{s.isEnabled ? "yes" : "no"}</td>
-                      <td className="px-3 py-2">{(s.isSource ?? true) ? "yes" : "no"}</td>
-                      <td className="px-3 py-2">{(s.isTarget ?? true) ? "yes" : "no"}</td>
-                      <td className="px-3 py-2">
+          <AdminTableShell
+            title="Configured available channels"
+            isEmpty={sources.length === 0}
+            emptyMessage="No available channels yet."
+            tableClassName="max-h-[26rem] overflow-auto"
+          >
+            <table className="w-full text-left text-sm">
+              <thead className="sticky top-0 z-10 bg-slate-900 text-xs font-semibold text-slate-300">
+                <tr>
+                  <th className="px-3 py-2">Guild</th>
+                  <th className="px-3 py-2">Available Channel</th>
+                  <th className="px-3 py-2">Thread</th>
+                  <th className="px-3 py-2">Enabled</th>
+                  <th className="px-3 py-2">Source</th>
+                  <th className="px-3 py-2">Target</th>
+                  <th className="px-3 py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800 bg-slate-950/40 text-slate-200">
+                {sources.map((s) => (
+                  <tr key={s._id}>
+                    <td className="px-3 py-2">{renderGuildLabel(s.guildId)}</td>
+                    <td className="px-3 py-2">{renderChannelLabel(s.channelId)}</td>
+                    <td className="px-3 py-2">{s.threadMode ?? "-"}</td>
+                    <td className="px-3 py-2">{s.isEnabled ? "yes" : "no"}</td>
+                    <td className="px-3 py-2">{(s.isSource ?? true) ? "yes" : "no"}</td>
+                    <td className="px-3 py-2">{(s.isTarget ?? true) ? "yes" : "no"}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
-                          onClick={() =>
-                            doRemoveSource({
-                              tenantKey,
-                              connectorId,
-                              channelId: s.channelId,
-                            })
-                          }
-                          className="text-sm font-medium underline"
+                          onClick={() => startEditSource(s)}
+                          className="text-sm font-medium text-cyan-300 underline"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await doRemoveSource({
+                                tenantKey,
+                                connectorId,
+                                channelId: s.channelId,
+                              });
+                              if (editingSourceChannelId === s.channelId) {
+                                cancelEditSource();
+                              }
+                              setSourceFormMessage(`Removed available channel ${renderChannelLabel(s.channelId)}.`);
+                            } catch (error) {
+                              const text =
+                                error instanceof Error ? error.message : "Failed to remove available channel";
+                              setSourceFormError(text);
+                            }
+                          }}
+                          className="text-sm font-medium text-rose-300 underline"
                         >
                           Remove
                         </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </AdminTableShell>
         </div>
 
         <div>
           <AdminSectionCard title="Mirror Mappings">
-
-            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-              <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
+            <div className="admin-surface-soft">
+              <label className="admin-label">
                 Filter available channels by guild (optional)
                 <select
-                  className="mt-1 h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm"
+                  className="admin-input mt-1"
                   value={guildIdFilter}
                   onChange={(e) => setGuildIdFilter(e.target.value)}
                 >
@@ -795,10 +977,10 @@ export function ConnectorWorkspace({
               </label>
 
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
+                <label className="admin-label">
                   Source (available channel)
                   <select
-                    className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm"
+                    className="admin-input"
                     value={newMappingSource}
                     onChange={(e) => setNewMappingSource(e.target.value)}
                   >
@@ -810,10 +992,10 @@ export function ConnectorWorkspace({
                     ))}
                   </select>
                 </label>
-                <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
+                <label className="admin-label">
                   Target (available channel)
                   <select
-                    className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm"
+                    className="admin-input"
                     value={newMappingTarget}
                     onChange={(e) => setNewMappingTarget(e.target.value)}
                   >
@@ -827,21 +1009,24 @@ export function ConnectorWorkspace({
                 </label>
               </div>
               {availableChannels.length === 0 ? (
-                <p className="mt-3 text-xs text-zinc-600">
+                <p className="mt-3 text-xs text-slate-400">
                   Add enabled available channels on the left before creating mappings.
                 </p>
               ) : mappingSourceOptions.length === 0 || mappingTargetOptions.length === 0 ? (
-                <p className="mt-3 text-xs text-zinc-600">
+                <p className="mt-3 text-xs text-slate-400">
                   Mark at least one available channel as source and one as target to create mappings.
                 </p>
               ) : null}
-              <p className="mt-3 text-xs text-zinc-600">
+              <p className="mt-3 text-xs text-slate-400">
                 These mappings define which target channels the bot mirrors to when connector mirroring is enabled.
                 Dashboard visibility is hidden by default until explicitly enabled with a minimum tier.
+                {editingMappingSourceChannelId
+                  ? " Editing keeps this row in place and updates it directly."
+                  : ""}
               </p>
 
               <div className="mt-3 flex flex-wrap items-end gap-3">
-                <label className="flex items-center gap-2 text-xs font-medium text-zinc-700">
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-300">
                   <input
                     type="checkbox"
                     checked={newMappingDashboardEnabled}
@@ -849,10 +1034,10 @@ export function ConnectorWorkspace({
                   />
                   Visible on dashboard
                 </label>
-                <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
+                <label className="admin-label">
                   Minimum tier
                   <select
-                    className="h-9 w-36 rounded-md border border-zinc-300 bg-white px-3 text-sm"
+                    className="admin-input w-36"
                     value={newMappingMinimumTier}
                     onChange={(e) =>
                       setNewMappingMinimumTier(e.target.value as SubscriptionTier)
@@ -864,105 +1049,148 @@ export function ConnectorWorkspace({
                     <option value="pro">pro</option>
                   </select>
                 </label>
-                <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
+                <label className="admin-label">
                   Priority
                   <input
                     value={newMappingPriority}
                     onChange={(e) => setNewMappingPriority(e.target.value)}
-                    className="h-9 w-32 rounded-md border border-zinc-300 px-3 text-sm"
+                    className="admin-input w-32"
                     placeholder="(optional)"
                   />
                 </label>
-                <button
-                  type="button"
-                  onClick={onAddMapping}
-                  className="h-9 rounded-md border border-zinc-300 bg-white px-4 text-sm font-medium"
-                >
-                  Add / update
+                <button type="button" onClick={onSubmitMapping} className="admin-btn-primary">
+                  {editingMappingSourceChannelId ? "Save mapping" : "Add mapping"}
                 </button>
+                {editingMappingSourceChannelId ? (
+                  <button type="button" onClick={cancelEditMapping} className="admin-btn-secondary">
+                    Cancel
+                  </button>
+                ) : null}
               </div>
+              {mappingFormMessage ? <p className="mt-3 text-sm text-emerald-400">{mappingFormMessage}</p> : null}
+              {mappingFormError ? <p className="mt-3 text-sm text-rose-400">{mappingFormError}</p> : null}
             </div>
           </AdminSectionCard>
 
-          <AdminTableShell title="Configured mirror mappings" isEmpty={mappings.length === 0} emptyMessage="No mappings yet.">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-zinc-50 text-xs font-semibold text-zinc-700">
-                  <tr>
-                    <th className="px-3 py-2">Source (available)</th>
-                    <th className="px-3 py-2">Target (available)</th>
-                    <th className="px-3 py-2">Dashboard</th>
-                    <th className="px-3 py-2">Min tier</th>
-                    <th className="px-3 py-2">Priority</th>
-                    <th className="px-3 py-2">Remove</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mappings.map((m) => (
-                    <tr key={m._id} className="border-t border-zinc-200">
-                      <td className="px-3 py-2">{renderChannelLabel(m.sourceChannelId)}</td>
-                      <td className="px-3 py-2">{renderChannelLabel(m.targetChannelId)}</td>
-                      <td className="px-3 py-2">
-                        {m.dashboardEnabled === true ? (
-                          <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
-                            visible
-                          </span>
-                        ) : (
-                          <span className="rounded bg-zinc-200 px-2 py-0.5 text-xs font-medium text-zinc-700">
-                            hidden
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">{m.minimumTier ?? "-"}</td>
-                      <td className="px-3 py-2">{m.priority ?? "-"}</td>
-                      <td className="px-3 py-2">
+          <AdminTableShell
+            title="Configured mirror mappings"
+            isEmpty={mappings.length === 0}
+            emptyMessage="No mappings yet."
+            tableClassName="max-h-[26rem] overflow-auto"
+          >
+            <table className="w-full text-left text-sm">
+              <thead className="sticky top-0 z-10 bg-slate-900 text-xs font-semibold text-slate-300">
+                <tr>
+                  <th className="px-3 py-2">Source (available)</th>
+                  <th className="px-3 py-2">Target (available)</th>
+                  <th className="px-3 py-2">Dashboard</th>
+                  <th className="px-3 py-2">Min tier</th>
+                  <th className="px-3 py-2">Priority</th>
+                  <th className="px-3 py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800 bg-slate-950/40 text-slate-200">
+                {mappings.map((m) => (
+                  <tr key={m._id}>
+                    <td className="px-3 py-2">{renderChannelLabel(m.sourceChannelId)}</td>
+                    <td className="px-3 py-2">{renderChannelLabel(m.targetChannelId)}</td>
+                    <td className="px-3 py-2">
+                      {m.dashboardEnabled === true ? (
+                        <span className="rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-300">
+                          visible
+                        </span>
+                      ) : (
+                        <span className="rounded-full border border-slate-500/30 bg-slate-600/20 px-2 py-0.5 text-xs font-medium text-slate-200">
+                          hidden
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">{m.minimumTier ?? "-"}</td>
+                    <td className="px-3 py-2">{m.priority ?? "-"}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
-                          onClick={() =>
-                            doRemoveMapping({
-                              tenantKey,
-                              connectorId,
-                              sourceChannelId: m.sourceChannelId,
-                            })
-                          }
-                          className="text-sm font-medium underline"
+                          onClick={() => startEditMapping(m)}
+                          className="text-sm font-medium text-cyan-300 underline"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await doRemoveMapping({
+                                tenantKey,
+                                connectorId,
+                                sourceChannelId: m.sourceChannelId,
+                              });
+                              if (editingMappingSourceChannelId === m.sourceChannelId) {
+                                cancelEditMapping();
+                              }
+                              setMappingFormMessage(
+                                `Removed mapping ${renderChannelLabel(m.sourceChannelId)} -> ${renderChannelLabel(m.targetChannelId)}.`,
+                              );
+                            } catch (error) {
+                              const text = error instanceof Error ? error.message : "Failed to remove mapping";
+                              setMappingFormError(text);
+                            }
+                          }}
+                          className="text-sm font-medium text-rose-300 underline"
                         >
                           Remove
                         </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </AdminTableShell>
 
-          <AdminTableShell title="Recent Mirror Jobs" isEmpty={mirrorJobs.length === 0} emptyMessage="No mirror jobs yet.">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-zinc-50 text-xs font-semibold text-zinc-700">
-                    <tr>
-                      <th className="px-3 py-2">Event</th>
-                      <th className="px-3 py-2">Source</th>
-                      <th className="px-3 py-2">Target</th>
-                      <th className="px-3 py-2">Status</th>
-                      <th className="px-3 py-2">Attempts</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {mirrorJobs.map((job) => (
-                      <tr key={job.jobId} className="border-t border-zinc-200">
-                        <td className="px-3 py-2">{job.eventType}</td>
-                        <td className="px-3 py-2">{renderChannelLabel(job.sourceChannelId)}</td>
-                        <td className="px-3 py-2">{renderChannelLabel(job.targetChannelId)}</td>
-                        <td className="px-3 py-2">
-                          {job.status}
-                          {job.lastError ? ` (${job.lastError})` : ""}
-                        </td>
-                        <td className="px-3 py-2">
-                          {job.attemptCount}/{job.maxAttempts}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          <AdminTableShell
+            title="Recent Mirror Jobs"
+            isEmpty={mirrorJobs.length === 0}
+            emptyMessage="No mirror jobs yet."
+            tableClassName="max-h-[32rem] overflow-auto"
+          >
+            <table className="w-full text-left text-sm">
+              <thead className="sticky top-0 z-10 bg-slate-900 text-xs font-semibold text-slate-300">
+                <tr>
+                  <th className="px-3 py-2">Updated</th>
+                  <th className="px-3 py-2">Event</th>
+                  <th className="px-3 py-2">Route</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Attempts</th>
+                  <th className="px-3 py-2">Run after</th>
+                  <th className="px-3 py-2">Last error</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800 bg-slate-950/40 text-slate-200">
+                {mirrorJobs.map((job) => (
+                  <tr key={job.jobId}>
+                    <td className="px-3 py-2 text-xs text-slate-300">{formatDateTime(job.updatedAt)}</td>
+                    <td className="px-3 py-2 uppercase tracking-wide text-slate-200">{job.eventType}</td>
+                    <td className="px-3 py-2">
+                      <p className="text-xs text-slate-100">{renderChannelLabel(job.sourceChannelId)}</p>
+                      <p className="text-xs text-slate-400">to {renderChannelLabel(job.targetChannelId)}</p>
+                    </td>
+                    <td className="px-3 py-2">{renderJobStatusBadge(job.status)}</td>
+                    <td className="px-3 py-2 text-xs text-slate-300">
+                      {job.attemptCount}/{job.maxAttempts}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-slate-300">{formatDateTime(job.runAfter)}</td>
+                    <td className="px-3 py-2 text-xs">
+                      {job.lastError ? (
+                        <span className="text-rose-300">{job.lastError}</span>
+                      ) : (
+                        <span className="text-slate-500">none</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </AdminTableShell>
         </div>
       </div>

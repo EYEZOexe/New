@@ -30,9 +30,9 @@ export function AdminTableShell({
   return (
     <AdminSectionCard title={title} description={description} actions={actions} className={className}>
       {isLoading ? (
-        <p className="text-sm text-slate-600">{loadingMessage}</p>
+        <p className="text-sm text-slate-400">{loadingMessage}</p>
       ) : isEmpty ? (
-        <p className="text-sm text-slate-600">{emptyMessage}</p>
+        <p className="text-sm text-slate-400">{emptyMessage}</p>
       ) : (
         <div className={cn("admin-table-shell", tableClassName)}>{children}</div>
       )}

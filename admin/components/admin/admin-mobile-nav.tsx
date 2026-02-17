@@ -20,9 +20,9 @@ export function AdminMobileNav({ pathname }: AdminMobileNavProps) {
           <Menu className="size-4" />
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="w-80 gap-0 border-r bg-white p-0">
-        <SheetHeader className="border-b p-5">
-          <SheetTitle className="text-left text-base">Admin Workspace</SheetTitle>
+      <SheetContent side="left" className="w-80 gap-0 border-r border-slate-800 bg-slate-950 p-0 text-slate-100">
+        <SheetHeader className="border-b border-slate-800 p-5">
+          <SheetTitle className="text-left text-base text-slate-100">Admin Workspace</SheetTitle>
         </SheetHeader>
         <div className="p-5">
           <AdminNavigation pathname={pathname} onNavigate={() => setOpen(false)} />

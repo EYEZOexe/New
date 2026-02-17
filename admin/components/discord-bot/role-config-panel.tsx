@@ -174,7 +174,7 @@ export function RoleConfigPanel({ breadcrumbs }: RoleConfigPanelProps) {
       />
 
       <AdminSectionCard title="Runtime status">
-        <div className="space-y-1 text-xs text-zinc-700">
+        <div className="space-y-1 text-xs text-slate-300">
           <p>
             Role sync bot token configured:{" "}
             <strong>{runtimeStatus?.hasRoleSyncBotToken ? "yes" : "no"}</strong>
@@ -189,8 +189,8 @@ export function RoleConfigPanel({ breadcrumbs }: RoleConfigPanelProps) {
             </p>
           ) : null}
         </div>
-        {message ? <p className="mt-4 text-sm text-emerald-700">{message}</p> : null}
-        {error ? <p className="mt-4 text-sm text-red-700">{error}</p> : null}
+        {message ? <p className="mt-4 text-sm text-emerald-400">{message}</p> : null}
+        {error ? <p className="mt-4 text-sm text-rose-400">{error}</p> : null}
       </AdminSectionCard>
 
       <div className="space-y-4">
@@ -221,7 +221,7 @@ export function RoleConfigPanel({ breadcrumbs }: RoleConfigPanelProps) {
               </div>
 
               <div className="mt-3 flex flex-wrap items-center gap-3">
-                <label className="flex items-center gap-2 text-xs font-medium text-zinc-700">
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-300">
                   <input
                     type="checkbox"
                     checked={draft.enabled}

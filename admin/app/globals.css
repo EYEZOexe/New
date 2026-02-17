@@ -32,22 +32,22 @@
 
 :root {
   --radius: 0.875rem;
-  --background: oklch(0.985 0.006 245);
-  --foreground: oklch(0.19 0.022 250);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.19 0.022 250);
-  --primary: oklch(0.44 0.09 238);
-  --primary-foreground: oklch(0.98 0.01 255);
-  --secondary: oklch(0.95 0.012 250);
-  --secondary-foreground: oklch(0.23 0.02 250);
-  --muted: oklch(0.96 0.008 250);
-  --muted-foreground: oklch(0.49 0.025 250);
-  --accent: oklch(0.91 0.026 220);
-  --accent-foreground: oklch(0.24 0.04 240);
+  --background: oklch(0.18 0.02 255);
+  --foreground: oklch(0.95 0.01 255);
+  --card: oklch(0.24 0.02 255);
+  --card-foreground: oklch(0.95 0.01 255);
+  --primary: oklch(0.63 0.13 220);
+  --primary-foreground: oklch(0.13 0.015 255);
+  --secondary: oklch(0.28 0.018 252);
+  --secondary-foreground: oklch(0.93 0.01 255);
+  --muted: oklch(0.28 0.014 252);
+  --muted-foreground: oklch(0.72 0.02 252);
+  --accent: oklch(0.31 0.03 228);
+  --accent-foreground: oklch(0.95 0.012 252);
   --destructive: oklch(0.62 0.22 27);
-  --border: oklch(0.9 0.012 250);
-  --input: oklch(0.92 0.01 250);
-  --ring: oklch(0.52 0.08 238);
+  --border: oklch(0.34 0.015 252);
+  --input: oklch(0.32 0.015 252);
+  --ring: oklch(0.67 0.12 220);
 }
 
 @layer base {
@@ -58,9 +58,9 @@
   body {
     @apply bg-background text-foreground antialiased;
     background-image:
-      radial-gradient(circle at 10% -10%, oklch(0.93 0.045 225 / 0.45), transparent 40%),
-      radial-gradient(circle at 100% 0%, oklch(0.92 0.03 255 / 0.35), transparent 45%),
-      linear-gradient(180deg, oklch(0.99 0.004 255), oklch(0.975 0.008 250));
+      radial-gradient(circle at 10% -10%, oklch(0.34 0.12 220 / 0.42), transparent 42%),
+      radial-gradient(circle at 100% 0%, oklch(0.29 0.09 260 / 0.3), transparent 45%),
+      linear-gradient(180deg, oklch(0.2 0.02 255), oklch(0.17 0.018 255));
     min-height: 100vh;
   }
 }
@@ -75,11 +75,11 @@
   }
 
   .admin-surface {
-    @apply rounded-3xl border bg-white/90 p-6 shadow-sm backdrop-blur-md md:p-8;
+    @apply rounded-3xl border border-slate-800/80 bg-slate-950/70 p-6 shadow-sm backdrop-blur-md md:p-8;
   }
 
   .admin-surface-soft {
-    @apply rounded-2xl border bg-slate-50/80 p-4;
+    @apply rounded-2xl border border-slate-800/90 bg-slate-900/55 p-4;
   }
 
   .admin-grid {
@@ -87,39 +87,39 @@
   }
 
   .admin-title {
-    @apply text-3xl font-semibold tracking-tight text-slate-900;
+    @apply text-3xl font-semibold tracking-tight text-slate-100;
   }
 
   .admin-subtitle {
-    @apply mt-2 text-sm text-slate-600;
+    @apply mt-2 text-sm text-slate-400;
   }
 
   .admin-chip {
-    @apply inline-flex items-center rounded-full border bg-white px-3 py-1 text-xs font-semibold text-slate-700;
+    @apply inline-flex items-center rounded-full border border-cyan-400/40 bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-200;
   }
 
   .admin-label {
-    @apply flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-slate-600;
+    @apply flex flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-slate-300;
   }
 
   .admin-input {
-    @apply h-10 rounded-xl border bg-white px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200 disabled:opacity-60;
+    @apply h-10 rounded-xl border border-slate-700 bg-slate-950/70 px-3 text-sm text-slate-100 shadow-sm outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-900 disabled:opacity-60;
   }
 
   .admin-textarea {
-    @apply min-h-24 rounded-xl border bg-white p-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200 disabled:opacity-60;
+    @apply min-h-24 rounded-xl border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-100 shadow-sm outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-900 disabled:opacity-60;
   }
 
   .admin-btn-primary {
-    @apply inline-flex h-10 items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60;
+    @apply inline-flex h-10 items-center justify-center rounded-xl bg-cyan-500 px-4 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-60;
   }
 
   .admin-btn-secondary {
-    @apply inline-flex h-10 items-center justify-center rounded-xl border bg-white px-4 text-sm font-semibold text-slate-800 transition hover:bg-slate-100 disabled:opacity-60;
+    @apply inline-flex h-10 items-center justify-center rounded-xl border border-slate-700 bg-slate-900/60 px-4 text-sm font-semibold text-slate-100 transition hover:bg-slate-800 disabled:opacity-60;
   }
 
   .admin-link {
-    @apply text-sm font-semibold text-slate-700 underline-offset-2 transition hover:text-slate-900 hover:underline;
+    @apply text-sm font-semibold text-cyan-300 underline-offset-2 transition hover:text-cyan-200 hover:underline;
   }
 
   .admin-workspace {
@@ -127,11 +127,11 @@
   }
 
   .admin-workspace-sidebar {
-    @apply sticky top-0 h-screen border-r border-slate-200/80 bg-white/80 px-4 py-6 backdrop-blur-md;
+    @apply sticky top-0 h-screen border-r border-slate-800/90 bg-slate-950/75 px-4 py-6 backdrop-blur-md;
   }
 
   .admin-workspace-sidebar-inner {
-    @apply rounded-2xl border border-slate-200/80 bg-white/75 p-4;
+    @apply rounded-2xl border border-slate-800/80 bg-slate-900/65 p-4;
   }
 
   .admin-workspace-main {
@@ -139,7 +139,7 @@
   }
 
   .admin-workspace-topbar {
-    @apply sticky top-0 z-20 border-b border-slate-200/80 bg-white/85 px-4 py-3 backdrop-blur-md md:px-8;
+    @apply sticky top-0 z-20 border-b border-slate-800/80 bg-slate-950/80 px-4 py-3 backdrop-blur-md md:px-8;
   }
 
   .admin-workspace-topbar-inner {
@@ -151,22 +151,22 @@
   }
 
   .admin-workspace-nav-link {
-    @apply flex items-center rounded-xl px-2 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900;
+    @apply flex items-center rounded-xl px-2 py-2 text-sm font-medium text-slate-300 transition hover:bg-slate-800 hover:text-slate-100;
   }
 
   .admin-workspace-nav-link-active {
-    @apply bg-slate-900 text-white hover:bg-slate-800 hover:text-white;
+    @apply bg-cyan-500 text-slate-950 hover:bg-cyan-400 hover:text-slate-950;
   }
 
   .admin-page-header {
-    @apply rounded-3xl border border-slate-200/80 bg-white/90 p-6 shadow-sm backdrop-blur-sm md:p-8;
+    @apply rounded-3xl border border-slate-800/80 bg-slate-950/70 p-6 shadow-sm backdrop-blur-sm md:p-8;
   }
 
   .admin-section-card {
-    @apply rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm md:p-6;
+    @apply rounded-2xl border border-slate-800/80 bg-slate-950/65 p-5 shadow-sm md:p-6;
   }
 
   .admin-table-shell {
-    @apply overflow-x-auto rounded-xl border border-slate-200;
+    @apply overflow-x-auto rounded-xl border border-slate-800;
   }
 }

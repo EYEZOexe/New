@@ -109,7 +109,7 @@ export default function MappingsPage() {
 
         {lastToken ? (
           <div className="mt-4">
-            <p className="text-xs font-medium text-zinc-700">Connector token (shown once):</p>
+            <p className="text-xs font-medium text-slate-300">Connector token (shown once):</p>
             <pre className="mt-2 overflow-x-auto rounded-md bg-zinc-900 p-3 text-xs text-zinc-100">
               {lastToken}
             </pre>
@@ -124,7 +124,7 @@ export default function MappingsPage() {
         emptyMessage="No connectors yet."
       >
         <table className="w-full text-left text-sm">
-          <thead className="bg-zinc-50 text-xs font-semibold text-zinc-700">
+          <thead className="sticky top-0 bg-slate-900 text-xs font-semibold text-slate-300">
             <tr>
               <th className="px-3 py-2">Tenant</th>
               <th className="px-3 py-2">Connector</th>
@@ -135,9 +135,9 @@ export default function MappingsPage() {
               <th className="px-3 py-2">Open</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-800 bg-slate-950/40 text-slate-200">
             {connectors?.map((connector) => (
-              <tr key={connector._id} className="border-t border-zinc-200">
+              <tr key={connector._id}>
                 <td className="px-3 py-2">{connector.tenantKey}</td>
                 <td className="px-3 py-2">{connector.connectorId}</td>
                 <td className="px-3 py-2">{connector.status}</td>
@@ -150,7 +150,7 @@ export default function MappingsPage() {
                 </td>
                 <td className="px-3 py-2">
                   <Link
-                    className="font-medium underline"
+                    className="font-medium text-cyan-300 underline"
                     href={`/mappings/${encodeURIComponent(connector.tenantKey)}/${encodeURIComponent(
                       connector.connectorId,
                     )}`}

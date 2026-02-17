@@ -83,9 +83,10 @@ export default function ShopCustomersPage() {
         isLoading={!rows}
         isEmpty={rows !== undefined && rows.length === 0}
         emptyMessage="No payment customer mappings found."
+        tableClassName="max-h-[34rem] overflow-auto"
       >
-        <table className="min-w-full divide-y divide-zinc-200 text-sm">
-          <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-600">
+        <table className="min-w-full divide-y divide-slate-800 text-sm">
+          <thead className="sticky top-0 bg-slate-900 text-left text-xs uppercase tracking-wide text-slate-300">
             <tr>
               <th className="px-3 py-2">User</th>
               <th className="px-3 py-2">Subscription</th>
@@ -97,31 +98,31 @@ export default function ShopCustomersPage() {
               <th className="px-3 py-2">Updated</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-200">
+          <tbody className="divide-y divide-slate-800 bg-slate-950/40">
             {rows?.map((row) => (
               <tr key={`${row.provider}:${row.userId}:${row.externalSubscriptionId ?? "none"}`}>
                 <td className="px-3 py-3 align-top">
-                  <p className="font-medium text-zinc-900">{row.userEmail ?? row.userId}</p>
-                  <p className="mt-1 font-mono text-xs text-zinc-500">{row.userId}</p>
-                  <p className="mt-1 text-xs text-zinc-500">
+                  <p className="font-medium text-slate-100">{row.userEmail ?? row.userId}</p>
+                  <p className="mt-1 font-mono text-xs text-slate-400">{row.userId}</p>
+                  <p className="mt-1 text-xs text-slate-400">
                     customer email: {row.customerEmail ?? "n/a"}
                   </p>
                 </td>
-                <td className="px-3 py-3 align-top text-zinc-700">{row.subscriptionStatus ?? "none"}</td>
-                <td className="px-3 py-3 align-top text-zinc-700">{row.tier ?? "n/a"}</td>
-                <td className="px-3 py-3 align-top text-xs text-zinc-700">
+                <td className="px-3 py-3 align-top text-slate-300">{row.subscriptionStatus ?? "none"}</td>
+                <td className="px-3 py-3 align-top text-slate-300">{row.tier ?? "n/a"}</td>
+                <td className="px-3 py-3 align-top text-xs text-slate-300">
                   {row.endsAt ? new Date(row.endsAt).toLocaleString() : "n/a"}
                 </td>
-                <td className="px-3 py-3 align-top font-mono text-xs text-zinc-700">
+                <td className="px-3 py-3 align-top font-mono text-xs text-slate-300">
                   {row.externalCustomerId ?? "n/a"}
                 </td>
-                <td className="px-3 py-3 align-top font-mono text-xs text-zinc-700">
+                <td className="px-3 py-3 align-top font-mono text-xs text-slate-300">
                   {row.externalSubscriptionId ?? "n/a"}
                 </td>
-                <td className="px-3 py-3 align-top font-mono text-xs text-zinc-700">
+                <td className="px-3 py-3 align-top font-mono text-xs text-slate-300">
                   {row.lastEventId ?? "n/a"}
                 </td>
-                <td className="px-3 py-3 align-top text-xs text-zinc-700">
+                <td className="px-3 py-3 align-top text-xs text-slate-300">
                   {new Date(row.updatedAt).toLocaleString()}
                 </td>
               </tr>
