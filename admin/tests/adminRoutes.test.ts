@@ -42,3 +42,10 @@ describe("discord bot route", () => {
     expect(state.activeItem).toBe("discord-bot");
   });
 });
+
+describe("shop grouping", () => {
+  it("marks shop group active for policies route", () => {
+    const state = getAdminNavState("/shop/policies");
+    expect(state.activeGroup).toBe("shop");
+  });
+});
