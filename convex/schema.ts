@@ -42,6 +42,10 @@ export default defineSchema({
     connectorId: v.string(),
     sourceChannelId: v.string(),
     targetChannelId: v.string(),
+    dashboardEnabled: v.optional(v.boolean()),
+    minimumTier: v.optional(
+      v.union(v.literal("basic"), v.literal("advanced"), v.literal("pro")),
+    ),
     filtersJson: v.optional(v.any()),
     transformJson: v.optional(v.any()),
     priority: v.optional(v.number()),
@@ -134,6 +138,37 @@ export default defineSchema({
     .index("by_scope_externalId", ["scope", "externalId"])
     .index("by_enabled", ["enabled"])
     .index("by_tier", ["tier"]),
+
+  shopTiers: defineTable({
+    tier: v.union(v.literal("basic"), v.literal("advanced"), v.literal("pro")),
+    title: v.string(),
+    subtitle: v.optional(v.string()),
+    badge: v.optional(v.string()),
+    description: v.optional(v.string()),
+    sortOrder: v.number(),
+    active: v.boolean(),
+    updatedAt: v.number(),
+  })
+    .index("by_tier", ["tier"])
+    .index("by_active_sortOrder", ["active", "sortOrder"]),
+
+  shopVariants: defineTable({
+    tier: v.union(v.literal("basic"), v.literal("advanced"), v.literal("pro")),
+    durationDays: v.number(),
+    displayPrice: v.string(),
+    priceSuffix: v.optional(v.string()),
+    checkoutUrl: v.string(),
+    highlights: v.optional(v.array(v.string())),
+    isFeatured: v.optional(v.boolean()),
+    sortOrder: v.optional(v.number()),
+    active: v.boolean(),
+    policyScope: v.union(v.literal("product"), v.literal("variant")),
+    policyExternalId: v.string(),
+    updatedAt: v.number(),
+  })
+    .index("by_tier_durationDays", ["tier", "durationDays"])
+    .index("by_active_tier_sortOrder", ["active", "tier", "sortOrder"])
+    .index("by_policy_link", ["policyScope", "policyExternalId"]),
 
   paymentCustomers: defineTable({
     provider: v.string(),
