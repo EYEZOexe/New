@@ -14,6 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Approved Phase 6 product/UX design for website/admin modernization: tier-first shop with admin-managed catalog, realtime checkout-return/dashboard state, website-only tier-gated dashboard signal visibility (default hidden until explicitly configured), and worker queue architecture upgrade from fixed ultra-low polling to event-driven wakeups with bounded fallback polling to reduce empty claim spam while preserving low-latency mirroring targets. (2026-02-17)
 - Completed Phase 5 attachment hardening across ingest, dashboard, and mirror paths: ingest now normalizes/stores Discord attachment references with IDs (`attachmentId`) and URL/type/size sanitization, signal queries expose sanitized attachment refs with backend attachment-count diagnostics, dashboard now enforces safe attachment rendering (type/size-aware image preview limits + blocked executable-type handling) while preserving stable attachment links, and mirror payload attachment contracts are aligned end-to-end. (2026-02-17)
 - Closed Phase 4 mirror reliability/observability gaps: Convex mirror completion now distinguishes terminal vs retryable Discord failures (including retry-after aware requeue), stores mirrored extra image message IDs for deterministic cleanup, and admin connector detail now shows mirror latency stats (`create`/`update`/`delete` p95 over last 60m) alongside queue/runtime status to enforce the `<100ms` target. (2026-02-17)
 - Upgraded mirror message formatting for customer channels: bot now posts signal content as Discord embeds, includes non-image attachments in embed fields, and posts multi-image attachments as sequential raw image messages below the embed, with extra mirrored message IDs tracked for update/delete cleanup. (2026-02-16)
@@ -59,6 +60,8 @@ Backend is Convex.
 
 **Next**
 - Add scheduled payment reconciliation and alerting for webhook drift/failure spikes.
+- Implement Phase 6 storefront/admin redesign and tier-gated dashboard visibility per approved design.
+- Replace high-frequency mirror/role claim polling loops with event-driven worker wakeups to reduce backend mutation noise without regressing mirror latency.
 
 **Blockers / Risks**
 - Data migration. We need a clear plan to migrate users/subscriptions/signals into Convex without downtime.
@@ -74,6 +77,7 @@ Backend is Convex.
 - Bun migration consistency. Build and CI/deploy tooling must stay aligned with Bun lockfiles/workspaces or deployments will fail before app startup.
 - Webhook idempotency and retries. We need to guarantee "at least once" delivery does not create duplicate state.
 - Performance. Sub-100ms p95 delivery requires careful schema/indexing and realtime subscriptions; polling is not acceptable on the critical path.
+- Worker queue claim noise. Current fixed-interval claim loops can generate frequent empty claim mutations when queues are idle/misconfigured; migrate to event-driven wakeups to avoid unnecessary load and noisy observability streams.
 
 ## Milestones (Phases)
 
@@ -146,6 +150,19 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
 - [x] Mirror attachments to Discord where appropriate (2026-02-17)
   Exit criteria: mirrored messages include attachments or stable links.
 
+### Phase 6: Storefront + Admin UX + Tier-Gated Dashboard
+
+Goal: deliver a conversion-focused shop/admin experience and enforce tier-based dashboard signal visibility.
+
+- [ ] Add admin-managed shop catalog domain (tiers + per-tier duration variants + policy linkage)
+  Exit criteria: operator can manage presentation variants without modifying enforcement policy logic.
+- [ ] Add website tier-first shop + checkout-return state powered by realtime Convex data
+  Exit criteria: customer can select tier/duration and launch external Sell checkout from a polished storefront.
+- [ ] Enforce website-only dashboard visibility by mapping/channel minimum tier rules
+  Exit criteria: signal feed content is filtered by subscription tier with hidden-by-default mapping behavior.
+- [ ] Replace worker fixed low-interval claim loops with event-driven queue wakeups
+  Exit criteria: idle queue claim mutation spam is significantly reduced while maintaining low-latency processing when jobs arrive.
+
 ## Checklists / Hygiene
 
 - [x] Reset docs and roadmap for Convex migration (2026-02-14)
@@ -217,8 +234,11 @@ Goal: attachments are preserved and accessible across dashboard + mirror.
 | 2026-02-15 | Use `convex-backend.g3netic.com` as backend origin and `convex.g3netic.com` as site/dashboard origin in env docs | N/A |
 | 2026-02-16 | Self-hosted Convex auth routes are served under `/http`; `CONVEX_SITE_URL` must use backend `/http` origin | N/A |
 | 2026-02-16 | `NEXT_PUBLIC_CONVEX_URL` must not include `/http` to avoid websocket sync 404s (`/http/api/*`) | N/A |
+| 2026-02-17 | Adopt split-domain Phase 6 architecture (policy enforcement separated from shop catalog), website-only tier-gated dashboard visibility, and event-driven worker queue wakeups replacing fixed ultra-low polling | `docs/plans/2026-02-17-shop-admin-redesign-design.md` |
 
 ## Links
 
 - Convex adoption design: `docs/plans/2026-02-14-convex-adoption-design.md`
 - Convex adoption plan: `docs/plans/2026-02-14-convex-adoption-plan.md`
+- Shop/admin redesign design: `docs/plans/2026-02-17-shop-admin-redesign-design.md`
+- Shop/admin redesign implementation plan: `docs/plans/2026-02-17-shop-admin-redesign-plan.md`
