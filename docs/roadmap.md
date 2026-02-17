@@ -14,6 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Approved full admin workspace refactor design + execution plan for a sidebar-first route architecture (`/mappings`, `/discord-bot`, `/shop/*`) with mobile drawer behavior, legacy-route redirects, and strict functionality preservation requirements before implementation begins. (2026-02-17)
 - Completed full `website` dark-theme redesign and componentization pass: home/shop/dashboard/checkout-return/login/signup now share a unified nocturnal visual system, use `shadcn` UI primitives (`Card`, `Button`, `Badge`, `Input`, `Alert`) with reusable site shell components, and dashboard logic is split from a monolithic page into dedicated hook/types/utils/component modules for maintainability. (2026-02-17)
 - Completed component-structure cleanup for redesigned catalog/shop surfaces: `admin` catalog now uses a split hook+component architecture (no monolithic page), and `website` shop now uses `useShopCatalog` + dedicated hero/tier card components with lighter render work and stable selection state updates. (2026-02-17)
 - Synced self-hosted Convex env variables from `website/.env.example` for non-placeholder keys via CLI; `CONVEX_SITE_URL` remains deployment-managed because Convex rejects overriding built-in env var names via `convex env set`. (2026-02-17)
@@ -242,6 +243,8 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
 | 2026-02-17 | Adopt split-domain Phase 6 architecture (policy enforcement separated from shop catalog), website-only tier-gated dashboard visibility, and event-driven worker queue wakeups replacing fixed ultra-low polling | `docs/plans/2026-02-17-shop-admin-redesign-design.md` |
 | 2026-02-17 | Execute Phase 6 implementation plan across Convex/admin/website/Discord-Bot with verification and roadmap sync | `docs/plans/2026-02-17-shop-admin-redesign-plan.md` |
 | 2026-02-17 | Remove manual per-variant checkout URL authoring in admin catalog default flow; auto-build checkout from selected Sell product policy + storefront origin with custom override only for edge cases | N/A |
+| 2026-02-17 | Approve full admin workspace route rewrite centered on sidebar IA (`Mappings`, `Discord Bot`, `Shop`) with route migrations + redirects | `docs/plans/2026-02-17-admin-workspace-refactor-design.md` |
+| 2026-02-17 | Define implementation task plan for admin workspace refactor with verification gates (`typecheck`, `build`, smoke checks) | `docs/plans/2026-02-17-admin-workspace-refactor-plan.md` |
 
 ## Links
 
@@ -249,3 +252,5 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
 - Convex adoption plan: `docs/plans/2026-02-14-convex-adoption-plan.md`
 - Shop/admin redesign design: `docs/plans/2026-02-17-shop-admin-redesign-design.md`
 - Shop/admin redesign implementation plan: `docs/plans/2026-02-17-shop-admin-redesign-plan.md`
+- Admin workspace refactor design: `docs/plans/2026-02-17-admin-workspace-refactor-design.md`
+- Admin workspace refactor implementation plan: `docs/plans/2026-02-17-admin-workspace-refactor-plan.md`
