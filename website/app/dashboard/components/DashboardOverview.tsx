@@ -27,30 +27,34 @@ type DashboardOverviewProps = {
 
 export function DashboardOverview(props: DashboardOverviewProps) {
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <Card className="site-panel">
-        <CardHeader className="pb-2">
+    <div className="grid gap-5 lg:grid-cols-3">
+      <Card className="site-panel h-full">
+        <CardHeader className="px-0 pb-3">
           <CardTitle className="text-base">Subscription</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-3 px-0">
           <div className="flex items-center gap-2">
             <Badge variant="outline">Status: {props.viewer?.subscriptionStatus ?? "inactive"}</Badge>
             <Badge variant="outline">Tier: {props.viewer?.tier ?? "none"}</Badge>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Expires:{" "}
-            {props.viewer?.subscriptionEndsAt
-              ? new Date(props.viewer.subscriptionEndsAt).toLocaleString()
-              : "n/a"}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Time left:{" "}
-            {props.hasRemainingTime
-              ? props.remainingText
-              : props.viewer?.subscriptionEndsAt
-                ? "expired"
+
+          <div className="site-soft space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Expires:{" "}
+              {props.viewer?.subscriptionEndsAt
+                ? new Date(props.viewer.subscriptionEndsAt).toLocaleString()
                 : "n/a"}
-          </p>
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Time left:{" "}
+              {props.hasRemainingTime
+                ? props.remainingText
+                : props.viewer?.subscriptionEndsAt
+                  ? "expired"
+                  : "n/a"}
+            </p>
+          </div>
+
           {!props.hasSignalAccess ? (
             <Alert className="border-amber-400/40 bg-amber-500/10">
               <AlertDescription className="text-amber-100/90">
@@ -61,16 +65,20 @@ export function DashboardOverview(props: DashboardOverviewProps) {
         </CardContent>
       </Card>
 
-      <Card className="site-panel">
-        <CardHeader className="pb-2">
+      <Card className="site-panel h-full">
+        <CardHeader className="px-0 pb-3">
           <CardTitle className="text-base">Visibility</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-3 px-0">
           <Badge variant="outline">Configured channels: {props.configuredVisibleCount}</Badge>
-          <p className="text-sm text-muted-foreground">
-            Available for your tier: {props.visibleMappingsCount}
-            {props.lockedMappings > 0 ? ` (locked: ${props.lockedMappings})` : ""}
-          </p>
+          <div className="site-soft space-y-1.5">
+            <p className="text-sm text-muted-foreground">
+              Available for your tier: {props.visibleMappingsCount}
+            </p>
+            {props.lockedMappings > 0 ? (
+              <p className="text-sm text-muted-foreground">Locked above your tier: {props.lockedMappings}</p>
+            ) : null}
+          </div>
           {props.lockedMappings > 0 ? (
             <Alert className="border-amber-400/40 bg-amber-500/10">
               <AlertDescription className="text-amber-100/90">
@@ -85,12 +93,12 @@ export function DashboardOverview(props: DashboardOverviewProps) {
         </CardContent>
       </Card>
 
-      <Card className="site-panel">
-        <CardHeader className="pb-2">
+      <Card className="site-panel h-full">
+        <CardHeader className="px-0 pb-3">
           <CardTitle className="text-base">Discord Link</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm">
+        <CardContent className="space-y-3 px-0">
+          <p className="text-sm break-all">
             {props.isDiscordLinked
               ? `${props.viewerDiscordLink?.username ?? "Linked"} (${props.viewerDiscordLink?.discordUserId})`
               : "Not linked"}
@@ -118,6 +126,7 @@ export function DashboardOverview(props: DashboardOverviewProps) {
             <Button
               size="sm"
               variant="outline"
+              className="rounded-full"
               onClick={props.onStartDiscordLink}
               disabled={props.isCompletingDiscordLink || props.isUnlinkingDiscord}
             >
@@ -126,6 +135,7 @@ export function DashboardOverview(props: DashboardOverviewProps) {
             <Button
               size="sm"
               variant="outline"
+              className="rounded-full"
               onClick={props.onUnlinkDiscord}
               disabled={!props.isDiscordLinked || props.isUnlinkingDiscord || props.isCompletingDiscordLink}
             >

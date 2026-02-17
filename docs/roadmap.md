@@ -14,6 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Completed SaaS website layout polish across home/login/signup/dashboard: introduced stronger header IA with metric callouts, cleaner responsive content hierarchy (including two-column auth layouts), improved visual rhythm/typography tokens, and refined dashboard signal-card readability for long IDs/content/attachments. (2026-02-17)
 - Fixed intermittent signal attachment drops in Convex ingest dedupe/update flow: sparse non-delete events (empty attachment arrays) now preserve previously stored attachment refs instead of overwriting them, with backend diagnostics (`[ingest] preserved existing attachment refs...`) plus regression tests in `website/tests/ingestAttachmentMerge.test.js`. (2026-02-17)
 - Hardened Sell payment-method loading in admin wizard: `sellProducts:listSellPaymentMethods` now fails soft (no client-thrown server error) and supports terminal-configured fallback methods via `SELLAPP_DEFAULT_PAYMENT_METHODS` when API discovery returns none/errors; wizard Step 3 now shows the terminal command hint for setting fallback defaults. (2026-02-17)
 - Fixed Sell wizard payment method failures (`The selected payment_methods.0 is invalid`): admin Step 3 now loads selectable payment methods from Sell product variant API data (`sellProducts:listSellPaymentMethods`) instead of hardcoding `STRIPE`, and Convex variant upsert now only sends `payment_methods` when valid methods are provided/discovered (otherwise it defers to Sell defaults). (2026-02-17)
@@ -178,6 +179,8 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
   Exit criteria: idle queue claim mutation spam is significantly reduced while maintaining low-latency processing when jobs arrive.
 - [x] Refactor admin workspace IA to sidebar-based route domains (`/mappings`, `/discord-bot`, `/shop/*`) with legacy redirects and shared shell/page composition primitives (2026-02-17)
   Exit criteria: canonical admin routes use shared workspace shell + breadcrumbs/header/table primitives, legacy paths redirect, and admin route helper tests pass.
+- [x] Polish website layout hierarchy and responsive UX for home/auth/dashboard surfaces (2026-02-17)
+  Exit criteria: shared page/header primitives enforce clearer visual hierarchy and spacing, auth pages use split informational + form layout on desktop, and dashboard feed cards remain readable for long metadata/content.
 
 ## Checklists / Hygiene
 
@@ -255,6 +258,7 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
 | 2026-02-17 | Remove manual per-variant checkout URL authoring in admin catalog default flow; auto-build checkout from selected Sell product policy + storefront origin with custom override only for edge cases | N/A |
 | 2026-02-17 | Approve full admin workspace route rewrite centered on sidebar IA (`Mappings`, `Discord Bot`, `Shop`) with route migrations + redirects | `docs/plans/2026-02-17-admin-workspace-refactor-design.md` |
 | 2026-02-17 | Define implementation task plan for admin workspace refactor with verification gates (`typecheck`, `build`, smoke checks) | `docs/plans/2026-02-17-admin-workspace-refactor-plan.md` |
+| 2026-02-17 | Apply website UI layout polish pass focused on hierarchy, responsive composition, and feed readability across home/auth/dashboard | N/A |
 
 ## Links
 

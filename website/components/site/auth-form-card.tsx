@@ -22,35 +22,43 @@ export function AuthFormCard(props: AuthFormCardProps) {
   const isLogin = props.mode === "login";
 
   return (
-    <Card className="site-panel mx-auto w-full max-w-md">
-      <CardHeader>
-        <CardTitle>{isLogin ? "Log in" : "Sign up"}</CardTitle>
+    <Card className="site-panel w-full max-w-lg">
+      <CardHeader className="space-y-2 px-0 pb-2">
+        <CardTitle className="text-2xl">{isLogin ? "Log in" : "Sign up"}</CardTitle>
         <CardDescription>
           {isLogin
             ? "Sign in with your email and password."
             : "Create your account and unlock your dashboard."}
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <form onSubmit={props.onSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="auth-email">Email</Label>
+      <CardContent className="space-y-5 px-0">
+        <form onSubmit={props.onSubmit} className="space-y-5">
+          <div className="space-y-2.5">
+            <Label htmlFor="auth-email" className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+              Email
+            </Label>
             <Input
               id="auth-email"
               type="email"
               required
+              autoComplete="email"
               value={props.email}
+              className="h-11 rounded-xl bg-background/60"
               onChange={(event) => props.onEmailChange(event.target.value)}
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="auth-password">Password</Label>
+          <div className="space-y-2.5">
+            <Label htmlFor="auth-password" className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+              Password
+            </Label>
             <Input
               id="auth-password"
               type="password"
               required
+              autoComplete={isLogin ? "current-password" : "new-password"}
               value={props.password}
+              className="h-11 rounded-xl bg-background/60"
               onChange={(event) => props.onPasswordChange(event.target.value)}
             />
           </div>
@@ -61,7 +69,7 @@ export function AuthFormCard(props: AuthFormCardProps) {
             </Alert>
           ) : null}
 
-          <Button type="submit" disabled={props.isSubmitting} className="w-full">
+          <Button type="submit" disabled={props.isSubmitting} className="h-11 w-full rounded-xl text-sm font-semibold">
             {props.isSubmitting
               ? isLogin
                 ? "Logging in..."

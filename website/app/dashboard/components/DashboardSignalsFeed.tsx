@@ -66,27 +66,33 @@ function EmptyState(props: { signalState: SignalState }) {
 export function DashboardSignalsFeed(props: DashboardSignalsFeedProps) {
   return (
     <Card className="site-panel">
-      <CardHeader className="px-0 pb-2">
+      <CardHeader className="px-0 pb-3">
         <CardTitle className="text-base">Signals</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 px-0">
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="site-soft grid gap-3 md:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="tenant-key">Tenant</Label>
+            <Label htmlFor="tenant-key" className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+              Tenant
+            </Label>
             <Input
               id="tenant-key"
               value={props.tenantKey}
               onChange={(event) => props.onTenantKeyChange(event.target.value)}
               placeholder="t1"
+              className="h-10 rounded-xl bg-background/60"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="connector-id">Connector</Label>
+            <Label htmlFor="connector-id" className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+              Connector
+            </Label>
             <Input
               id="connector-id"
               value={props.connectorId}
               onChange={(event) => props.onConnectorIdChange(event.target.value)}
               placeholder="conn_01"
+              className="h-10 rounded-xl bg-background/60"
             />
           </div>
         </div>
@@ -95,17 +101,18 @@ export function DashboardSignalsFeed(props: DashboardSignalsFeedProps) {
 
         {props.signalState === "has_signals"
           ? props.signals?.map((signal) => (
-              <Card key={signal._id} className="site-soft">
-                <CardContent className="space-y-3 px-0">
+              <Card key={signal._id} className="site-soft overflow-hidden">
+                <CardContent className="space-y-4 px-0">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(signal.createdAt).toLocaleString()}
-                    </p>
-                    <Badge variant="outline">
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">{new Date(signal.createdAt).toLocaleString()}</p>
+                      <p className="text-[11px] text-muted-foreground">Signal ID: {signal._id}</p>
+                    </div>
+                    <Badge variant="outline" className="max-w-full break-all">
                       {signal.sourceGuildId} / {signal.sourceChannelId}
                     </Badge>
                   </div>
-                  <p className="site-signal-text">{signal.content}</p>
+                  <p className="site-signal-text">{signal.content || "(No text content)"}</p>
 
                   <div className="flex flex-wrap items-center gap-2 text-[11px]">
                     {signal.editedAt ? (
@@ -134,25 +141,27 @@ export function DashboardSignalsFeed(props: DashboardSignalsFeedProps) {
                         const hideLink = meta.isBlockedType || !meta.isAllowedType;
 
                         return (
-                          <li key={key} className="site-soft space-y-2 text-xs">
+                          <li key={key} className="rounded-xl border border-border/70 bg-background/60 p-3 text-xs">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="font-semibold">{displayName}</span>
                               <Badge variant="outline">{typeText}</Badge>
                               <Badge variant="outline">{sizeText}</Badge>
                             </div>
+
                             {meta.isOversized ? (
-                              <p className="text-amber-200">
+                              <p className="mt-2 text-amber-200">
                                 Attachment exceeds {formatBytes(MAX_ATTACHMENT_BYTES)} preview limit.
                               </p>
                             ) : null}
                             {meta.isBlockedType || !meta.isAllowedType ? (
-                              <p className="text-red-200">
+                              <p className="mt-2 text-red-200">
                                 Attachment type is blocked from inline rendering.
                               </p>
                             ) : null}
+
                             {!hideLink ? (
                               <a
-                                className="inline-block underline underline-offset-4"
+                                className="mt-2 inline-block underline underline-offset-4"
                                 href={attachment.url}
                                 target="_blank"
                                 rel="noreferrer"
@@ -166,7 +175,7 @@ export function DashboardSignalsFeed(props: DashboardSignalsFeedProps) {
                                 alt={displayName}
                                 loading="lazy"
                                 referrerPolicy="no-referrer"
-                                className="max-h-72 rounded-md border border-border/70 object-contain"
+                                className="mt-2 max-h-72 rounded-lg border border-border/70 object-contain"
                               />
                             ) : null}
                           </li>

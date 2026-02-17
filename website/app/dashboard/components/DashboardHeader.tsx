@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 import { SectionHeader } from "@/components/site/section-header";
 import { Button } from "@/components/ui/button";
 
@@ -18,8 +16,19 @@ export function DashboardHeader(props: DashboardHeaderProps) {
         { href: "/", label: "Home" },
         { href: "/shop", label: "Shop" },
       ]}
+      highlights={[
+        { label: "Feed mode", value: "Tier-filtered realtime" },
+        { label: "Identity", value: "Discord link aware" },
+        { label: "State", value: "Subscription synced" },
+      ]}
       actions={
-        <Button size="sm" variant="outline" onClick={props.onLogout} disabled={props.isLoggingOut}>
+        <Button
+          size="sm"
+          variant="outline"
+          className="rounded-full px-4"
+          onClick={props.onLogout}
+          disabled={props.isLoggingOut}
+        >
           {props.isLoggingOut ? "Logging out..." : "Log out"}
         </Button>
       }
