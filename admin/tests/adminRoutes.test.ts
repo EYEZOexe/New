@@ -35,3 +35,10 @@ describe("detail routing", () => {
     expect(state.activeItem).toBe("mappings");
   });
 });
+
+describe("discord bot route", () => {
+  it("marks discord-bot active", () => {
+    const state = getAdminNavState("/discord-bot");
+    expect(state.activeItem).toBe("discord-bot");
+  });
+});
