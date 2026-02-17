@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
 import { internalMutation } from "./_generated/server";
+import { resolveAttachmentsForExistingSignalPatch } from "./ingestAttachmentMerge";
 import { messageEventToSignalFields } from "./ingestUtils";
 import { enqueueMirrorJobsForSignal } from "./mirrorQueue";
 
@@ -162,15 +163,21 @@ export const ingestMessageBatch = internalMutation({
           createdAt: fields.createdAt,
         };
 
+        const attachmentResolution = resolveAttachmentsForExistingSignalPatch({
+          eventType: message.event_type,
+          incomingAttachments: fields.attachments,
+          existingAttachments: existing.attachments,
+        });
+
         if (message.event_type === "delete") {
           patch.deletedAt = fields.deletedAt ?? args.receivedAt;
           patch.content = fields.content || existing.content;
-          if (fields.attachments.length > 0) {
-            patch.attachments = fields.attachments;
+          if (attachmentResolution.attachments) {
+            patch.attachments = attachmentResolution.attachments;
           }
         } else {
           patch.content = fields.content;
-          patch.attachments = fields.attachments;
+          patch.attachments = attachmentResolution.attachments;
 
           if (message.event_type === "update") {
             patch.editedAt = fields.editedAt ?? args.receivedAt;
@@ -183,11 +190,15 @@ export const ingestMessageBatch = internalMutation({
           }
         }
 
-        await ctx.db.patch(existing._id, patch as any);
-        attachmentRefsPersisted += mirrorAttachments.length;
+        if (attachmentResolution.preservedExisting) {
+          console.info(
+            `[ingest] preserved existing attachment refs for sparse event tenant=${args.tenantKey} connector=${args.connectorId} message=${fields.sourceMessageId} event=${message.event_type} existing_refs=${Array.isArray(existing.attachments) ? existing.attachments.length : 0}`,
+          );
+        }
 
-        mirrorContent = patch.content ? String(patch.content) : existing.content;
-        mirrorAttachments = Array.isArray(patch.attachments)
+        await ctx.db.patch(existing._id, patch as any);
+
+        const patchedAttachments = Array.isArray(patch.attachments)
           ? (patch.attachments as Array<{
               attachmentId?: string;
               url: string;
@@ -196,6 +207,10 @@ export const ingestMessageBatch = internalMutation({
               size?: number;
             }>)
           : fields.attachments;
+
+        attachmentRefsPersisted += patchedAttachments.length;
+        mirrorContent = patch.content ? String(patch.content) : existing.content;
+        mirrorAttachments = patchedAttachments;
       }
 
       if (!forwardingEnabled) continue;
