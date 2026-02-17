@@ -30,6 +30,7 @@ import type * as paymentsUtils from "../paymentsUtils.js";
 import type * as roleSync from "../roleSync.js";
 import type * as roleSyncQueue from "../roleSyncQueue.js";
 import type * as sellAccessPolicies from "../sellAccessPolicies.js";
+import type * as sellProducts from "../sellProducts.js";
 import type * as shopCatalog from "../shopCatalog.js";
 import type * as shopCatalogUtils from "../shopCatalogUtils.js";
 import type * as signals from "../signals.js";
@@ -67,6 +68,7 @@ declare const fullApi: ApiFromModules<{
   roleSync: typeof roleSync;
   roleSyncQueue: typeof roleSyncQueue;
   sellAccessPolicies: typeof sellAccessPolicies;
+  sellProducts: typeof sellProducts;
   shopCatalog: typeof shopCatalog;
   shopCatalogUtils: typeof shopCatalogUtils;
   signals: typeof signals;
