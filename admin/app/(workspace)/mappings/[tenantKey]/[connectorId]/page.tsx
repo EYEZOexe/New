@@ -1,4 +1,5 @@
 import { ConnectorWorkspace } from "@/components/mappings/connector-workspace";
+import { buildAdminBreadcrumbs } from "@/lib/adminRoutes";
 
 type MappingsConnectorDetailPageProps = {
   params: Promise<{
@@ -19,11 +20,17 @@ export default async function MappingsConnectorDetailPage({
   params,
 }: MappingsConnectorDetailPageProps) {
   const { tenantKey, connectorId } = await params;
+  const decodedTenantKey = safeDecode(tenantKey);
+  const decodedConnectorId = safeDecode(connectorId);
+  const breadcrumbs = buildAdminBreadcrumbs(
+    `/mappings/${encodeURIComponent(decodedTenantKey)}/${encodeURIComponent(decodedConnectorId)}`,
+  );
 
   return (
     <ConnectorWorkspace
-      tenantKey={safeDecode(tenantKey)}
-      connectorId={safeDecode(connectorId)}
+      tenantKey={decodedTenantKey}
+      connectorId={decodedConnectorId}
+      breadcrumbs={breadcrumbs}
     />
   );
 }

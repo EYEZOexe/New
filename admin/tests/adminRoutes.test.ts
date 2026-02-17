@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { getAdminNavState } from "../lib/adminRoutes";
+import { buildAdminBreadcrumbs, getAdminNavState } from "../lib/adminRoutes";
 
 describe("admin route navigation", () => {
   it("marks mappings route active", () => {
@@ -47,5 +47,12 @@ describe("shop grouping", () => {
   it("marks shop group active for policies route", () => {
     const state = getAdminNavState("/shop/policies");
     expect(state.activeGroup).toBe("shop");
+  });
+});
+
+describe("breadcrumbs", () => {
+  it("builds connector detail breadcrumb", () => {
+    const crumbs = buildAdminBreadcrumbs("/mappings/t1/conn_01");
+    expect(crumbs.join(" / ")).toBe("Mappings / t1 / conn_01");
   });
 });

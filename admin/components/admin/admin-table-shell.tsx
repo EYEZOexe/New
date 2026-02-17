@@ -11,6 +11,7 @@ type AdminTableShellProps = {
   emptyMessage?: string;
   loadingMessage?: string;
   className?: string;
+  tableClassName?: string;
   children: ReactNode;
 };
 
@@ -23,6 +24,7 @@ export function AdminTableShell({
   emptyMessage = "No rows found.",
   loadingMessage = "Loading...",
   className,
+  tableClassName,
   children,
 }: AdminTableShellProps) {
   return (
@@ -32,7 +34,7 @@ export function AdminTableShell({
       ) : isEmpty ? (
         <p className="text-sm text-slate-600">{emptyMessage}</p>
       ) : (
-        <div className={cn("admin-table-shell")}>{children}</div>
+        <div className={cn("admin-table-shell", tableClassName)}>{children}</div>
       )}
     </AdminSectionCard>
   );

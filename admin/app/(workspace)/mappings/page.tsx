@@ -7,6 +7,7 @@ import { makeFunctionReference } from "convex/server";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { AdminSectionCard } from "@/components/admin/admin-section-card";
 import { AdminTableShell } from "@/components/admin/admin-table-shell";
+import { buildAdminBreadcrumbs } from "@/lib/adminRoutes";
 
 type ConnectorRow = {
   _id: string;
@@ -62,6 +63,7 @@ export default function MappingsPage() {
         chip="Mappings"
         title="Connector Mappings"
         description="Create connector tokens and manage routing surfaces for Discord mirroring."
+        breadcrumbs={buildAdminBreadcrumbs("/mappings")}
         actions={
           <>
             <Link href="/shop/policies" className="admin-link">

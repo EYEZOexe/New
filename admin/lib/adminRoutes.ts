@@ -59,6 +59,14 @@ function isPathWithinRoute(pathname: string, routePrefix: string): boolean {
   return pathname.startsWith(`${routePrefix}/`);
 }
 
+function decodePathSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 export function getAdminNavState(pathname: string): AdminNavState {
   const normalizedPath = normalizePathname(pathname);
 
@@ -75,4 +83,38 @@ export function getAdminNavState(pathname: string): AdminNavState {
     activeGroup,
     activeShopRoute,
   };
+}
+
+export function buildAdminBreadcrumbs(pathname: string): string[] {
+  const normalizedPath = normalizePathname(pathname);
+  const [head, ...rest] = normalizedPath.split("/").filter(Boolean);
+
+  if (!head) return [];
+
+  if (head === "mappings") {
+    if (rest.length >= 2) {
+      return ["Mappings", decodePathSegment(rest[0]), decodePathSegment(rest[1])];
+    }
+    return ["Mappings"];
+  }
+
+  if (head === "discord-bot") {
+    return ["Discord Bot"];
+  }
+
+  if (head === "shop") {
+    const labelByRoute: Record<AdminShopRoute, string> = {
+      catalog: "Catalog",
+      policies: "Policies",
+      customers: "Customers",
+    };
+
+    const route = rest[0];
+    if (route === "catalog" || route === "policies" || route === "customers") {
+      return ["Shop", labelByRoute[route]];
+    }
+    return ["Shop"];
+  }
+
+  return [];
 }

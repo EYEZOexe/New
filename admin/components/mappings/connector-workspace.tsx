@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
+import { AdminPageHeader } from "@/components/admin/admin-page-header";
+import { AdminSectionCard } from "@/components/admin/admin-section-card";
+import { AdminTableShell } from "@/components/admin/admin-table-shell";
 
 type ConnectorRow = {
   _id: string;
@@ -83,9 +86,14 @@ type MirrorJobRow = {
 type ConnectorWorkspaceProps = {
   tenantKey: string;
   connectorId: string;
+  breadcrumbs?: readonly string[];
 };
 
-export function ConnectorWorkspace({ tenantKey, connectorId }: ConnectorWorkspaceProps) {
+export function ConnectorWorkspace({
+  tenantKey,
+  connectorId,
+  breadcrumbs,
+}: ConnectorWorkspaceProps) {
   const hasRouteParams = tenantKey !== "" && connectorId !== "";
 
   const getConnector = useMemo(
@@ -497,52 +505,46 @@ export function ConnectorWorkspace({ tenantKey, connectorId }: ConnectorWorkspac
   }
 
   return (
-    <main className="min-h-screen bg-zinc-50 p-8 text-zinc-900">
-      <section className="mx-auto w-full max-w-6xl rounded-xl border border-zinc-200 bg-white p-8 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {tenantKey || "unknown"} / {connectorId || "unknown"}
-            </h1>
-            <p className="mt-2 text-sm text-zinc-600">
-              Runtime config, bot mirroring controls, and token management.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Link
-              href="/mappings"
-              className="text-sm font-medium text-zinc-900 underline"
-            >
+    <div className="space-y-6">
+      <AdminPageHeader
+        chip="Mappings"
+        title={`${tenantKey || "unknown"} / ${connectorId || "unknown"}`}
+        description="Runtime config, bot mirroring controls, and token management."
+        breadcrumbs={breadcrumbs}
+        actions={
+          <>
+            <Link href="/mappings" className="admin-link">
               Back to mappings
             </Link>
-            <Link
-              href="/discord-bot"
-              className="text-sm font-medium text-zinc-900 underline"
-            >
-              Discord bot
+            <Link href="/discord-bot" className="admin-link">
+              Discord Bot
             </Link>
-            <Link
-              href="/shop/policies"
-              className="text-sm font-medium text-zinc-900 underline"
-            >
+            <Link href="/shop/policies" className="admin-link">
               Shop policies
             </Link>
-          </div>
-        </div>
+          </>
+        }
+      />
 
-        {!hasRouteParams ? (
-          <p className="mt-6 text-sm text-red-700">
+      {!hasRouteParams ? (
+        <AdminSectionCard>
+          <p className="text-sm text-red-700">
             Missing connector route params. Open this page from the connectors list.
           </p>
-        ) : connector === undefined ? (
-          <p className="mt-6 text-sm text-zinc-600">Loading connector...</p>
-        ) : connector === null ? (
-          <p className="mt-6 text-sm text-red-700">
+        </AdminSectionCard>
+      ) : connector === undefined ? (
+        <AdminSectionCard>
+          <p className="text-sm text-zinc-600">Loading connector...</p>
+        </AdminSectionCard>
+      ) : connector === null ? (
+        <AdminSectionCard>
+          <p className="text-sm text-red-700">
             Connector not found for this tenant/key pair.
           </p>
-        ) : (
-          <div className="mt-6 flex flex-wrap items-center gap-3">
+        </AdminSectionCard>
+      ) : (
+        <AdminSectionCard>
+          <div className="flex flex-wrap items-center gap-3">
             <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-800">
               status: {connector.status}
             </span>
@@ -580,20 +582,20 @@ export function ConnectorWorkspace({ tenantKey, connectorId }: ConnectorWorkspac
                   : "Enable mirroring"}
             </button>
           </div>
-        )}
+        </AdminSectionCard>
+      )}
 
-        {lastToken ? (
-          <div className="mt-4">
-            <p className="text-xs font-medium text-zinc-700">
-              Connector token (shown once):
-            </p>
-            <pre className="mt-2 overflow-x-auto rounded-md bg-zinc-900 p-3 text-xs text-zinc-100">
-              {lastToken}
-            </pre>
-          </div>
-        ) : null}
+      {lastToken ? (
+        <AdminSectionCard title="Connector token">
+          <p className="text-xs font-medium text-zinc-700">Shown once after rotation:</p>
+          <pre className="mt-2 overflow-x-auto rounded-md bg-zinc-900 p-3 text-xs text-zinc-100">
+            {lastToken}
+          </pre>
+        </AdminSectionCard>
+      ) : null}
 
-        <div className="mt-6 rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-xs text-zinc-700">
+      <AdminSectionCard title="Mirror runtime">
+        <div className="text-xs text-zinc-700">
           <p>
             Mirror bot token configured:{" "}
             <strong>{mirrorRuntime?.hasMirrorBotToken ? "yes" : "no"}</strong>
@@ -623,12 +625,13 @@ export function ConnectorWorkspace({ tenantKey, connectorId }: ConnectorWorkspac
             <strong>{mirrorLatencyStats?.delete.count ?? 0}</strong>).
           </p>
         </div>
+      </AdminSectionCard>
 
-        <div className="mt-10 grid gap-8 lg:grid-cols-2">
-          <div>
-            <h2 className="text-sm font-semibold text-zinc-900">Available Channels</h2>
+      <div className="grid gap-8 lg:grid-cols-2">
+        <div>
+          <AdminSectionCard title="Available Channels">
 
-            <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
                   Guild
@@ -725,8 +728,9 @@ export function ConnectorWorkspace({ tenantKey, connectorId }: ConnectorWorkspac
                   : ""}
               </p>
             </div>
+          </AdminSectionCard>
 
-            <div className="mt-4 overflow-x-auto rounded-lg border border-zinc-200">
+          <AdminTableShell title="Configured available channels" isEmpty={sources.length === 0} emptyMessage="No available channels yet.">
               <table className="w-full text-left text-sm">
                 <thead className="bg-zinc-50 text-xs font-semibold text-zinc-700">
                   <tr>
@@ -765,25 +769,15 @@ export function ConnectorWorkspace({ tenantKey, connectorId }: ConnectorWorkspac
                       </td>
                     </tr>
                   ))}
-                  {sources.length === 0 ? (
-                    <tr>
-                      <td
-                        className="px-3 py-3 text-sm text-zinc-600"
-                        colSpan={7}
-                      >
-                        No available channels yet.
-                      </td>
-                    </tr>
-                  ) : null}
                 </tbody>
               </table>
-            </div>
-          </div>
+          </AdminTableShell>
+        </div>
 
-          <div>
-            <h2 className="text-sm font-semibold text-zinc-900">Mirror Mappings</h2>
+        <div>
+          <AdminSectionCard title="Mirror Mappings">
 
-            <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
               <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
                 Filter available channels by guild (optional)
                 <select
@@ -888,8 +882,9 @@ export function ConnectorWorkspace({ tenantKey, connectorId }: ConnectorWorkspac
                 </button>
               </div>
             </div>
+          </AdminSectionCard>
 
-            <div className="mt-4 overflow-x-auto rounded-lg border border-zinc-200">
+          <AdminTableShell title="Configured mirror mappings" isEmpty={mappings.length === 0} emptyMessage="No mappings yet.">
               <table className="w-full text-left text-sm">
                 <thead className="bg-zinc-50 text-xs font-semibold text-zinc-700">
                   <tr>
@@ -936,25 +931,11 @@ export function ConnectorWorkspace({ tenantKey, connectorId }: ConnectorWorkspac
                       </td>
                     </tr>
                   ))}
-                  {mappings.length === 0 ? (
-                    <tr>
-                      <td
-                        className="px-3 py-3 text-sm text-zinc-600"
-                        colSpan={6}
-                      >
-                        No mappings yet.
-                      </td>
-                    </tr>
-                  ) : null}
                 </tbody>
               </table>
-            </div>
+          </AdminTableShell>
 
-            <div className="mt-6">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-700">
-                Recent Mirror Jobs
-              </h3>
-              <div className="mt-2 overflow-x-auto rounded-lg border border-zinc-200">
+          <AdminTableShell title="Recent Mirror Jobs" isEmpty={mirrorJobs.length === 0} emptyMessage="No mirror jobs yet.">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-zinc-50 text-xs font-semibold text-zinc-700">
                     <tr>
@@ -980,21 +961,12 @@ export function ConnectorWorkspace({ tenantKey, connectorId }: ConnectorWorkspac
                         </td>
                       </tr>
                     ))}
-                    {mirrorJobs.length === 0 ? (
-                      <tr>
-                        <td className="px-3 py-3 text-sm text-zinc-600" colSpan={5}>
-                          No mirror jobs yet.
-                        </td>
-                      </tr>
-                    ) : null}
                   </tbody>
                 </table>
-              </div>
-            </div>
-          </div>
+          </AdminTableShell>
         </div>
-      </section>
-    </main>
+      </div>
+    </div>
   );
 }
 

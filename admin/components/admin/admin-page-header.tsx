@@ -11,7 +11,7 @@ type AdminPageHeaderProps = {
   title: string;
   description?: string;
   actions?: ReactNode;
-  breadcrumbs?: readonly AdminBreadcrumb[];
+  breadcrumbs?: readonly (string | AdminBreadcrumb)[];
 };
 
 export function AdminPageHeader({
@@ -25,18 +25,25 @@ export function AdminPageHeader({
     <header className="admin-page-header">
       {breadcrumbs && breadcrumbs.length > 0 ? (
         <nav aria-label="Breadcrumbs" className="mb-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-          {breadcrumbs.map((crumb, index) => (
-            <span key={`${crumb.label}-${index}`} className="inline-flex items-center gap-2">
-              {crumb.href ? (
-                <Link href={crumb.href} className="font-medium text-slate-600 hover:text-slate-900">
-                  {crumb.label}
-                </Link>
-              ) : (
-                <span className="font-medium text-slate-900">{crumb.label}</span>
-              )}
-              {index < breadcrumbs.length - 1 ? <span>/</span> : null}
-            </span>
-          ))}
+          {breadcrumbs.map((crumbEntry, index) => {
+            const crumb =
+              typeof crumbEntry === "string" ? { label: crumbEntry } : crumbEntry;
+            return (
+              <span key={`${crumb.label}-${index}`} className="inline-flex items-center gap-2">
+                {crumb.href ? (
+                  <Link
+                    href={crumb.href}
+                    className="font-medium text-slate-600 hover:text-slate-900"
+                  >
+                    {crumb.label}
+                  </Link>
+                ) : (
+                  <span className="font-medium text-slate-900">{crumb.label}</span>
+                )}
+                {index < breadcrumbs.length - 1 ? <span>/</span> : null}
+              </span>
+            );
+          })}
         </nav>
       ) : null}
 

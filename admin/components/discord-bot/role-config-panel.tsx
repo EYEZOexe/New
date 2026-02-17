@@ -51,7 +51,11 @@ function toDraftState(rows: TierRoleMappingRow[]): Record<SubscriptionTier, Draf
   };
 }
 
-export function RoleConfigPanel() {
+type RoleConfigPanelProps = {
+  breadcrumbs?: readonly string[];
+};
+
+export function RoleConfigPanel({ breadcrumbs }: RoleConfigPanelProps) {
   const listTierRoleMappingsRef = useMemo(
     () =>
       makeFunctionReference<"query", Record<string, never>, TierRoleMappingRow[]>(
@@ -166,6 +170,7 @@ export function RoleConfigPanel() {
         chip="Discord Bot"
         title="Tier Role Configuration"
         description="Map each subscription tier to the Discord role that should be granted."
+        breadcrumbs={breadcrumbs}
       />
 
       <AdminSectionCard title="Runtime status">
