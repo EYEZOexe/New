@@ -4,6 +4,9 @@ import { loadBotConfig } from "./config";
 import { DiscordRoleManager } from "./discordRoleManager";
 import { DiscordSignalMirrorManager } from "./discordSignalMirrorManager";
 import { logError, logInfo, logWarn } from "./logger";
+import { QueueWakeClient } from "./queueWakeClient";
+
+type WakeSource = "startup" | "realtime_update" | "fallback_tick";
 
 async function main() {
   const config = loadBotConfig();
@@ -20,56 +23,40 @@ async function main() {
     workerId: config.workerId,
     claimLimit: config.mirrorClaimLimit,
   });
+  const wakeClient = new QueueWakeClient({
+    convexUrl: config.convexUrl,
+    botToken: config.queueWakeBotToken,
+    fallbackMinMs: config.queueWakeFallbackMinMs,
+    fallbackMaxMs: config.queueWakeFallbackMaxMs,
+  });
   const mirrorManager = new DiscordSignalMirrorManager(roleManager.discordClient);
 
   let shuttingDown = false;
-  let roleTickInProgress = false;
-  let mirrorTickInProgress = false;
-  let roleTimer: ReturnType<typeof setInterval> | null = null;
-  let mirrorTimer: ReturnType<typeof setInterval> | null = null;
+  let drainInFlight = false;
+  let scheduledDrain: ReturnType<typeof setTimeout> | null = null;
 
-  const shutdown = async (signal: string) => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    if (roleTimer) clearInterval(roleTimer);
-    if (mirrorTimer) clearInterval(mirrorTimer);
-    logInfo(`received ${signal}; shutting down`);
-    await roleManager.destroy();
-    process.exit(0);
+  const clearScheduledDrain = () => {
+    if (scheduledDrain) {
+      clearTimeout(scheduledDrain);
+      scheduledDrain = null;
+    }
   };
 
-  process.on("SIGINT", () => void shutdown("SIGINT"));
-  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  const processRoleTick = async (wakeSource: WakeSource) => {
+    if (shuttingDown) return 0;
 
-  roleManager.discordClient.once("ready", () => {
-    logInfo(
-      `discord ready user=${roleManager.discordClient.user?.tag ?? "unknown"} worker=${config.workerId}`,
-    );
-  });
-
-  await roleManager.login(config.discordBotToken);
-  logInfo(
-    `worker started role_poll_ms=${config.roleSyncPollIntervalMs} mirror_poll_ms=${config.mirrorPollIntervalMs} role_claim_limit=${config.roleSyncClaimLimit} mirror_claim_limit=${config.mirrorClaimLimit}`,
-  );
-
-  const processRoleTick = async () => {
-    if (shuttingDown || roleTickInProgress) return 0;
-    roleTickInProgress = true;
     let processed = 0;
-
     try {
       const jobs = await queueClient.claimJobs();
       processed = jobs.length;
-      if (jobs.length > 0) {
-        logInfo(`claimed ${jobs.length} role sync job(s)`);
-      }
+      logInfo(`wake=${wakeSource} queue=role claim_count=${jobs.length}`);
       for (const job of jobs) {
         if (shuttingDown) break;
         try {
           const result = await roleManager.executeJob(job);
           if (!result.ok) {
             logWarn(
-              `job=${job.jobId} action=${job.action} discord_user=${job.discordUserId} failed: ${result.message}`,
+              `role_job=${job.jobId} action=${job.action} discord_user=${job.discordUserId} failed=${result.message}`,
             );
             await queueClient.completeJob({
               jobId: job.jobId,
@@ -81,7 +68,7 @@ async function main() {
           }
 
           logInfo(
-            `job=${job.jobId} action=${job.action} discord_user=${job.discordUserId} success=${result.message}`,
+            `role_job=${job.jobId} action=${job.action} discord_user=${job.discordUserId} status=completed`,
           );
           await queueClient.completeJob({
             jobId: job.jobId,
@@ -89,10 +76,9 @@ async function main() {
             success: true,
           });
         } catch (error) {
-          const message =
-            error instanceof Error ? error.message : String(error);
+          const message = error instanceof Error ? error.message : String(error);
           logError(
-            `job=${job.jobId} action=${job.action} discord_user=${job.discordUserId} exception=${message}`,
+            `role_job=${job.jobId} action=${job.action} discord_user=${job.discordUserId} exception=${message}`,
           );
           await queueClient.completeJob({
             jobId: job.jobId,
@@ -102,33 +88,21 @@ async function main() {
           });
         }
       }
-
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logError(`role tick failed: ${message}`);
-    } finally {
-      roleTickInProgress = false;
-      if (processed > 0 && !shuttingDown) {
-        queueMicrotask(() => {
-          void processRoleTick();
-        });
-      }
     }
-
     return processed;
   };
 
-  const processMirrorTick = async () => {
-    if (shuttingDown || mirrorTickInProgress) return 0;
-    mirrorTickInProgress = true;
-    let processed = 0;
+  const processMirrorTick = async (wakeSource: WakeSource) => {
+    if (shuttingDown) return 0;
 
+    let processed = 0;
     try {
       const mirrorJobs = await mirrorQueueClient.claimJobs();
       processed = mirrorJobs.length;
-      if (mirrorJobs.length > 0) {
-        logInfo(`claimed ${mirrorJobs.length} mirror job(s)`);
-      }
+      logInfo(`wake=${wakeSource} queue=mirror claim_count=${mirrorJobs.length}`);
       for (const job of mirrorJobs) {
         if (shuttingDown) break;
         try {
@@ -152,7 +126,7 @@ async function main() {
           }
 
           logInfo(
-            `mirror_job=${job.jobId} event=${job.eventType} source_message=${job.sourceMessageId} success=${result.message} latency_ms=${latencyMs}`,
+            `mirror_job=${job.jobId} event=${job.eventType} source_message=${job.sourceMessageId} status=completed latency_ms=${latencyMs}`,
           );
           await mirrorQueueClient.completeJob({
             jobId: job.jobId,
@@ -163,8 +137,7 @@ async function main() {
             mirroredGuildId: result.mirroredGuildId,
           });
         } catch (error) {
-          const message =
-            error instanceof Error ? error.message : String(error);
+          const message = error instanceof Error ? error.message : String(error);
           logError(
             `mirror_job=${job.jobId} event=${job.eventType} source_message=${job.sourceMessageId} exception=${message}`,
           );
@@ -179,26 +152,89 @@ async function main() {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logError(`mirror tick failed: ${message}`);
-    } finally {
-      mirrorTickInProgress = false;
-      if (processed > 0 && !shuttingDown) {
-        queueMicrotask(() => {
-          void processMirrorTick();
-        });
-      }
     }
-
     return processed;
   };
 
-  roleTimer = setInterval(() => {
-    void processRoleTick();
-  }, config.roleSyncPollIntervalMs);
-  mirrorTimer = setInterval(() => {
-    void processMirrorTick();
-  }, config.mirrorPollIntervalMs);
+  const scheduleNextWake = () => {
+    if (shuttingDown) return;
+    const next = wakeClient.getNextWakeDelay();
+    const source: WakeSource = next.reason === "fallback" ? "fallback_tick" : "realtime_update";
+    clearScheduledDrain();
+    scheduledDrain = setTimeout(() => {
+      scheduledDrain = null;
+      void runDrainLoop(source);
+    }, next.delayMs);
+    logInfo(
+      `wake schedule source=${source} delay_ms=${next.delayMs} reason=${next.reason}`,
+    );
+  };
 
-  await Promise.all([processMirrorTick(), processRoleTick()]);
+  const runDrainLoop = async (wakeSource: WakeSource) => {
+    if (shuttingDown || drainInFlight) return;
+    drainInFlight = true;
+    clearScheduledDrain();
+
+    try {
+      logInfo(`wake triggered source=${wakeSource}`);
+      for (;;) {
+        if (shuttingDown) break;
+        const [mirrorProcessed, roleProcessed] = await Promise.all([
+          processMirrorTick(wakeSource),
+          processRoleTick(wakeSource),
+        ]);
+        const totalProcessed = mirrorProcessed + roleProcessed;
+        if (totalProcessed === 0) break;
+        if (shuttingDown) break;
+      }
+    } finally {
+      drainInFlight = false;
+      scheduleNextWake();
+    }
+  };
+
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    clearScheduledDrain();
+    logInfo(`received ${signal}; shutting down`);
+    await wakeClient.stop();
+    await roleManager.destroy();
+    process.exit(0);
+  };
+
+  process.on("SIGINT", () => void shutdown("SIGINT"));
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+
+  roleManager.discordClient.once("ready", () => {
+    logInfo(
+      `discord ready user=${roleManager.discordClient.user?.tag ?? "unknown"} worker=${config.workerId}`,
+    );
+  });
+
+  await roleManager.login(config.discordBotToken);
+  logInfo(
+    `worker started wake_fallback_min_ms=${config.queueWakeFallbackMinMs} wake_fallback_max_ms=${config.queueWakeFallbackMaxMs} role_claim_limit=${config.roleSyncClaimLimit} mirror_claim_limit=${config.mirrorClaimLimit}`,
+  );
+
+  wakeClient.start({
+    onWakeState: (state, source) => {
+      logInfo(
+        `wake update source=${source} mirror_ready=${state.mirror.pendingReady} mirror_next=${state.mirror.nextRunAfter ?? -1} role_ready=${state.role.pendingReady} role_next=${state.role.nextRunAfter ?? -1}`,
+      );
+      scheduleNextWake();
+    },
+    onConnectionHealthyChange: (healthy) => {
+      logInfo(`wake connection healthy=${healthy}`);
+      scheduleNextWake();
+    },
+    onError: (error) => {
+      logWarn(`wake subscription error=${error.message}`);
+      scheduleNextWake();
+    },
+  });
+
+  await runDrainLoop("startup");
 }
 
 main().catch((error) => {

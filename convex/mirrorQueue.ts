@@ -82,6 +82,9 @@ async function enqueueMirrorJobForTarget(
         sourceCreatedAt: args.sourceCreatedAt,
         sourceEditedAt: args.sourceEditedAt,
         sourceDeletedAt: args.sourceDeletedAt,
+        ...(status === "pending"
+          ? { runAfter: Math.min(existing.runAfter, args.now) }
+          : {}),
         updatedAt: args.now,
       });
       return {

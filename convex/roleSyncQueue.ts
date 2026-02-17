@@ -159,6 +159,13 @@ async function enqueueRoleSyncJobForTarget(
       )
       .first();
     if (existing) {
+      await ctx.db.patch(existing._id, {
+        source: args.source,
+        ...(status === "pending"
+          ? { runAfter: Math.min(existing.runAfter, args.now) }
+          : {}),
+        updatedAt: args.now,
+      });
       return {
         enqueued: true,
         deduped: true,

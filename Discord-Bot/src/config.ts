@@ -3,9 +3,10 @@ export type BotConfig = {
   convexUrl: string;
   roleSyncBotToken: string;
   mirrorBotToken: string;
+  queueWakeBotToken: string;
   workerId: string;
-  roleSyncPollIntervalMs: number;
-  mirrorPollIntervalMs: number;
+  queueWakeFallbackMinMs: number;
+  queueWakeFallbackMaxMs: number;
   roleSyncClaimLimit: number;
   mirrorClaimLimit: number;
 };
@@ -36,22 +37,28 @@ function parseIntEnv(
 export function loadBotConfig(): BotConfig {
   const roleSyncBotToken = requiredEnv("ROLE_SYNC_BOT_TOKEN");
   const dedicatedMirrorToken = process.env.MIRROR_BOT_TOKEN?.trim() ?? "";
+  const queueWakeFallbackMinMs = parseIntEnv("QUEUE_WAKE_FALLBACK_MIN_MS", 250, {
+    min: 50,
+    max: 5000,
+  });
+  const queueWakeFallbackMaxMs = parseIntEnv("QUEUE_WAKE_FALLBACK_MAX_MS", 1000, {
+    min: 100,
+    max: 10000,
+  });
+  if (queueWakeFallbackMaxMs < queueWakeFallbackMinMs) {
+    throw new Error("invalid_env:QUEUE_WAKE_FALLBACK_MAX_MS");
+  }
 
   return {
     discordBotToken: requiredEnv("DISCORD_BOT_TOKEN"),
     convexUrl: requiredEnv("CONVEX_URL"),
     roleSyncBotToken,
     mirrorBotToken: dedicatedMirrorToken || roleSyncBotToken,
+    queueWakeBotToken: dedicatedMirrorToken || roleSyncBotToken,
     workerId:
       process.env.DISCORD_BOT_WORKER_ID?.trim() || `discord-worker-${process.pid}`,
-    roleSyncPollIntervalMs: parseIntEnv("ROLE_SYNC_POLL_INTERVAL_MS", 1000, {
-      min: 100,
-      max: 60000,
-    }),
-    mirrorPollIntervalMs: parseIntEnv("MIRROR_POLL_INTERVAL_MS", 25, {
-      min: 10,
-      max: 60000,
-    }),
+    queueWakeFallbackMinMs,
+    queueWakeFallbackMaxMs,
     roleSyncClaimLimit: parseIntEnv("ROLE_SYNC_CLAIM_LIMIT", 5, {
       min: 1,
       max: 20,
