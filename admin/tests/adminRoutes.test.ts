@@ -21,3 +21,10 @@ describe("workspace shell contracts", () => {
     expect(discord.activeItem).toBe("discord-bot");
   });
 });
+
+describe("root routing behavior", () => {
+  it("treats root as mappings landing target", () => {
+    const state = getAdminNavState("/mappings");
+    expect(state.activeItem).toBe("mappings");
+  });
+});
