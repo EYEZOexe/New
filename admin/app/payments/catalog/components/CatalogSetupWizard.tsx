@@ -5,7 +5,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminSectionCard } from "@/components/admin/admin-section-card";
 import type { CatalogQueryResult, SubscriptionTier } from "../types";
-import { buildAutoCheckoutUrl, formatCatalogError } from "../utils";
+import { buildAutoCheckoutUrl, formatCatalogError, normalizeStorefrontUrl } from "../utils";
 
 type SellProductVisibility = "PUBLIC" | "ON_HOLD" | "HIDDEN" | "PRIVATE";
 
@@ -39,6 +39,47 @@ type UpsertVariantResult =
 
 function policyIdFromProduct(product: SellProductRow): string {
   return `${product.id}|${product.slug}`;
+}
+
+function mergeProducts(...groups: SellProductRow[][]): SellProductRow[] {
+  const byId = new Map<number, SellProductRow>();
+  for (const group of groups) {
+    for (const product of group) {
+      if (!Number.isInteger(product.id) || product.id <= 0) continue;
+      byId.set(product.id, product);
+    }
+  }
+  return Array.from(byId.values()).sort((a, b) => b.id - a.id);
+}
+
+function titleFromSlug(slug: string): string {
+  return slug
+    .split(/[-_]/g)
+    .filter((part) => part.trim().length > 0)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function deriveProductFromPolicyExternalId(
+  externalId: string,
+  storefrontUrl: string,
+): SellProductRow | null {
+  const [idPart, slugPart] = externalId.split("|");
+  const parsedId = Number.parseInt((idPart ?? "").trim(), 10);
+  if (!Number.isInteger(parsedId) || parsedId <= 0) return null;
+  const slug = (slugPart ?? "").trim();
+  const origin = normalizeStorefrontUrl(storefrontUrl);
+  const url = origin && slug ? `${origin}/product/${encodeURIComponent(slug)}` : null;
+  return {
+    id: parsedId,
+    slug,
+    title: slug ? titleFromSlug(slug) : `Product ${parsedId}`,
+    description: null,
+    visibility: "HIDDEN",
+    url,
+    created_at: null,
+    updated_at: null,
+  };
 }
 
 function defaultTierTitle(tier: SubscriptionTier): string {
@@ -144,6 +185,7 @@ export function CatalogSetupWizard({
   const catalog = useQuery(listCatalogRef, {});
 
   const [products, setProducts] = useState<SellProductRow[]>([]);
+  const [draftProducts, setDraftProducts] = useState<SellProductRow[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [productsMessage, setProductsMessage] = useState<string | null>(null);
   const [productsError, setProductsError] = useState<string | null>(null);
@@ -173,12 +215,6 @@ export function CatalogSetupWizard({
   const [isSavingVariant, setIsSavingVariant] = useState(false);
   const [variantMessage, setVariantMessage] = useState<string | null>(null);
   const [variantError, setVariantError] = useState<string | null>(null);
-
-  const selectedProduct = useMemo(
-    () =>
-      products.find((product) => policyIdFromProduct(product) === selectedPolicyExternalId) ?? null,
-    [products, selectedPolicyExternalId],
-  );
 
   const selectedEnabledPolicy = useMemo(
     () =>
@@ -219,6 +255,28 @@ export function CatalogSetupWizard({
   const variantCount =
     catalog?.tiers.reduce((total, tier) => total + tier.variants.length, 0) ?? 0;
 
+  const policyDerivedProducts = useMemo(
+    () =>
+      policies
+        .filter((policy) => policy.scope === "product")
+        .map((policy) => deriveProductFromPolicyExternalId(policy.externalId, storefrontUrl))
+        .filter((row): row is SellProductRow => row !== null),
+    [policies, storefrontUrl],
+  );
+
+  const productOptions = useMemo(
+    () => mergeProducts(products, draftProducts, policyDerivedProducts),
+    [products, draftProducts, policyDerivedProducts],
+  );
+
+  const selectedProduct = useMemo(
+    () =>
+      productOptions.find(
+        (product) => policyIdFromProduct(product) === selectedPolicyExternalId,
+      ) ?? null,
+    [selectedPolicyExternalId, productOptions],
+  );
+
   const loadSellProducts = useCallback(async () => {
     setIsLoadingProducts(true);
     setProductsError(null);
@@ -252,6 +310,7 @@ export function CatalogSetupWizard({
       const policyId = policyIdFromProduct(result.product);
       setSelectedPolicyExternalId(policyId);
       setTierTitle(result.product.title || defaultTierTitle(mappingTier));
+      setDraftProducts((current) => mergeProducts(current, [result.product]));
       const parsedDuration = Number.parseInt(mappingDurationDays.trim(), 10);
       if (Number.isInteger(parsedDuration) && parsedDuration > 0) {
         await upsertPolicy({
@@ -394,7 +453,7 @@ export function CatalogSetupWizard({
       <div className="mb-4 grid gap-3 md:grid-cols-3">
         <div className="rounded-xl border border-slate-800 bg-slate-900/55 px-4 py-3">
           <p className="text-xs uppercase tracking-wide text-slate-400">Products (Sell API)</p>
-          <p className="mt-1 text-xl font-semibold text-slate-100">{products.length}</p>
+          <p className="mt-1 text-xl font-semibold text-slate-100">{productOptions.length}</p>
         </div>
         <div className="rounded-xl border border-slate-800 bg-slate-900/55 px-4 py-3">
           <p className="text-xs uppercase tracking-wide text-slate-400">Catalog tiers</p>
@@ -419,11 +478,11 @@ export function CatalogSetupWizard({
                 onChange={(event) => setSelectedPolicyExternalId(event.target.value)}
               >
                 <option value="">Select product...</option>
-                {products.map((product) => {
+                {productOptions.map((product) => {
                   const policyId = policyIdFromProduct(product);
                   return (
                     <option key={product.id} value={policyId}>
-                      {product.title} ({policyId})
+                      {product.title} ({policyId}) [{product.visibility}]
                     </option>
                   );
                 })}
@@ -477,13 +536,17 @@ export function CatalogSetupWizard({
             </button>
           </div>
           {selectedProduct ? (
-            <p className="mt-3 text-xs text-slate-300">
-              Selected: {selectedProduct.title} ({selectedPolicyExternalId})
-            </p>
-          ) : null}
-          {productsMessage ? <p className="mt-2 text-sm text-emerald-400">{productsMessage}</p> : null}
-          {productsError ? <p className="mt-2 text-sm text-rose-400">{productsError}</p> : null}
-        </div>
+          <p className="mt-3 text-xs text-slate-300">
+            Selected: {selectedProduct.title} ({selectedPolicyExternalId})
+          </p>
+        ) : null}
+        <p className="mt-2 text-xs text-slate-400">
+          Note: Sell list API only returns public/live products. Draft/hidden products are kept here
+          when created or already linked by policy.
+        </p>
+        {productsMessage ? <p className="mt-2 text-sm text-emerald-400">{productsMessage}</p> : null}
+        {productsError ? <p className="mt-2 text-sm text-rose-400">{productsError}</p> : null}
+      </div>
 
         <div className="admin-surface-soft">
           <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300">Step 2</p>
