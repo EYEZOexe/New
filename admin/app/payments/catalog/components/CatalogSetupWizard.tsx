@@ -191,6 +191,20 @@ export function CatalogSetupWizard({
     [policies, selectedPolicyExternalId],
   );
 
+  useEffect(() => {
+    if (!selectedPolicyExternalId) return;
+    const policy = policies.find(
+      (row) => row.scope === "product" && row.externalId === selectedPolicyExternalId,
+    );
+    if (!policy) return;
+    setMappingTier(policy.tier);
+    if (policy.durationDays !== null) {
+      setMappingDurationDays(String(policy.durationDays));
+      setVariantDurationDays(String(policy.durationDays));
+    }
+    setVariantTier(policy.tier);
+  }, [policies, selectedPolicyExternalId]);
+
   const autoCheckoutPreview = useMemo(
     () =>
       buildAutoCheckoutUrl({
@@ -238,6 +252,18 @@ export function CatalogSetupWizard({
       const policyId = policyIdFromProduct(result.product);
       setSelectedPolicyExternalId(policyId);
       setTierTitle(result.product.title || defaultTierTitle(mappingTier));
+      const parsedDuration = Number.parseInt(mappingDurationDays.trim(), 10);
+      if (Number.isInteger(parsedDuration) && parsedDuration > 0) {
+        await upsertPolicy({
+          scope: "product",
+          externalId: policyId,
+          tier: mappingTier,
+          durationDays: parsedDuration,
+          enabled: true,
+        });
+        setVariantTier(mappingTier);
+        setVariantDurationDays(String(parsedDuration));
+      }
       setProductsMessage(`Created product ${result.product.title} (${policyId}).`);
       setProductTitle("");
       setProductDescription("");
@@ -462,11 +488,16 @@ export function CatalogSetupWizard({
         <div className="admin-surface-soft">
           <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300">Step 2</p>
           <h3 className="mt-1 text-base font-semibold text-slate-100">Access mapping (policy)</h3>
+          <p className="mt-1 text-xs text-slate-400">
+            Product policy key is auto-linked from your selected Sell product.
+          </p>
           <div className="mt-3 grid gap-3 md:grid-cols-3">
-            <label className="admin-label md:col-span-2">
-              Policy external ID
-              <input className="admin-input" value={selectedPolicyExternalId} readOnly />
-            </label>
+            <div className="admin-label md:col-span-2">
+              Linked product policy key
+              <div className="admin-input flex items-center font-mono text-xs text-cyan-300">
+                {selectedPolicyExternalId || "Select a product in Step 1"}
+              </div>
+            </div>
             <label className="admin-label">
               Tier
               <select
@@ -622,4 +653,3 @@ export function CatalogSetupWizard({
     </AdminSectionCard>
   );
 }
-
