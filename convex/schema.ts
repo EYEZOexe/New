@@ -220,6 +220,7 @@ export default defineSchema({
     attachments: v.optional(
       v.array(
         v.object({
+          attachmentId: v.optional(v.string()),
           url: v.string(),
           name: v.optional(v.string()),
           contentType: v.optional(v.string()),
@@ -287,6 +288,7 @@ export default defineSchema({
     attachments: v.optional(
       v.array(
         v.object({
+          attachmentId: v.optional(v.string()),
           url: v.string(),
           name: v.optional(v.string()),
           contentType: v.optional(v.string()),

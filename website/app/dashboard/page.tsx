@@ -15,7 +15,13 @@ type SignalRow = {
   sourceGuildId: string;
   sourceChannelId: string;
   content: string;
-  attachments?: Array<{ url: string; name?: string }>;
+  attachments?: Array<{
+    attachmentId?: string;
+    url: string;
+    name?: string;
+    contentType?: string;
+    size?: number;
+  }>;
 };
 
 type ViewerRow = {
@@ -48,6 +54,22 @@ type UnlinkViewerDiscordResult = {
   unlinked: boolean;
 };
 
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+const IMAGE_PREVIEW_MAX_BYTES = 10 * 1024 * 1024;
+const ALLOWED_ATTACHMENT_MIME_PREFIXES = [
+  "image/",
+  "video/",
+  "audio/",
+  "text/",
+];
+const ALLOWED_ATTACHMENT_MIME_EXACT = new Set(["application/pdf"]);
+const BLOCKED_ATTACHMENT_MIME_PREFIXES = [
+  "application/x-msdownload",
+  "application/x-dosexec",
+  "application/x-msi",
+  "application/vnd.microsoft.portable-executable",
+];
+
 function formatRemainingMs(remainingMs: number): string {
   const totalSeconds = Math.max(0, Math.floor(remainingMs / 1000));
   const days = Math.floor(totalSeconds / 86400);
@@ -58,6 +80,59 @@ function formatRemainingMs(remainingMs: number): string {
   if (days > 0) return `${days}d ${hours}h ${minutes}m`;
   if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
   return `${minutes}m ${seconds}s`;
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "unknown size";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function inferMimeFromUrl(url: string): string | null {
+  const normalized = url.toLowerCase();
+  if (normalized.endsWith(".png")) return "image/png";
+  if (normalized.endsWith(".jpg") || normalized.endsWith(".jpeg")) return "image/jpeg";
+  if (normalized.endsWith(".webp")) return "image/webp";
+  if (normalized.endsWith(".gif")) return "image/gif";
+  if (normalized.endsWith(".bmp")) return "image/bmp";
+  if (normalized.endsWith(".pdf")) return "application/pdf";
+  return null;
+}
+
+function classifyAttachment(attachment: {
+  url: string;
+  contentType?: string;
+  size?: number;
+}) {
+  const contentType = (attachment.contentType ?? "").trim().toLowerCase();
+  const inferred = inferMimeFromUrl(attachment.url);
+  const normalizedType = contentType || inferred || "";
+
+  const isBlockedType = BLOCKED_ATTACHMENT_MIME_PREFIXES.some((prefix) =>
+    normalizedType.startsWith(prefix),
+  );
+  const isAllowedType =
+    !normalizedType ||
+    ALLOWED_ATTACHMENT_MIME_EXACT.has(normalizedType) ||
+    ALLOWED_ATTACHMENT_MIME_PREFIXES.some((prefix) => normalizedType.startsWith(prefix));
+  const isOversized =
+    typeof attachment.size === "number" && attachment.size > MAX_ATTACHMENT_BYTES;
+  const isImage = normalizedType.startsWith("image/");
+  const canPreviewImage =
+    isImage &&
+    !isBlockedType &&
+    !isOversized &&
+    (typeof attachment.size !== "number" || attachment.size <= IMAGE_PREVIEW_MAX_BYTES);
+
+  return {
+    normalizedType,
+    isBlockedType,
+    isAllowedType,
+    isOversized,
+    isImage,
+    canPreviewImage,
+  };
 }
 
 export default function DashboardPage() {
@@ -122,8 +197,12 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!signals) return;
+    const attachmentRefs = signals.reduce(
+      (total, signal) => total + (signal.attachments?.length ?? 0),
+      0,
+    );
     console.info(
-      `[dashboard] realtime signals update: tenant=${tenantKey} connector=${connectorId} count=${signals.length}`,
+      `[dashboard] realtime signals update: tenant=${tenantKey} connector=${connectorId} count=${signals.length} attachment_refs=${attachmentRefs}`,
     );
   }, [signals, tenantKey, connectorId]);
 
@@ -477,18 +556,61 @@ export default function DashboardPage() {
                 </div>
                 {signal.attachments?.length ? (
                   <ul className="mt-3 space-y-1">
-                    {signal.attachments.map((a, idx) => (
-                      <li key={`${signal._id}-a-${idx}`} className="text-xs">
-                        <a
-                          className="text-zinc-900 underline"
-                          href={a.url}
-                          target="_blank"
-                          rel="noreferrer"
+                    {signal.attachments.map((a, idx) => {
+                      const meta = classifyAttachment(a);
+                      const displayName = a.name?.trim() || `Attachment ${idx + 1}`;
+                      const key = `${signal._id}-a-${a.attachmentId ?? idx}`;
+                      const sizeText =
+                        typeof a.size === "number" ? formatBytes(a.size) : "unknown size";
+                      const typeText = meta.normalizedType || "unknown type";
+                      const hideLink = meta.isBlockedType || !meta.isAllowedType;
+
+                      return (
+                        <li
+                          key={key}
+                          className="rounded border border-zinc-200 bg-white p-2 text-xs text-zinc-700"
                         >
-                          {a.name ?? a.url}
-                        </a>
-                      </li>
-                    ))}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium text-zinc-900">{displayName}</span>
+                            <span className="rounded bg-zinc-100 px-2 py-0.5 text-[10px] text-zinc-600">
+                              {typeText}
+                            </span>
+                            <span className="rounded bg-zinc-100 px-2 py-0.5 text-[10px] text-zinc-600">
+                              {sizeText}
+                            </span>
+                          </div>
+                          {meta.isOversized ? (
+                            <p className="mt-1 text-[11px] text-amber-700">
+                              Attachment exceeds {formatBytes(MAX_ATTACHMENT_BYTES)} preview limit.
+                            </p>
+                          ) : null}
+                          {meta.isBlockedType || !meta.isAllowedType ? (
+                            <p className="mt-1 text-[11px] text-red-700">
+                              Attachment type is blocked from inline rendering.
+                            </p>
+                          ) : null}
+                          {!hideLink ? (
+                            <a
+                              className="mt-1 inline-block text-zinc-900 underline"
+                              href={a.url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Open attachment
+                            </a>
+                          ) : null}
+                          {meta.canPreviewImage ? (
+                            <img
+                              src={a.url}
+                              alt={displayName}
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                              className="mt-2 max-h-64 rounded border border-zinc-200 object-contain"
+                            />
+                          ) : null}
+                        </li>
+                      );
+                    })}
                   </ul>
                 ) : null}
               </article>

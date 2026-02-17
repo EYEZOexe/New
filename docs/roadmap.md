@@ -14,6 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Completed Phase 5 attachment hardening across ingest, dashboard, and mirror paths: ingest now normalizes/stores Discord attachment references with IDs (`attachmentId`) and URL/type/size sanitization, signal queries expose sanitized attachment refs with backend attachment-count diagnostics, dashboard now enforces safe attachment rendering (type/size-aware image preview limits + blocked executable-type handling) while preserving stable attachment links, and mirror payload attachment contracts are aligned end-to-end. (2026-02-17)
 - Closed Phase 4 mirror reliability/observability gaps: Convex mirror completion now distinguishes terminal vs retryable Discord failures (including retry-after aware requeue), stores mirrored extra image message IDs for deterministic cleanup, and admin connector detail now shows mirror latency stats (`create`/`update`/`delete` p95 over last 60m) alongside queue/runtime status to enforce the `<100ms` target. (2026-02-17)
 - Upgraded mirror message formatting for customer channels: bot now posts signal content as Discord embeds, includes non-image attachments in embed fields, and posts multi-image attachments as sequential raw image messages below the embed, with extra mirrored message IDs tracked for update/delete cleanup. (2026-02-16)
 - Reduced Phase 4 mirror path latency by removing fixed queue waits: Vencord plugin outbox now fast-flushes message events immediately (with async disk persistence) and lowers fallback flush cadence from 250ms to 25ms, while Discord-Bot now runs a dedicated low-latency mirror queue loop (`MIRROR_POLL_INTERVAL_MS`, default 25ms) with immediate drain when work is present and per-job latency logs. (2026-02-16)
@@ -57,7 +58,6 @@ Backend is Convex.
 - Phase 1 signal pipeline is now hardened end-to-end: message ingest normalizes update/delete timestamps with fallbacks, stale post-delete updates are ignored server-side, plugin emits message delete events, and dashboard feed surfaces edited/deleted state with realtime update logs. (2026-02-16)
 
 **Next**
-- Begin Phase 5 attachments work: persist attachment metadata + references and render safely in dashboard.
 - Add scheduled payment reconciliation and alerting for webhook drift/failure spikes.
 
 **Blockers / Risks**
@@ -139,11 +139,11 @@ Goal: signals are mirrored to the customer guild with mapping for updates/delete
 
 Goal: attachments are preserved and accessible across dashboard + mirror.
 
-- [ ] Store Discord attachments and references in Convex
+- [x] Store Discord attachments and references in Convex (2026-02-17)
   Exit criteria: attachments are accessible with references stored alongside signals.
-- [ ] Display attachments in dashboard
+- [x] Display attachments in dashboard (2026-02-17)
   Exit criteria: dashboard renders attachments safely (type/size restrictions).
-- [ ] Mirror attachments to Discord where appropriate
+- [x] Mirror attachments to Discord where appropriate (2026-02-17)
   Exit criteria: mirrored messages include attachments or stable links.
 
 ## Checklists / Hygiene

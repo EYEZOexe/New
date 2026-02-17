@@ -1,4 +1,5 @@
 type IngestAttachment = {
+  discord_attachment_id: string;
   filename: string;
   source_url: string;
   size: number;
@@ -47,6 +48,7 @@ export function messageEventToSignalFields(
   sourceGuildId: string;
   content: string;
   attachments: Array<{
+    attachmentId?: string;
     url: string;
     name?: string;
     contentType?: string;
@@ -56,12 +58,39 @@ export function messageEventToSignalFields(
   editedAt?: number;
   deletedAt?: number;
 } {
-  const attachments = (event.attachments ?? []).map((a) => ({
-    url: a.source_url ?? "",
-    ...(a.filename ? { name: a.filename } : {}),
-    ...(a.content_type ? { contentType: a.content_type } : {}),
-    ...(typeof a.size === "number" ? { size: a.size } : {}),
-  }));
+  const attachments = (event.attachments ?? []).flatMap((a) => {
+    const rawUrl = typeof a.source_url === "string" ? a.source_url.trim() : "";
+    if (!isSafeAttachmentUrl(rawUrl)) {
+      return [];
+    }
+
+    const rawName = typeof a.filename === "string" ? a.filename.trim() : "";
+    const normalizedName =
+      rawName.length > 180 ? rawName.slice(0, 180) : rawName;
+    const rawContentType =
+      typeof a.content_type === "string" ? a.content_type.trim() : "";
+    const normalizedContentType = rawContentType
+      ? rawContentType.toLowerCase()
+      : "";
+    const normalizedSize =
+      typeof a.size === "number" && Number.isFinite(a.size) && a.size >= 0
+        ? Math.floor(a.size)
+        : undefined;
+    const attachmentId =
+      typeof a.discord_attachment_id === "string"
+        ? a.discord_attachment_id.trim()
+        : "";
+
+    return [
+      {
+        ...(attachmentId ? { attachmentId } : {}),
+        url: rawUrl,
+        ...(normalizedName ? { name: normalizedName } : {}),
+        ...(normalizedContentType ? { contentType: normalizedContentType } : {}),
+        ...(typeof normalizedSize === "number" ? { size: normalizedSize } : {}),
+      },
+    ];
+  });
 
   const editedAtFromPayload = parseOptionalIsoToMs(event.edited_at);
   const deletedAtFromPayload = parseOptionalIsoToMs(event.deleted_at);
@@ -89,4 +118,14 @@ export function messageEventToSignalFields(
     ...(editedAt ? { editedAt } : {}),
     ...(deletedAt ? { deletedAt } : {}),
   };
+}
+
+function isSafeAttachmentUrl(value: string): boolean {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
 }

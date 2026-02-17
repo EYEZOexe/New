@@ -185,6 +185,7 @@ function supportsMessageOps(channel: Channel): channel is MessageCapableChannel 
 function buildMirroredPayload(
   content: string,
   attachments: Array<{
+    attachmentId?: string;
     url: string;
     name?: string;
     contentType?: string;

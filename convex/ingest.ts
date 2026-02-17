@@ -115,6 +115,7 @@ export const ingestMessageBatch = internalMutation({
     let accepted = 0;
     let deduped = 0;
     let ignored = 0;
+    let attachmentRefsPersisted = 0;
     let mirrorEnqueued = 0;
     let mirrorDeduped = 0;
     let mirrorSkipped = 0;
@@ -143,6 +144,7 @@ export const ingestMessageBatch = internalMutation({
       if (!existing) {
         await ctx.db.insert("signals", fields as any);
         accepted += 1;
+        attachmentRefsPersisted += fields.attachments.length;
       } else {
         deduped += 1;
 
@@ -182,10 +184,12 @@ export const ingestMessageBatch = internalMutation({
         }
 
         await ctx.db.patch(existing._id, patch as any);
+        attachmentRefsPersisted += mirrorAttachments.length;
 
         mirrorContent = patch.content ? String(patch.content) : existing.content;
         mirrorAttachments = Array.isArray(patch.attachments)
           ? (patch.attachments as Array<{
+              attachmentId?: string;
               url: string;
               name?: string;
               contentType?: string;
@@ -221,13 +225,14 @@ export const ingestMessageBatch = internalMutation({
     }
 
     console.info(
-      `[ingest] signal batch processed tenant=${args.tenantKey} connector=${args.connectorId} accepted=${accepted} deduped=${deduped} ignored=${ignored} mirror_enqueued=${mirrorEnqueued} mirror_deduped=${mirrorDeduped} mirror_skipped=${mirrorSkipped} total=${args.messages.length}`,
+      `[ingest] signal batch processed tenant=${args.tenantKey} connector=${args.connectorId} accepted=${accepted} deduped=${deduped} ignored=${ignored} attachment_refs=${attachmentRefsPersisted} mirror_enqueued=${mirrorEnqueued} mirror_deduped=${mirrorDeduped} mirror_skipped=${mirrorSkipped} total=${args.messages.length}`,
     );
 
     return {
       accepted,
       deduped,
       ignored,
+      attachmentRefsPersisted,
       mirrorEnqueued,
       mirrorDeduped,
       mirrorSkipped,

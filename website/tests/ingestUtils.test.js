@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { messageEventToSignalFields, parseIsoToMs } from "../convex/ingestUtils";
+import { messageEventToSignalFields, parseIsoToMs } from "../../convex/ingestUtils";
 
 describe("ingestUtils", () => {
   it("parses ISO timestamps to ms", () => {
@@ -40,6 +40,7 @@ describe("ingestUtils", () => {
       content: "hello",
       attachments: [
         {
+          attachmentId: "a1",
           url: "https://cdn/x.png",
           name: "x.png",
           contentType: "image/png",

@@ -5,6 +5,7 @@ export const DEFAULT_SIGNAL_MIRROR_MAX_ATTEMPTS = 8;
 export type SignalMirrorEventType = "create" | "update" | "delete";
 
 type SignalAttachment = {
+  attachmentId?: string;
   url: string;
   name?: string;
   contentType?: string;

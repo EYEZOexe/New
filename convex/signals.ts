@@ -4,6 +4,60 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { query } from "./_generated/server";
 import { hasActiveSubscriptionAccess } from "./subscriptionAccess";
 
+const MAX_ATTACHMENT_NAME_LENGTH = 180;
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function sanitizeAttachment(attachment: {
+  attachmentId?: string;
+  url: string;
+  name?: string;
+  contentType?: string;
+  size?: number;
+}): {
+  attachmentId?: string;
+  url: string;
+  name?: string;
+  contentType?: string;
+  size?: number;
+} | null {
+  const url = typeof attachment.url === "string" ? attachment.url.trim() : "";
+  if (!isHttpUrl(url)) return null;
+
+  const attachmentId =
+    typeof attachment.attachmentId === "string"
+      ? attachment.attachmentId.trim()
+      : "";
+  const name = typeof attachment.name === "string" ? attachment.name.trim() : "";
+  const contentType =
+    typeof attachment.contentType === "string"
+      ? attachment.contentType.trim().toLowerCase()
+      : "";
+  const size =
+    typeof attachment.size === "number" &&
+    Number.isFinite(attachment.size) &&
+    attachment.size >= 0
+      ? Math.floor(attachment.size)
+      : undefined;
+
+  return {
+    ...(attachmentId ? { attachmentId } : {}),
+    url,
+    ...(name
+      ? { name: name.slice(0, MAX_ATTACHMENT_NAME_LENGTH) }
+      : {}),
+    ...(contentType ? { contentType } : {}),
+    ...(typeof size === "number" ? { size } : {}),
+  };
+}
+
 export const listRecent = query({
   args: {
     tenantKey: v.string(),
@@ -30,13 +84,55 @@ export const listRecent = query({
 
     const limit = Math.max(1, Math.min(200, args.limit ?? 50));
 
-    return await ctx.db
+    const rows = await ctx.db
       .query("signals")
       .withIndex("by_createdAt", (q) =>
         q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
       )
       .order("desc")
       .take(limit);
+
+    const sanitized = rows.map((row) => {
+      const rawAttachments = Array.isArray(row.attachments) ? row.attachments : [];
+      const attachments = rawAttachments
+        .map((attachment) =>
+          sanitizeAttachment({
+            attachmentId:
+              typeof (attachment as { attachmentId?: unknown }).attachmentId === "string"
+                ? ((attachment as { attachmentId?: string }).attachmentId ?? undefined)
+                : undefined,
+            url: String((attachment as { url?: unknown }).url ?? ""),
+            name:
+              typeof (attachment as { name?: unknown }).name === "string"
+                ? ((attachment as { name?: string }).name ?? undefined)
+                : undefined,
+            contentType:
+              typeof (attachment as { contentType?: unknown }).contentType === "string"
+                ? ((attachment as { contentType?: string }).contentType ?? undefined)
+                : undefined,
+            size:
+              typeof (attachment as { size?: unknown }).size === "number"
+                ? ((attachment as { size?: number }).size ?? undefined)
+                : undefined,
+          }),
+        )
+        .filter((value): value is NonNullable<typeof value> => value !== null);
+
+      return {
+        ...row,
+        attachments,
+      };
+    });
+
+    const attachmentCount = sanitized.reduce(
+      (total, row) => total + (row.attachments?.length ?? 0),
+      0,
+    );
+    console.info(
+      `[signals] listRecent tenant=${args.tenantKey} connector=${args.connectorId} returned=${sanitized.length} attachment_refs=${attachmentCount}`,
+    );
+
+    return sanitized;
   },
 });
 

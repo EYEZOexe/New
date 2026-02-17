@@ -13,6 +13,7 @@ export type ClaimedSignalMirrorJob = {
   eventType: "create" | "update" | "delete";
   content: string;
   attachments: Array<{
+    attachmentId?: string;
     url: string;
     name?: string;
     contentType?: string;
