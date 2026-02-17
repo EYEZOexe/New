@@ -290,6 +290,10 @@ export const upsertMapping = mutation({
     connectorId: v.string(),
     sourceChannelId: v.string(),
     targetChannelId: v.string(),
+    dashboardEnabled: v.optional(v.boolean()),
+    minimumTier: v.optional(
+      v.union(v.literal("basic"), v.literal("advanced"), v.literal("pro")),
+    ),
     filtersJson: v.optional(v.any()),
     transformJson: v.optional(v.any()),
     priority: v.optional(v.number()),
@@ -315,6 +319,8 @@ export const upsertMapping = mutation({
         connectorId: args.connectorId,
         sourceChannelId: args.sourceChannelId,
         targetChannelId: args.targetChannelId,
+        dashboardEnabled: args.dashboardEnabled,
+        minimumTier: args.minimumTier,
         filtersJson: args.filtersJson,
         transformJson: args.transformJson,
         priority: args.priority,
@@ -323,6 +329,8 @@ export const upsertMapping = mutation({
     } else {
       await ctx.db.patch(existing._id, {
         targetChannelId: args.targetChannelId,
+        dashboardEnabled: args.dashboardEnabled,
+        minimumTier: args.minimumTier,
         filtersJson: args.filtersJson,
         transformJson: args.transformJson,
         priority: args.priority,

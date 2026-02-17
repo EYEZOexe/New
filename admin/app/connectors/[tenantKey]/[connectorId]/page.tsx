@@ -31,8 +31,12 @@ type MappingRow = {
   _id: string;
   sourceChannelId: string;
   targetChannelId: string;
+  dashboardEnabled?: boolean;
+  minimumTier?: "basic" | "advanced" | "pro";
   priority?: number;
 };
+
+type SubscriptionTier = "basic" | "advanced" | "pro";
 
 type GuildRow = { _id: string; guildId: string; name: string };
 type ChannelRow = { _id: string; channelId: string; guildId: string; name: string };
@@ -201,6 +205,8 @@ export default function ConnectorDetailPage() {
           connectorId: string;
           sourceChannelId: string;
           targetChannelId: string;
+          dashboardEnabled?: boolean;
+          minimumTier?: SubscriptionTier;
           priority?: number;
         },
         { ok: true }
@@ -313,6 +319,9 @@ export default function ConnectorDetailPage() {
   const [newMappingSource, setNewMappingSource] = useState("");
   const [newMappingTarget, setNewMappingTarget] = useState("");
   const [newMappingPriority, setNewMappingPriority] = useState<string>("");
+  const [newMappingDashboardEnabled, setNewMappingDashboardEnabled] = useState(false);
+  const [newMappingMinimumTier, setNewMappingMinimumTier] =
+    useState<SubscriptionTier>("basic");
 
   useEffect(() => {
     if (!newSourceGuildId || !newSourceChannelId) return;
@@ -471,8 +480,13 @@ export default function ConnectorDetailPage() {
       connectorId,
       sourceChannelId: newMappingSource,
       targetChannelId: newMappingTarget,
+      dashboardEnabled: newMappingDashboardEnabled,
+      minimumTier: newMappingDashboardEnabled ? newMappingMinimumTier : undefined,
       priority: Number.isFinite(prio) ? prio : undefined,
     });
+    console.info(
+      `[admin/connectors] mapping updated tenant=${tenantKey} connector=${connectorId} source=${newMappingSource} target=${newMappingTarget} dashboard_enabled=${newMappingDashboardEnabled} minimum_tier=${newMappingDashboardEnabled ? newMappingMinimumTier : "none"}`,
+    );
   }
 
   async function onRequestChannels() {
@@ -837,9 +851,33 @@ export default function ConnectorDetailPage() {
               ) : null}
               <p className="mt-3 text-xs text-zinc-600">
                 These mappings define which target channels the bot mirrors to when connector mirroring is enabled.
+                Dashboard visibility is hidden by default until explicitly enabled with a minimum tier.
               </p>
 
               <div className="mt-3 flex flex-wrap items-end gap-3">
+                <label className="flex items-center gap-2 text-xs font-medium text-zinc-700">
+                  <input
+                    type="checkbox"
+                    checked={newMappingDashboardEnabled}
+                    onChange={(e) => setNewMappingDashboardEnabled(e.target.checked)}
+                  />
+                  Visible on dashboard
+                </label>
+                <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
+                  Minimum tier
+                  <select
+                    className="h-9 w-36 rounded-md border border-zinc-300 bg-white px-3 text-sm"
+                    value={newMappingMinimumTier}
+                    onChange={(e) =>
+                      setNewMappingMinimumTier(e.target.value as SubscriptionTier)
+                    }
+                    disabled={!newMappingDashboardEnabled}
+                  >
+                    <option value="basic">basic</option>
+                    <option value="advanced">advanced</option>
+                    <option value="pro">pro</option>
+                  </select>
+                </label>
                 <label className="flex flex-col gap-1 text-xs font-medium text-zinc-700">
                   Priority
                   <input
@@ -865,6 +903,8 @@ export default function ConnectorDetailPage() {
                   <tr>
                     <th className="px-3 py-2">Source (available)</th>
                     <th className="px-3 py-2">Target (available)</th>
+                    <th className="px-3 py-2">Dashboard</th>
+                    <th className="px-3 py-2">Min tier</th>
                     <th className="px-3 py-2">Priority</th>
                     <th className="px-3 py-2">Remove</th>
                   </tr>
@@ -874,6 +914,18 @@ export default function ConnectorDetailPage() {
                     <tr key={m._id} className="border-t border-zinc-200">
                       <td className="px-3 py-2">{renderChannelLabel(m.sourceChannelId)}</td>
                       <td className="px-3 py-2">{renderChannelLabel(m.targetChannelId)}</td>
+                      <td className="px-3 py-2">
+                        {m.dashboardEnabled === true ? (
+                          <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
+                            visible
+                          </span>
+                        ) : (
+                          <span className="rounded bg-zinc-200 px-2 py-0.5 text-xs font-medium text-zinc-700">
+                            hidden
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">{m.minimumTier ?? "-"}</td>
                       <td className="px-3 py-2">{m.priority ?? "-"}</td>
                       <td className="px-3 py-2">
                         <button
@@ -896,7 +948,7 @@ export default function ConnectorDetailPage() {
                     <tr>
                       <td
                         className="px-3 py-3 text-sm text-zinc-600"
-                        colSpan={4}
+                        colSpan={6}
                       >
                         No mappings yet.
                       </td>

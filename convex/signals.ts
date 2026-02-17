@@ -3,6 +3,10 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 
 import { query } from "./_generated/server";
 import { hasActiveSubscriptionAccess } from "./subscriptionAccess";
+import {
+  filterVisibleChannelIdsForTier,
+  type SubscriptionTier,
+} from "./tierVisibility";
 
 const MAX_ATTACHMENT_NAME_LENGTH = 180;
 
@@ -84,13 +88,39 @@ export const listRecent = query({
 
     const limit = Math.max(1, Math.min(200, args.limit ?? 50));
 
-    const rows = await ctx.db
+    const mappingRules = await ctx.db
+      .query("connectorMappings")
+      .withIndex("by_tenant_connectorId", (q) =>
+        q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+      )
+      .collect();
+    const viewerTier = (subscription?.tier ?? null) as SubscriptionTier | null;
+    const visibleChannelIds = filterVisibleChannelIdsForTier(
+      viewerTier,
+      mappingRules.map((mapping) => ({
+        channelId: mapping.sourceChannelId,
+        dashboardEnabled: mapping.dashboardEnabled,
+        minimumTier: mapping.minimumTier,
+      })),
+    );
+    const visibleChannelSet = new Set(visibleChannelIds);
+    if (visibleChannelSet.size === 0) {
+      console.info(
+        `[signals] listRecent gated_no_visible_channels tenant=${args.tenantKey} connector=${args.connectorId} tier=${viewerTier ?? "none"} mappings=${mappingRules.length}`,
+      );
+      return [];
+    }
+
+    const candidateRows = await ctx.db
       .query("signals")
       .withIndex("by_createdAt", (q) =>
         q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
       )
       .order("desc")
-      .take(limit);
+      .take(Math.min(2000, limit * 10));
+    const rows = candidateRows
+      .filter((row) => visibleChannelSet.has(row.sourceChannelId))
+      .slice(0, limit);
 
     const sanitized = rows.map((row) => {
       const rawAttachments = Array.isArray(row.attachments) ? row.attachments : [];
@@ -129,7 +159,7 @@ export const listRecent = query({
       0,
     );
     console.info(
-      `[signals] listRecent tenant=${args.tenantKey} connector=${args.connectorId} returned=${sanitized.length} attachment_refs=${attachmentCount}`,
+      `[signals] listRecent tenant=${args.tenantKey} connector=${args.connectorId} tier=${viewerTier ?? "none"} visible_channels=${visibleChannelSet.size} scanned=${candidateRows.length} returned=${sanitized.length} attachment_refs=${attachmentCount}`,
     );
 
     return sanitized;
