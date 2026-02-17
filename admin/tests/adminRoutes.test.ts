@@ -12,3 +12,12 @@ describe("admin route navigation", () => {
     expect(state.activeGroup).toBe("shop");
   });
 });
+
+describe("workspace shell contracts", () => {
+  it("supports mobile drawer and desktop sidebar routes", () => {
+    const mappings = getAdminNavState("/mappings");
+    const discord = getAdminNavState("/discord-bot");
+    expect(mappings.activeItem).toBe("mappings");
+    expect(discord.activeItem).toBe("discord-bot");
+  });
+});
