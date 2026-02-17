@@ -14,7 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
-- Approved full admin workspace refactor design + execution plan for a sidebar-first route architecture (`/mappings`, `/discord-bot`, `/shop/*`) with mobile drawer behavior, legacy-route redirects, and strict functionality preservation requirements before implementation begins. (2026-02-17)
+- Completed admin workspace route refactor implementation: admin now uses unified sidebar workspace IA (`/mappings`, `/discord-bot`, `/shop/*`), shared shell/page primitives, canonical route migrations with legacy redirects (`/connectors`, `/discord`, `/payments/*`), and verified route helpers/breadcrumbs coverage in `admin/tests/adminRoutes.test.ts`. (2026-02-17)
 - Completed full `website` dark-theme redesign and componentization pass: home/shop/dashboard/checkout-return/login/signup now share a unified nocturnal visual system, use `shadcn` UI primitives (`Card`, `Button`, `Badge`, `Input`, `Alert`) with reusable site shell components, and dashboard logic is split from a monolithic page into dedicated hook/types/utils/component modules for maintainability. (2026-02-17)
 - Completed component-structure cleanup for redesigned catalog/shop surfaces: `admin` catalog now uses a split hook+component architecture (no monolithic page), and `website` shop now uses `useShopCatalog` + dedicated hero/tier card components with lighter render work and stable selection state updates. (2026-02-17)
 - Synced self-hosted Convex env variables from `website/.env.example` for non-placeholder keys via CLI; `CONVEX_SITE_URL` remains deployment-managed because Convex rejects overriding built-in env var names via `convex env set`. (2026-02-17)
@@ -77,7 +77,7 @@ Backend is Convex.
 - Convex deployment credentials. We need `CONVEX_SELF_HOSTED_ADMIN_KEY` available in CI/deploy to push schema/functions to self-hosted Convex.
 - Convex built-in env management caveat. `CONVEX_SITE_URL` cannot be overridden with `convex env set`; it must be controlled through deployment/runtime configuration.
 - Discord OAuth app configuration. `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, and callback URL registration must stay aligned with deployed `NEXT_PUBLIC_APP_URL` / `DISCORD_REDIRECT_URI`.
-- Discord role sync configuration/permissions. `ROLE_SYNC_BOT_TOKEN` must be aligned across Convex + bot env; tier role mappings must be maintained in admin (`/discord`) or legacy fallback env must be set; bot needs `Manage Roles` with hierarchy above all managed customer tier roles.
+- Discord role sync configuration/permissions. `ROLE_SYNC_BOT_TOKEN` must be aligned across Convex + bot env; tier role mappings must be maintained in admin (`/discord-bot`) or legacy fallback env must be set; bot needs `Manage Roles` with hierarchy above all managed customer tier roles.
 - Discord mirror permissions/configuration. `MIRROR_BOT_TOKEN` (or `ROLE_SYNC_BOT_TOKEN` fallback) must be aligned across Convex + bot env; connector forwarding must be enabled per connector and source->target mappings maintained in admin; bot needs send/edit/delete permissions in mapped target channels.
 - Sell webhook payload variance risk. Some events may omit `variant_id`; maintain product-level fallback policies so fixed-term duration enforcement remains deterministic.
 - Some provider webhook variants may omit stable customer/subscription IDs; fallback email matching still exists for those events and should be monitored.
@@ -168,6 +168,8 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
   Exit criteria: signal feed content is filtered by subscription tier with hidden-by-default mapping behavior.
 - [x] Replace worker fixed low-interval claim loops with event-driven queue wakeups (2026-02-17)
   Exit criteria: idle queue claim mutation spam is significantly reduced while maintaining low-latency processing when jobs arrive.
+- [x] Refactor admin workspace IA to sidebar-based route domains (`/mappings`, `/discord-bot`, `/shop/*`) with legacy redirects and shared shell/page composition primitives (2026-02-17)
+  Exit criteria: canonical admin routes use shared workspace shell + breadcrumbs/header/table primitives, legacy paths redirect, and admin route helper tests pass.
 
 ## Checklists / Hygiene
 
