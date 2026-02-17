@@ -28,3 +28,10 @@ describe("root routing behavior", () => {
     expect(state.activeItem).toBe("mappings");
   });
 });
+
+describe("detail routing", () => {
+  it("keeps mappings nav active for connector detail", () => {
+    const state = getAdminNavState("/mappings/t1/conn_01");
+    expect(state.activeItem).toBe("mappings");
+  });
+});
