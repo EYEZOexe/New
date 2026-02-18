@@ -1,3 +1,7 @@
+"use client";
+
+import { makeFunctionReference } from "convex/server";
+import { useQuery } from "convex/react";
 import { Sparkles } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -7,19 +11,45 @@ import { WorkspaceSectionHeader } from "@/components/workspace/workspace-section
 
 import { IndicatorPanels } from "./components/indicator-panels";
 
-const oracleAlerts = [
-  { id: "o-1", title: "4H Bullish Delta Volume", side: "bull" as const, timeframe: "4H", price: "$77,716", date: "02/02/2026" },
-  { id: "o-2", title: "4H Bearish Delta Volume", side: "bear" as const, timeframe: "4H", price: "$81,269", date: "31/01/2026" },
-  { id: "o-3", title: "1H Bullish FVG Reclaim", side: "bull" as const, timeframe: "1H", price: "$68,112", date: "30/01/2026" },
-];
-
-const watchlistAlerts = [
-  { id: "w-1", title: "BTC 15M Bearish Structure Break", side: "bear" as const, timeframe: "15M", price: "$78,343", date: "03/02/2026" },
-  { id: "w-2", title: "15M Bullish Structure Break", side: "bull" as const, timeframe: "15M", price: "$78,854", date: "03/02/2026" },
-  { id: "w-3", title: "ETH 1H Bearish Continuation", side: "bear" as const, timeframe: "1H", price: "$2,612", date: "02/02/2026" },
-];
+const listIndicatorAlertsRef = makeFunctionReference<
+  "query",
+  { panel?: "oracle" | "watchlist"; limit?: number },
+  Array<{
+    _id: string;
+    panel: "oracle" | "watchlist";
+    title: string;
+    side: "bull" | "bear";
+    timeframe: string;
+    price: string;
+    eventDate: string;
+    live?: boolean;
+    updatedAt: number;
+  }>
+>("workspace:listIndicatorAlerts");
 
 export default function IndicatorsPage() {
+  const alerts = useQuery(listIndicatorAlertsRef, { limit: 80 });
+  const oracleAlerts = (alerts ?? [])
+    .filter((row) => row.panel === "oracle")
+    .map((row) => ({
+      id: row._id,
+      title: row.title,
+      side: row.side,
+      timeframe: row.timeframe,
+      price: row.price,
+      date: row.eventDate,
+    }));
+  const watchlistAlerts = (alerts ?? [])
+    .filter((row) => row.panel === "watchlist")
+    .map((row) => ({
+      id: row._id,
+      title: row.title,
+      side: row.side,
+      timeframe: row.timeframe,
+      price: row.price,
+      date: row.eventDate,
+    }));
+
   return (
     <>
       <WorkspaceSectionHeader
@@ -48,8 +78,15 @@ export default function IndicatorsPage() {
         </CardContent>
       </Card>
 
-      <IndicatorPanels oracleAlerts={oracleAlerts} watchlistAlerts={watchlistAlerts} />
+      {alerts === undefined ? (
+        <Card className="site-panel">
+          <CardContent className="px-0 py-6 text-sm text-muted-foreground">
+            Loading indicator alerts...
+          </CardContent>
+        </Card>
+      ) : (
+        <IndicatorPanels oracleAlerts={oracleAlerts} watchlistAlerts={watchlistAlerts} />
+      )}
     </>
   );
 }
-

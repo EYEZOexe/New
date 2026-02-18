@@ -13,7 +13,10 @@ type StrategyItem = {
   strategy: string;
   description: string;
   tags: string[];
-  body: string[];
+  sections: Array<{
+    title: string;
+    body: string;
+  }>;
 };
 
 type StrategyListProps = {
@@ -42,10 +45,7 @@ export function StrategyList(props: StrategyListProps) {
                 strategy={item.strategy}
                 description={item.description}
                 tags={item.tags}
-                sections={item.body.map((paragraph, index) => ({
-                  title: `Step ${index + 1}`,
-                  body: paragraph,
-                }))}
+                sections={item.sections}
               />
             </div>
             <p className="text-sm text-muted-foreground">{item.description}</p>

@@ -170,6 +170,105 @@ export default defineSchema({
     .index("by_active_tier_sortOrder", ["active", "tier", "sortOrder"])
     .index("by_policy_link", ["policyScope", "policyExternalId"]),
 
+  marketSnapshots: defineTable({
+    symbol: v.string(),
+    name: v.string(),
+    price: v.number(),
+    change1h: v.number(),
+    change24h: v.number(),
+    marketCap: v.number(),
+    volume24h: v.number(),
+    fundingRate: v.optional(v.number()),
+    high24h: v.optional(v.number()),
+    low24h: v.optional(v.number()),
+    sparkline7d: v.optional(v.array(v.number())),
+    updatedAt: v.number(),
+  })
+    .index("by_symbol", ["symbol"])
+    .index("by_updatedAt", ["updatedAt"]),
+
+  liveIntelItems: defineTable({
+    panel: v.string(),
+    title: v.string(),
+    value: v.number(),
+    changePct: v.number(),
+    timeframe: v.union(
+      v.literal("5m"),
+      v.literal("15m"),
+      v.literal("1h"),
+      v.literal("4h"),
+      v.literal("1d"),
+    ),
+    sentiment: v.union(v.literal("bullish"), v.literal("bearish"), v.literal("neutral")),
+    updatedAt: v.number(),
+  })
+    .index("by_panel", ["panel"])
+    .index("by_updatedAt", ["updatedAt"]),
+
+  indicatorAlerts: defineTable({
+    panel: v.union(v.literal("oracle"), v.literal("watchlist")),
+    title: v.string(),
+    side: v.union(v.literal("bull"), v.literal("bear")),
+    timeframe: v.string(),
+    price: v.string(),
+    eventDate: v.string(),
+    live: v.optional(v.boolean()),
+    updatedAt: v.number(),
+  }).index("by_panel_updatedAt", ["panel", "updatedAt"]),
+
+  strategyEntries: defineTable({
+    analyst: v.string(),
+    strategy: v.string(),
+    description: v.string(),
+    tags: v.optional(v.array(v.string())),
+    sections: v.optional(
+      v.array(
+        v.object({
+          title: v.string(),
+          body: v.string(),
+        }),
+      ),
+    ),
+    active: v.boolean(),
+    updatedAt: v.number(),
+  }).index("by_active_updatedAt", ["active", "updatedAt"]),
+
+  journalTrades: defineTable({
+    userId: v.id("users"),
+    coin: v.string(),
+    direction: v.union(v.literal("long"), v.literal("short")),
+    entryPrice: v.number(),
+    exitPrice: v.optional(v.number()),
+    stopLoss: v.number(),
+    riskUsd: v.number(),
+    takeProfits: v.optional(v.array(v.number())),
+    pnlUsd: v.optional(v.number()),
+    leverage: v.string(),
+    setup: v.string(),
+    executionGrade: v.union(v.literal("A"), v.literal("B"), v.literal("C"), v.literal("D")),
+    status: v.union(v.literal("open"), v.literal("closed")),
+    entryDate: v.string(),
+    exitDate: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user_createdAt", ["userId", "createdAt"])
+    .index("by_user_status", ["userId", "status"]),
+
+  newsArticles: defineTable({
+    source: v.string(),
+    title: v.string(),
+    url: v.string(),
+    category: v.string(),
+    publishedAt: v.number(),
+    featured: v.optional(v.boolean()),
+    updatedAt: v.number(),
+  })
+    .index("by_publishedAt", ["publishedAt"])
+    .index("by_featured_publishedAt", ["featured", "publishedAt"]),
+
   paymentCustomers: defineTable({
     provider: v.string(),
     userId: v.id("users"),

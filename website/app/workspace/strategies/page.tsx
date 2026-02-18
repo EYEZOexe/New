@@ -1,37 +1,40 @@
+"use client";
+
+import { makeFunctionReference } from "convex/server";
+import { useQuery } from "convex/react";
+
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { WorkspaceSectionHeader } from "@/components/workspace/workspace-section-header";
 
 import { StrategyList } from "./components/strategy-list";
 
-const strategies = [
-  {
-    id: "s-1",
-    analyst: "Sveezy",
-    strategy: "Breakout Framework",
-    description: "Volume-based breakout strategy focused on clean breaks through resistance with expansion space.",
-    tags: ["Breakout", "Momentum", "5M", "1H"],
-    body: [
-      "Identify a clear resistance that has been respected multiple times on higher timeframe.",
-      "Check for a visible low-volume gap above resistance to avoid immediate chop.",
-      "Drop to execution timeframe and confirm structure break with volume participation.",
-    ],
-  },
-  {
-    id: "s-2",
-    analyst: "Soul",
-    strategy: "Level-to-Level Scalping",
-    description: "Momentum scalping setup using level reaction and profile confirmation.",
-    tags: ["Scalping", "Momentum", "1M", "15M"],
-    body: [
-      "Anchor around prior session high/low and immediate value area boundaries.",
-      "Only execute when order flow confirms continuation off the chosen level.",
-      "Reduce size aggressively when volatility compression appears.",
-    ],
-  },
-];
+const listStrategiesRef = makeFunctionReference<
+  "query",
+  { activeOnly?: boolean; limit?: number },
+  Array<{
+    _id: string;
+    analyst: string;
+    strategy: string;
+    description: string;
+    tags?: string[];
+    sections?: Array<{ title: string; body: string }>;
+    active: boolean;
+    updatedAt: number;
+  }>
+>("workspace:listStrategies");
 
 export default function StrategiesPage() {
+  const strategyRows = useQuery(listStrategiesRef, { activeOnly: true, limit: 100 });
+  const strategies = (strategyRows ?? []).map((row) => ({
+    id: row._id,
+    analyst: row.analyst,
+    strategy: row.strategy,
+    description: row.description,
+    tags: row.tags ?? [],
+    sections: row.sections ?? [],
+  }));
+
   return (
     <>
       <WorkspaceSectionHeader
@@ -49,8 +52,15 @@ export default function StrategiesPage() {
         </CardContent>
       </Card>
 
-      <StrategyList items={strategies} />
+      {strategyRows === undefined ? (
+        <Card className="site-panel">
+          <CardContent className="px-0 py-6 text-sm text-muted-foreground">
+            Loading strategy library...
+          </CardContent>
+        </Card>
+      ) : (
+        <StrategyList items={strategies} />
+      )}
     </>
   );
 }
-

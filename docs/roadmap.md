@@ -14,6 +14,8 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Implemented Convex-powered live workspace ingestion: added `internal.workspace.refreshExternalWorkspaceFeeds` (CoinGecko + CryptoCompare fetch), idempotent upsert/replace mutations for `marketSnapshots` / `liveIntelItems` / `indicatorAlerts` / `newsArticles`, automatic default strategy seeding, and 2-minute cron scheduling in `convex/crons.ts`; also executed a one-off live refresh to populate current rows. (2026-02-17)
+- Connected `website` workspace modules to live Convex data contracts: `markets`, `live-intel`, `signals`, `indicators`, `strategies`, `journal`, and `news` pages now read from Convex queries (`workspace:*`, `signals:listRecent`, `users:viewer`), and journal trade logging now persists through Convex mutation (`workspace:createJournalTrade`) with validated form payloads. Also introduced new Convex workspace domain tables for market/intel/indicator/strategy/news/journal data storage. (2026-02-17)
 - Executed initial trader workspace expansion in `website`: added authenticated `/workspace/*` IA (`overview`, `markets`, `live-intel`, `signals`, `indicators`, `strategies`, `journal`, `news`), shared sidebar/topbar shell primitives, `/dashboard` compatibility redirect, module adapters with tests, and modal workflows for symbol/trade/strategy details plus trade logging schema validation. (2026-02-17)
 - Approved trader workspace expansion design + implementation plan for `website`: introduces authenticated `/workspace/*` route IA (overview, markets, live-intel, signals, indicators, strategies, journal, news), shared sidebar/topbar shell, modal workflow patterns, and phased adapter-first data integration to incorporate high-density trading UI elements while preserving existing Convex entitlement/Discord flows. (2026-02-17)
 - Completed SaaS website layout polish across home/login/signup/dashboard: introduced stronger header IA with metric callouts, cleaner responsive content hierarchy (including two-column auth layouts), improved visual rhythm/typography tokens, and refined dashboard signal-card readability for long IDs/content/attachments. (2026-02-17)
@@ -75,12 +77,12 @@ Backend is Convex.
 - Phase 1 signal pipeline is now hardened end-to-end: message ingest normalizes update/delete timestamps with fallbacks, stale post-delete updates are ignored server-side, plugin emits message delete events, and dashboard feed surfaces edited/deleted state with realtime update logs. (2026-02-16)
 
 **Next**
-- Replace mock adapter-backed workspace module datasets with live Convex-backed feeds per module (`markets`, `live-intel`, `strategies`, `journal`, `news`) and add module-specific backend observability.
 - Add scheduled payment reconciliation and alerting for webhook drift/failure spikes.
 - Monitor queue-wake rollout metrics (`wake source`, `empty/non-empty claim outcomes`, pickup latency) and tune bounded fallback ranges if websocket quality degrades in production.
 - Add operational dashboards/alerts for shop catalog publish validation failures (`policy_link_required`, `policy_link_disabled`, checkout URL validation).
 
 **Blockers / Risks**
+- External provider dependency for workspace feeds. Market/news ingestion relies on public upstream APIs (CoinGecko/CryptoCompare); provider outages, schema changes, or rate limits can temporarily reduce feed freshness.
 - Sell product CRUD in admin depends on `SELLAPP_API_TOKEN` being configured in Convex runtime env; missing token causes product list/create/update actions to fail (`sell_api_token_missing`).
 - Data migration. We need a clear plan to migrate users/subscriptions/signals into Convex without downtime.
 - Auth and identity mapping. We need one stable user identifier across web, bot, and webhook processing.
@@ -266,6 +268,8 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
 | 2026-02-17 | Apply website UI layout polish pass focused on hierarchy, responsive composition, and feed readability across home/auth/dashboard | N/A |
 | 2026-02-17 | Approve trader workspace expansion IA for `website` using `/workspace/*` modules + shared shell with phased execution plan | `docs/plans/2026-02-17-trader-workspace-expansion-design.md` |
 | 2026-02-17 | Execute workspace expansion implementation tasks for shared shell, module routes, adapters/tests, and modal workflows in `website` | `docs/plans/2026-02-17-trader-workspace-expansion-plan.md` |
+| 2026-02-17 | Wire workspace module pages to live Convex query/mutation data paths and add dedicated workspace domain tables for market/intel/indicator/strategy/news/journal datasets | `docs/plans/2026-02-17-trader-workspace-expansion-plan.md` |
+| 2026-02-17 | Add scheduled external feed ingestion for workspace modules (Convex internal action + cron + upsert mutations) and trigger first live refresh | `docs/plans/2026-02-17-trader-workspace-expansion-plan.md` |
 
 ## Links
 

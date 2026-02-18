@@ -1,65 +1,54 @@
+"use client";
+
+import { makeFunctionReference } from "convex/server";
+import { useQuery } from "convex/react";
+
+import { Card, CardContent } from "@/components/ui/card";
 import { ChartCard } from "@/components/workspace/chart-card";
 import { WorkspaceSectionHeader } from "@/components/workspace/workspace-section-header";
 
+import type { MarketInstrument } from "../lib/types";
 import { buildMarketKpis, normalizeMarketRows } from "../lib/marketAdapter";
 import { MarketsKpiRow } from "./components/markets-kpi-row";
 import { MarketsTable } from "./components/markets-table";
 
-const mockMarketData = normalizeMarketRows([
-  {
-    id: "btc",
-    symbol: "BTC",
-    name: "Bitcoin",
-    price: 67818,
-    change1h: -0.04,
-    change24h: -1.15,
-    marketCap: 1_360_000_000_000,
-    sparkline7d: [67120, 67310, 67800, 67550, 67610, 67730, 67818],
-  },
-  {
-    id: "eth",
-    symbol: "ETH",
-    name: "Ethereum",
-    price: 1968.27,
-    change1h: 0.17,
-    change24h: -0.06,
-    marketCap: 237_740_000_000,
-    sparkline7d: [1910, 1925, 1940, 1936, 1955, 1961, 1968.27],
-  },
-  {
-    id: "sol",
-    symbol: "SOL",
-    name: "Solana",
-    price: 84.98,
-    change1h: -0.04,
-    change24h: -0.3,
-    marketCap: 48_250_000_000,
-    sparkline7d: [81.1, 82.5, 83.2, 84.1, 83.8, 84.7, 84.98],
-  },
-  {
-    id: "xrp",
-    symbol: "XRP",
-    name: "XRP",
-    price: 1.46,
-    change1h: 0.07,
-    change24h: -1.77,
-    marketCap: 88_680_000_000,
-    sparkline7d: [1.37, 1.41, 1.39, 1.42, 1.45, 1.44, 1.46],
-  },
-  {
-    id: "doge",
-    symbol: "DOGE",
-    name: "Dogecoin",
-    price: 0.0987,
-    change1h: 0.01,
-    change24h: -2.81,
-    marketCap: 16_650_000_000,
-    sparkline7d: [0.088, 0.091, 0.094, 0.092, 0.095, 0.097, 0.0987],
-  },
-]);
+const listMarketSnapshotsRef = makeFunctionReference<
+  "query",
+  { limit?: number },
+  Array<{
+    _id: string;
+    symbol: string;
+    name: string;
+    price: number;
+    change1h: number;
+    change24h: number;
+    marketCap: number;
+    volume24h: number;
+    fundingRate?: number;
+    high24h?: number;
+    low24h?: number;
+    sparkline7d?: number[];
+    updatedAt: number;
+  }>
+>("workspace:listMarketSnapshots");
 
 export default function MarketsPage() {
-  const kpis = buildMarketKpis(mockMarketData);
+  const marketRows = useQuery(listMarketSnapshotsRef, { limit: 100 });
+  const normalizedRows: MarketInstrument[] = normalizeMarketRows(
+    (marketRows ?? []).map((row) => ({
+      id: row._id,
+      symbol: row.symbol,
+      name: row.name,
+      price: row.price,
+      change1h: row.change1h,
+      change24h: row.change24h,
+      marketCap: row.marketCap,
+      volume24h: row.volume24h,
+      sparkline7d: row.sparkline7d ?? [],
+    })),
+  );
+  const kpis = buildMarketKpis(normalizedRows);
+  const topRows = normalizedRows.slice(0, 3);
 
   return (
     <>
@@ -76,13 +65,28 @@ export default function MarketsPage() {
       />
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <ChartCard title="BTC 7D" values={mockMarketData.find((row) => row.symbol === "BTC")?.sparkline7d ?? []} />
-        <ChartCard title="ETH 7D" values={mockMarketData.find((row) => row.symbol === "ETH")?.sparkline7d ?? []} />
-        <ChartCard title="SOL 7D" values={mockMarketData.find((row) => row.symbol === "SOL")?.sparkline7d ?? []} />
+        {topRows.length > 0 ? (
+          topRows.map((row) => (
+            <ChartCard key={row.id} title={`${row.symbol} 7D`} values={row.sparkline7d ?? []} />
+          ))
+        ) : (
+          <Card className="site-panel lg:col-span-3">
+            <CardContent className="px-0 py-6 text-sm text-muted-foreground">
+              No live market chart series are available yet.
+            </CardContent>
+          </Card>
+        )}
       </div>
 
-      <MarketsTable rows={mockMarketData} />
+      {marketRows === undefined ? (
+        <Card className="site-panel">
+          <CardContent className="px-0 py-6 text-sm text-muted-foreground">
+            Loading market snapshots...
+          </CardContent>
+        </Card>
+      ) : (
+        <MarketsTable rows={normalizedRows} />
+      )}
     </>
   );
 }
-

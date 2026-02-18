@@ -10,4 +10,11 @@ crons.interval(
   {},
 );
 
+crons.interval(
+  "refresh workspace live feeds",
+  { minutes: 2 },
+  internal.workspace.refreshExternalWorkspaceFeeds,
+  {},
+);
+
 export default crons;

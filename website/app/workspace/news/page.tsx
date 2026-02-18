@@ -1,5 +1,11 @@
+"use client";
+
+import { makeFunctionReference } from "convex/server";
+import { useQuery } from "convex/react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { WorkspaceSectionHeader } from "@/components/workspace/workspace-section-header";
 
 import { normalizeNewsArticles, partitionFeaturedNews } from "../lib/newsAdapter";
@@ -7,52 +13,35 @@ import { SymbolQuickViewDialog } from "../components/symbol-quick-view-dialog";
 import { NewsFeatureCard } from "./components/news-feature-card";
 import { NewsGrid } from "./components/news-grid";
 
-const newsRows = normalizeNewsArticles([
-  {
-    id: "n-1",
-    source: "CoinDesk",
-    title: "Crypto slides as tech stocks and gold retreat; bitcoin correlation turns positive",
-    url: "https://www.coindesk.com/",
-    category: "featured",
-    featured: true,
-    publishedAt: Date.now() - 10 * 60 * 1000,
-  },
-  {
-    id: "n-2",
-    source: "CryptoNews",
-    title: "Germany central bank president endorses crypto stablecoins under EU MiCA framework",
-    url: "https://cryptonews.com/",
-    category: "regulation",
-    publishedAt: Date.now() - 23 * 60 * 1000,
-  },
-  {
-    id: "n-3",
-    source: "Cointelegraph",
-    title: "Steak 'n Shake says same-store sales rose after bitcoin rollout",
-    url: "https://cointelegraph.com/",
-    category: "market",
-    publishedAt: Date.now() - 38 * 60 * 1000,
-  },
-  {
-    id: "n-4",
-    source: "CryptoPotato",
-    title: "Matrixport: Crypto extreme fear suggests incoming inflection point",
-    url: "https://cryptopotato.com/",
-    category: "update",
-    publishedAt: Date.now() - 16 * 60 * 1000,
-  },
-  {
-    id: "n-5",
-    source: "Watcher Guru",
-    title: "Monero use holds despite delistings as darknet markets shift",
-    url: "https://watcher.guru/",
-    category: "market",
-    publishedAt: Date.now() - 2 * 60 * 60 * 1000,
-  },
-]);
+const listNewsArticlesRef = makeFunctionReference<
+  "query",
+  { limit?: number },
+  Array<{
+    _id: string;
+    source: string;
+    title: string;
+    url: string;
+    category: string;
+    publishedAt: number;
+    featured?: boolean;
+    updatedAt: number;
+  }>
+>("workspace:listNewsArticles");
 
 export default function NewsPage() {
-  const partitioned = partitionFeaturedNews(newsRows);
+  const newsRows = useQuery(listNewsArticlesRef, { limit: 80 });
+  const normalizedNews = normalizeNewsArticles(
+    (newsRows ?? []).map((row) => ({
+      id: row._id,
+      source: row.source,
+      title: row.title,
+      url: row.url,
+      category: row.category,
+      publishedAt: row.publishedAt,
+      featured: row.featured ?? false,
+    })),
+  );
+  const partitioned = partitionFeaturedNews(normalizedNews);
   const featured = partitioned.featured;
 
   return (
@@ -84,10 +73,18 @@ export default function NewsPage() {
         }
       />
 
-      {featured ? <NewsFeatureCard article={featured} /> : null}
-
-      <NewsGrid articles={partitioned.rest} />
+      {newsRows === undefined ? (
+        <Card className="site-panel">
+          <CardContent className="px-0 py-6 text-sm text-muted-foreground">
+            Loading market intelligence feed...
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {featured ? <NewsFeatureCard article={featured} /> : null}
+          <NewsGrid articles={partitioned.rest} />
+        </>
+      )}
     </>
   );
 }
-

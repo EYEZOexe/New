@@ -39,6 +39,7 @@ import type * as subscriptionAccess from "../subscriptionAccess.js";
 import type * as tierVisibility from "../tierVisibility.js";
 import type * as users from "../users.js";
 import type * as workerQueueWake from "../workerQueueWake.js";
+import type * as workspace from "../workspace.js";
 
 import type {
   ApiFromModules,
@@ -78,6 +79,7 @@ declare const fullApi: ApiFromModules<{
   tierVisibility: typeof tierVisibility;
   users: typeof users;
   workerQueueWake: typeof workerQueueWake;
+  workspace: typeof workspace;
 }>;
 
 /**
