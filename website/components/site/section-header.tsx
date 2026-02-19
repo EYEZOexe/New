@@ -46,7 +46,7 @@ export function SectionHeader(props: SectionHeaderProps) {
                 asChild
                 size="sm"
                 variant="ghost"
-                className="rounded-full border border-border/70 bg-background/35 px-3.5"
+                className="rounded-full border border-border/70 bg-background/35 px-4"
               >
                 <Link href={link.href}>{link.label}</Link>
               </Button>
@@ -62,7 +62,7 @@ export function SectionHeader(props: SectionHeaderProps) {
           </div>
 
           {props.highlights?.length ? (
-            <div className="grid gap-2 sm:grid-cols-3 lg:w-[290px] lg:grid-cols-1">
+            <div className="grid gap-2 sm:grid-cols-3 lg:w-[340px] lg:grid-cols-1">
               {props.highlights.map((item) => (
                 <div key={item.label} className="site-metric">
                   <p className="site-kicker">{item.label}</p>

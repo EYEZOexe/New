@@ -70,11 +70,11 @@
 
 @layer components {
   .site-page {
-    @apply relative min-h-screen overflow-hidden px-4 pb-12 pt-6 md:px-8 md:pb-16 md:pt-8;
+    @apply relative min-h-screen overflow-hidden px-4 pb-12 pt-6 md:px-8 md:pb-16 md:pt-8 xl:px-10 2xl:px-14;
   }
 
   .site-wrap {
-    @apply relative z-10 mx-auto w-full max-w-6xl space-y-6 md:space-y-8;
+    @apply relative z-10 mx-auto w-full max-w-[1780px] space-y-6 md:space-y-8;
   }
 
   .site-panel {
@@ -130,5 +130,6 @@
       linear-gradient(to right, oklch(0.62 0.08 220 / 0.05) 1px, transparent 1px),
       linear-gradient(to bottom, oklch(0.62 0.08 220 / 0.05) 1px, transparent 1px);
     background-size: 30px 30px;
+    min-height: calc(100vh - 11rem);
   }
 }

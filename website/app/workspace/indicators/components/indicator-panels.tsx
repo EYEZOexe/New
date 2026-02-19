@@ -16,10 +16,18 @@ type IndicatorPanelsProps = {
 };
 
 function AlertList(props: { alerts: IndicatorAlert[] }) {
+  if (props.alerts.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-border/70 bg-background/35 p-4 text-sm text-muted-foreground">
+        No alerts available for this panel right now.
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       {props.alerts.map((alert) => (
-        <article key={alert.id} className="rounded-xl border border-border/70 bg-background/45 p-3.5">
+        <article key={alert.id} className="rounded-xl border border-border/70 bg-background/45 p-3.5 transition-colors hover:border-primary/45 hover:bg-background/55">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="font-semibold">{alert.title}</p>
             <p className="text-xs text-muted-foreground">{alert.date}</p>
@@ -63,4 +71,3 @@ export function IndicatorPanels(props: IndicatorPanelsProps) {
     </div>
   );
 }
-

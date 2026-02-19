@@ -35,13 +35,13 @@ export function NewsGrid(props: NewsGridProps) {
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       {props.articles.map((article) => (
-        <Card key={article.id} className="site-soft h-full">
+        <Card key={article.id} className="site-soft h-full transition-colors hover:border-primary/45 hover:bg-background/55">
           <CardContent className="space-y-3 px-0">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">{article.source}</p>
               <p className="text-xs text-muted-foreground">{formatAge(article.publishedAt)}</p>
             </div>
-            <p className="font-semibold">{article.title}</p>
+            <p className="font-semibold leading-snug">{article.title}</p>
             <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">{article.category}</p>
             <a
               href={article.url}

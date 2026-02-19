@@ -21,6 +21,14 @@ function formatNumber(value: number | null | undefined): string {
   return value.toFixed(4);
 }
 
+function formatUsd(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
 export function TradeDetailDialog(props: TradeDetailDialogProps) {
   return (
     <DetailDialog
@@ -49,11 +57,9 @@ export function TradeDetailDialog(props: TradeDetailDialogProps) {
           {props.direction}
         </Badge>
         <p className={props.pnl >= 0 ? "text-emerald-300 font-semibold" : "text-red-300 font-semibold"}>
-          {props.pnl >= 0 ? "+" : ""}
-          {props.pnl.toFixed(2)}R
+          {props.pnl >= 0 ? "+" : "-"}{formatUsd(Math.abs(props.pnl))}
         </p>
       </div>
     </DetailDialog>
   );
 }
-

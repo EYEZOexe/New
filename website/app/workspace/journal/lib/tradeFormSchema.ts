@@ -41,8 +41,31 @@ export const tradeFormSchema = z
         message: "Exit date is required for closed trades",
       });
     }
+
+    if (value.status === "closed" && typeof value.exitPrice !== "number") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["exitPrice"],
+        message: "Exit price is required for closed trades",
+      });
+    }
+
+    if (value.direction === "long" && value.stopLoss >= value.entryPrice) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["stopLoss"],
+        message: "Long trades require stop loss below entry",
+      });
+    }
+
+    if (value.direction === "short" && value.stopLoss <= value.entryPrice) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["stopLoss"],
+        message: "Short trades require stop loss above entry",
+      });
+    }
   });
 
 export type TradeFormInput = z.input<typeof tradeFormSchema>;
 export type TradeFormValues = z.output<typeof tradeFormSchema>;
-

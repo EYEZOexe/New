@@ -63,6 +63,31 @@ function parseNumber(value: string): number {
   return Number(value.trim());
 }
 
+function computeClosedTradePnlUsd(input: {
+  direction: "long" | "short";
+  entryPrice: number;
+  exitPrice: number;
+  stopLoss: number;
+  riskUsd: number;
+}): number {
+  if (input.riskUsd <= 0) return 0;
+
+  const riskPerUnit =
+    input.direction === "long"
+      ? input.entryPrice - input.stopLoss
+      : input.stopLoss - input.entryPrice;
+  if (!Number.isFinite(riskPerUnit) || riskPerUnit <= 0) return 0;
+
+  const rewardPerUnit =
+    input.direction === "long"
+      ? input.exitPrice - input.entryPrice
+      : input.entryPrice - input.exitPrice;
+
+  const pnl = (rewardPerUnit / riskPerUnit) * input.riskUsd;
+  if (!Number.isFinite(pnl)) return 0;
+  return Number(pnl.toFixed(2));
+}
+
 export function LogTradeDialog(props: LogTradeDialogProps) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<DraftTrade>(initialDraft);
@@ -78,20 +103,34 @@ export function LogTradeDialog(props: LogTradeDialogProps) {
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    const entryPrice = parseNumber(draft.entryPrice);
+    const exitPrice = draft.exitPrice.trim() ? parseNumber(draft.exitPrice) : null;
+    const stopLoss = parseNumber(draft.stopLoss);
+    const riskUsd = parseNumber(draft.riskUsd);
+    const calculatedPnlUsd =
+      draft.status === "closed" && typeof exitPrice === "number"
+        ? computeClosedTradePnlUsd({
+            direction: draft.direction,
+            entryPrice,
+            exitPrice,
+            stopLoss,
+            riskUsd,
+          })
+        : 0;
 
     const payload = {
       coin: draft.coin,
       direction: draft.direction,
-      entryPrice: parseNumber(draft.entryPrice),
-      exitPrice: draft.exitPrice.trim() ? parseNumber(draft.exitPrice) : null,
-      stopLoss: parseNumber(draft.stopLoss),
-      riskUsd: parseNumber(draft.riskUsd),
+      entryPrice,
+      exitPrice,
+      stopLoss,
+      riskUsd,
       takeProfits: draft.takeProfits
         .split(",")
         .map((value) => value.trim())
         .filter(Boolean)
         .map((value) => Number(value)),
-      pnlUsd: 0,
+      pnlUsd: calculatedPnlUsd,
       leverage: draft.leverage,
       setup: draft.setup,
       executionGrade: draft.executionGrade,
@@ -108,9 +147,13 @@ export function LogTradeDialog(props: LogTradeDialogProps) {
     const parsed = tradeFormSchema.safeParse(payload);
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? "Unable to save trade");
+      console.error("[workspace/journal-ui] trade validation failed");
       return;
     }
 
+    console.info(
+      `[workspace/journal-ui] trade validated coin=${parsed.data.coin.toUpperCase()} status=${parsed.data.status} pnl=${parsed.data.pnlUsd ?? 0}`,
+    );
     props.onCreate?.(parsed.data);
     setDraft(initialDraft);
     setOpen(false);
@@ -283,4 +326,3 @@ export function LogTradeDialog(props: LogTradeDialogProps) {
     </Dialog>
   );
 }
-

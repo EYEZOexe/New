@@ -54,6 +54,9 @@ export default function NewsPage() {
             <Badge variant="outline" className="rounded-full border-emerald-500/40 text-emerald-300">
               Live
             </Badge>
+            <Badge variant="outline" className="rounded-full">
+              Source: CryptoCompare
+            </Badge>
             <SymbolQuickViewDialog
               trigger={
                 <Button variant="outline" className="rounded-full">

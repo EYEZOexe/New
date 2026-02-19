@@ -14,6 +14,7 @@ type TradeLogRow = {
   direction: "long" | "short";
   entry: number;
   exit: number | null;
+  stopLoss: number | null;
   pnl: number;
   status: "open" | "closed";
   date: string;
@@ -110,7 +111,7 @@ export function TradeLogTable(props: TradeLogTableProps) {
                       date={row.date}
                       entry={row.entry}
                       exit={row.exit}
-                      stopLoss={row.exit}
+                      stopLoss={row.stopLoss}
                       pnl={row.pnl}
                     />
                   </td>

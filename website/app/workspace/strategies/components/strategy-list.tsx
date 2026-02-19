@@ -24,10 +24,20 @@ type StrategyListProps = {
 };
 
 export function StrategyList(props: StrategyListProps) {
+  if (props.items.length === 0) {
+    return (
+      <Card className="site-panel">
+        <CardContent className="px-0 py-6 text-sm text-muted-foreground">
+          No strategies match the active filter.
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
-    <div className="space-y-3">
+    <div className="grid gap-3 xl:grid-cols-2">
       {props.items.map((item) => (
-        <Card key={item.id} className="site-panel">
+        <Card key={item.id} className="site-panel h-full transition-colors hover:border-primary/45">
           <CardContent className="space-y-3 px-0">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>

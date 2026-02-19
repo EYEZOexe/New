@@ -15,7 +15,7 @@ type WorkspaceRoute = {
 };
 
 export const workspaceRoutes: WorkspaceRoute[] = [
-  { key: "overview", href: "/workspace/overview", label: "Overview" },
+  { key: "overview", href: "/dashboard", label: "Dashboard" },
   { key: "markets", href: "/workspace/markets", label: "Markets" },
   { key: "live-intel", href: "/workspace/live-intel", label: "Live Intel" },
   { key: "signals", href: "/workspace/signals", label: "Signals & Alerts" },
@@ -32,8 +32,8 @@ export type WorkspaceNavState = {
 
 export function normalizeWorkspacePath(pathname: string): string {
   const cleanPath = pathname.split("?")[0] ?? pathname;
-  if (cleanPath === "/dashboard") {
-    return "/workspace/overview";
+  if (cleanPath === "/workspace/overview") {
+    return "/dashboard";
   }
   return cleanPath;
 }
@@ -50,4 +50,3 @@ export function getWorkspaceNavState(pathname: string): WorkspaceNavState {
     activeKey: matchedRoute.key,
   };
 }
-

@@ -15,6 +15,7 @@ type ShopTierCardProps = {
 
 export function ShopTierCard(props: ShopTierCardProps) {
   const tier = props.tier;
+  const selectedDuration = props.selectedVariant?.durationDays ?? null;
 
   return (
     <Card
@@ -23,7 +24,7 @@ export function ShopTierCard(props: ShopTierCardProps) {
       )}`}
     >
       <CardContent className="space-y-5 px-0">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xl font-semibold">{tier.title}</p>
           {tier.badge ? <Badge variant="outline">{tier.badge}</Badge> : null}
         </div>
@@ -37,8 +38,9 @@ export function ShopTierCard(props: ShopTierCardProps) {
               type="button"
               size="sm"
               variant={
-                variant.durationDays === props.selectedVariant?.durationDays ? "default" : "outline"
+                variant.durationDays === selectedDuration ? "default" : "outline"
               }
+              className="rounded-full px-4"
               onClick={() => props.onSelectDuration(variant.durationDays)}
             >
               {variant.durationDays}d
@@ -65,7 +67,7 @@ export function ShopTierCard(props: ShopTierCardProps) {
               </ul>
             ) : null}
 
-            <Button asChild className="w-full">
+            <Button asChild className="w-full rounded-xl">
               <a
                 href={buildCheckoutUrl(
                   props.selectedVariant.checkoutUrl,
@@ -78,6 +80,11 @@ export function ShopTierCard(props: ShopTierCardProps) {
                 Checkout {tier.title}
               </a>
             </Button>
+            <div className="site-soft space-y-1 text-xs text-muted-foreground">
+              <p>Tier: {tier.tier.toUpperCase()}</p>
+              <p>Duration: {props.selectedVariant.durationDays} days</p>
+              <p>Policy-linked entitlement confirmation follows checkout return state.</p>
+            </div>
             <p className="text-xs text-muted-foreground">
               After payment, open{" "}
               <Link href="/checkout/return" className="underline underline-offset-4">

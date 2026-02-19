@@ -26,7 +26,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { getWorkspaceNavState } from "@/lib/workspaceRoutes";
+import { getWorkspaceNavState, workspaceRoutes } from "@/lib/workspaceRoutes";
 
 const navIcons = {
   overview: LayoutDashboard,
@@ -39,25 +39,14 @@ const navIcons = {
   news: Newspaper,
 } as const;
 
-const navItems = [
-  { key: "overview", href: "/workspace/overview", label: "Overview" },
-  { key: "markets", href: "/workspace/markets", label: "Markets" },
-  { key: "live-intel", href: "/workspace/live-intel", label: "Live Intel" },
-  { key: "signals", href: "/workspace/signals", label: "Signals & Alerts" },
-  { key: "indicators", href: "/workspace/indicators", label: "Indicators" },
-  { key: "strategies", href: "/workspace/strategies", label: "Strategies" },
-  { key: "journal", href: "/workspace/journal", label: "Trading Journal" },
-  { key: "news", href: "/workspace/news", label: "News" },
-] as const;
-
 export function WorkspaceSidebar() {
   const pathname = usePathname();
-  const state = getWorkspaceNavState(pathname ?? "/workspace/overview");
+  const state = getWorkspaceNavState(pathname ?? "/dashboard");
 
   return (
     <Sidebar collapsible="offcanvas" className="border-r border-border/70">
       <SidebarHeader className="border-b border-border/70 px-4 py-4">
-        <Link href="/workspace/overview" className="flex items-center gap-2">
+        <Link href="/dashboard" className="flex items-center gap-2">
           <div className="rounded-lg bg-primary/25 p-1.5 text-primary">
             <ShieldAlert className="size-4" />
           </div>
@@ -73,7 +62,7 @@ export function WorkspaceSidebar() {
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => {
+              {workspaceRoutes.map((item) => {
                 const Icon = navIcons[item.key];
                 const isActive = state.activeKey === item.key;
                 return (
@@ -102,4 +91,3 @@ export function WorkspaceSidebar() {
     </Sidebar>
   );
 }
-

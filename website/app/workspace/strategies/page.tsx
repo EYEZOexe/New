@@ -2,8 +2,10 @@
 
 import { makeFunctionReference } from "convex/server";
 import { useQuery } from "convex/react";
+import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { WorkspaceSectionHeader } from "@/components/workspace/workspace-section-header";
 
@@ -26,6 +28,7 @@ const listStrategiesRef = makeFunctionReference<
 
 export default function StrategiesPage() {
   const strategyRows = useQuery(listStrategiesRef, { activeOnly: true, limit: 100 });
+  const [selectedTag, setSelectedTag] = useState("all");
   const strategies = (strategyRows ?? []).map((row) => ({
     id: row._id,
     analyst: row.analyst,
@@ -34,21 +37,46 @@ export default function StrategiesPage() {
     tags: row.tags ?? [],
     sections: row.sections ?? [],
   }));
+  const availableTags = useMemo(() => {
+    const tags = new Set<string>();
+    for (const strategy of strategies) {
+      for (const tag of strategy.tags) {
+        tags.add(tag);
+      }
+    }
+    return ["all", ...Array.from(tags).sort((left, right) => left.localeCompare(right))];
+  }, [strategies]);
+  const filteredStrategies = useMemo(
+    () => (selectedTag === "all" ? strategies : strategies.filter((item) => item.tags.includes(selectedTag))),
+    [selectedTag, strategies],
+  );
 
   return (
     <>
       <WorkspaceSectionHeader
         title="Strategies"
         description="Analyst playbooks and execution frameworks with tactical filtering."
+        actions={
+          <Badge variant="outline" className="rounded-full">
+            Active playbooks: {filteredStrategies.length}
+          </Badge>
+        }
       />
 
       <Card className="site-soft">
         <CardContent className="flex flex-wrap items-center gap-2 px-0">
-          <Badge variant="outline">All Strategies</Badge>
-          <Badge variant="outline">Scalping</Badge>
-          <Badge variant="outline">Swing</Badge>
-          <Badge variant="outline">Breakout</Badge>
-          <Badge variant="outline">Reversal</Badge>
+          {availableTags.map((tag) => (
+            <Button
+              key={tag}
+              type="button"
+              size="sm"
+              variant={selectedTag === tag ? "default" : "outline"}
+              className="rounded-full capitalize"
+              onClick={() => setSelectedTag(tag)}
+            >
+              {tag}
+            </Button>
+          ))}
         </CardContent>
       </Card>
 
@@ -59,7 +87,7 @@ export default function StrategiesPage() {
           </CardContent>
         </Card>
       ) : (
-        <StrategyList items={strategies} />
+        <StrategyList items={filteredStrategies} />
       )}
     </>
   );

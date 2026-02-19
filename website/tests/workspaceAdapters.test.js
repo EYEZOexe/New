@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { normalizeJournalTrades, summarizeJournalTrades } from "../app/workspace/lib/journalAdapter";
+import { buildJournalAnalytics } from "../app/workspace/lib/journalMetrics";
 import { groupLiveIntelByPanel, normalizeLiveIntelCards } from "../app/workspace/lib/liveIntelAdapter";
 import { buildMarketKpis, normalizeMarketRows } from "../app/workspace/lib/marketAdapter";
 import { normalizeNewsArticles, partitionFeaturedNews } from "../app/workspace/lib/newsAdapter";
@@ -57,6 +58,14 @@ describe("workspace adapters", () => {
       netPnl: 180,
       winRate: 0.5,
     });
+
+    const analytics = buildJournalAnalytics(trades);
+    expect(analytics.profitFactor).toBe(5);
+    expect(analytics.expectancy).toBe(100);
+    expect(analytics.bestTrade).toBe(250);
+    expect(analytics.maxDrawdown).toBe(-50);
+    expect(analytics.equityPoints).toHaveLength(2);
+    expect(analytics.dailyPnl).toHaveLength(1);
   });
 
   it("normalizes and partitions news with featured precedence", () => {

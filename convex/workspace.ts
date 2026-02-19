@@ -97,6 +97,44 @@ function toIsoDate(timestampMs: number): string {
   return new Date(timestampMs).toISOString().slice(0, 10);
 }
 
+function computeJournalTradePnlUsd(input: {
+  direction: "long" | "short";
+  entryPrice: number;
+  exitPrice?: number;
+  stopLoss: number;
+  riskUsd: number;
+  status: "open" | "closed";
+  explicitPnlUsd?: number;
+}): { pnlUsd: number; source: "explicit" | "computed" | "default_zero" } {
+  if (typeof input.explicitPnlUsd === "number" && Number.isFinite(input.explicitPnlUsd)) {
+    return { pnlUsd: Number(input.explicitPnlUsd.toFixed(2)), source: "explicit" };
+  }
+
+  if (input.status !== "closed" || typeof input.exitPrice !== "number" || input.riskUsd <= 0) {
+    return { pnlUsd: 0, source: "default_zero" };
+  }
+
+  const riskPerUnit =
+    input.direction === "long"
+      ? input.entryPrice - input.stopLoss
+      : input.stopLoss - input.entryPrice;
+  if (!Number.isFinite(riskPerUnit) || riskPerUnit <= 0) {
+    return { pnlUsd: 0, source: "default_zero" };
+  }
+
+  const rewardPerUnit =
+    input.direction === "long"
+      ? input.exitPrice - input.entryPrice
+      : input.entryPrice - input.exitPrice;
+
+  const computed = (rewardPerUnit / riskPerUnit) * input.riskUsd;
+  if (!Number.isFinite(computed)) {
+    return { pnlUsd: 0, source: "default_zero" };
+  }
+
+  return { pnlUsd: Number(computed.toFixed(2)), source: "computed" };
+}
+
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, {
     method: "GET",
@@ -317,8 +355,23 @@ export const createJournalTrade = mutation({
     if (!userId) {
       throw new Error("unauthenticated");
     }
+    if (args.status === "closed" && !args.exitDate) {
+      throw new Error("exit_date_required_for_closed_trade");
+    }
+    if (args.status === "closed" && typeof args.exitPrice !== "number") {
+      throw new Error("exit_price_required_for_closed_trade");
+    }
 
     const now = Date.now();
+    const pnlResult = computeJournalTradePnlUsd({
+      direction: args.direction,
+      entryPrice: args.entryPrice,
+      exitPrice: args.exitPrice,
+      stopLoss: args.stopLoss,
+      riskUsd: args.riskUsd,
+      status: args.status,
+      explicitPnlUsd: args.pnlUsd,
+    });
     const tradeId = await ctx.db.insert("journalTrades", {
       userId,
       coin: args.coin.trim().toUpperCase(),
@@ -328,7 +381,7 @@ export const createJournalTrade = mutation({
       stopLoss: args.stopLoss,
       riskUsd: args.riskUsd,
       ...(args.takeProfits ? { takeProfits: args.takeProfits } : {}),
-      ...(typeof args.pnlUsd === "number" ? { pnlUsd: args.pnlUsd } : {}),
+      pnlUsd: pnlResult.pnlUsd,
       leverage: args.leverage.trim(),
       setup: args.setup.trim(),
       executionGrade: args.executionGrade,
@@ -342,7 +395,7 @@ export const createJournalTrade = mutation({
     });
 
     console.info(
-      `[workspace/journal] created trade=${String(tradeId)} user=${String(userId)} coin=${args.coin.trim().toUpperCase()} status=${args.status}`,
+      `[workspace/journal] created trade=${String(tradeId)} user=${String(userId)} coin=${args.coin.trim().toUpperCase()} status=${args.status} pnl_usd=${pnlResult.pnlUsd} pnl_source=${pnlResult.source}`,
     );
     return { ok: true as const, tradeId };
   },

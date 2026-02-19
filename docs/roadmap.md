@@ -14,6 +14,9 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Applied Convex backend rollout for website workspace/journal updates via `bunx convex dev --once --env-file website/.env.example`; post-deploy function smoke queries (`workspace:listMarketSnapshots`, `workspace:listStrategies`, `workspace:listNewsArticles`) returned callable payloads. (2026-02-19)
+- Completed second-pass website workspace polish: improved cross-module visual consistency and interaction behavior across `live-intel`, `indicators`, `strategies`, and `news` surfaces (timeframe-aware live intel filtering, strategy tag filtering, better empty states, and stronger card interaction affordances). Also executed Convex env sync from `website/.env.example` for non-placeholder runtime keys via CLI. (2026-02-19)
+- Completed website member experience restructure: promoted `/dashboard` from compatibility redirect to a real workspace-shell page, widened site layout constraints to better use desktop viewport space, refreshed login/signup/shop IA, made workspace auth gating redirect-safe, and upgraded trading journal to computed analytics (profit factor/expectancy/drawdown), interactive P&L calendar, and equity curve visualization with validated closed-trade persistence + backend P&L fallback calculation. (2026-02-19)
 - Implemented Convex-powered live workspace ingestion: added `internal.workspace.refreshExternalWorkspaceFeeds` (CoinGecko + CryptoCompare fetch), idempotent upsert/replace mutations for `marketSnapshots` / `liveIntelItems` / `indicatorAlerts` / `newsArticles`, automatic default strategy seeding, and 2-minute cron scheduling in `convex/crons.ts`; also executed a one-off live refresh to populate current rows. (2026-02-17)
 - Connected `website` workspace modules to live Convex data contracts: `markets`, `live-intel`, `signals`, `indicators`, `strategies`, `journal`, and `news` pages now read from Convex queries (`workspace:*`, `signals:listRecent`, `users:viewer`), and journal trade logging now persists through Convex mutation (`workspace:createJournalTrade`) with validated form payloads. Also introduced new Convex workspace domain tables for market/intel/indicator/strategy/news/journal data storage. (2026-02-17)
 - Executed initial trader workspace expansion in `website`: added authenticated `/workspace/*` IA (`overview`, `markets`, `live-intel`, `signals`, `indicators`, `strategies`, `journal`, `news`), shared sidebar/topbar shell primitives, `/dashboard` compatibility redirect, module adapters with tests, and modal workflows for symbol/trade/strategy details plus trade logging schema validation. (2026-02-17)
@@ -82,6 +85,7 @@ Backend is Convex.
 - Add operational dashboards/alerts for shop catalog publish validation failures (`policy_link_required`, `policy_link_disabled`, checkout URL validation).
 
 **Blockers / Risks**
+- Local Windows/Bun CLI caveat during `convex run` smoke checks: command returns valid payload output but exits with a post-output `uv` assertion (`!(handle->flags & UV_HANDLE_CLOSING)`); deploy operations still succeed, but local CLI verification ergonomics are degraded until runtime/tooling update.
 - External provider dependency for workspace feeds. Market/news ingestion relies on public upstream APIs (CoinGecko/CryptoCompare); provider outages, schema changes, or rate limits can temporarily reduce feed freshness.
 - Sell product CRUD in admin depends on `SELLAPP_API_TOKEN` being configured in Convex runtime env; missing token causes product list/create/update actions to fail (`sell_api_token_missing`).
 - Data migration. We need a clear plan to migrate users/subscriptions/signals into Convex without downtime.
@@ -188,6 +192,12 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
   Exit criteria: shared page/header primitives enforce clearer visual hierarchy and spacing, auth pages use split informational + form layout on desktop, and dashboard feed cards remain readable for long metadata/content.
 - [x] Introduce workspace route-group shell and multi-module member UI surfaces in `website` (`/workspace/*`) with compatibility redirect from `/dashboard` (2026-02-17)
   Exit criteria: workspace routes build/typecheck pass, sidebar/topbar shell is shared, module adapter tests pass, and journal trade schema validation test coverage is present.
+- [x] Promote `/dashboard` to canonical workspace entry and upgrade journal analytics from placeholders to computed metrics/charts/calendar with validated persistence rules. (2026-02-19)
+  Exit criteria: `/dashboard` renders workspace shell directly, `/workspace/overview` compatibility remains intact, journal KPIs/curve/calendar derive from stored trade data, and website tests/typecheck/build pass.
+- [x] Complete second-pass workspace module UX consistency pass and refresh Convex env values from `website/.env.example`. (2026-02-19)
+  Exit criteria: module-level cards/filtering/empty states are consistent across key workspace pages and Convex runtime env sync command succeeds for non-placeholder keys.
+- [x] Deploy latest Convex function/schema set from `website` and execute post-deploy workspace query smoke checks. (2026-02-19)
+  Exit criteria: `convex dev --once` succeeds with current env file context and workspace queries are callable after deploy.
 
 ## Checklists / Hygiene
 
@@ -270,6 +280,9 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
 | 2026-02-17 | Execute workspace expansion implementation tasks for shared shell, module routes, adapters/tests, and modal workflows in `website` | `docs/plans/2026-02-17-trader-workspace-expansion-plan.md` |
 | 2026-02-17 | Wire workspace module pages to live Convex query/mutation data paths and add dedicated workspace domain tables for market/intel/indicator/strategy/news/journal datasets | `docs/plans/2026-02-17-trader-workspace-expansion-plan.md` |
 | 2026-02-17 | Add scheduled external feed ingestion for workspace modules (Convex internal action + cron + upsert mutations) and trigger first live refresh | `docs/plans/2026-02-17-trader-workspace-expansion-plan.md` |
+| 2026-02-19 | Execute website member experience restructure for canonical dashboard routing, wider layout usage, auth/shop refresh, and functional journal analytics | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
+| 2026-02-19 | Execute second-pass workspace UI consistency polish and Convex env sync from `website/.env.example` | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
+| 2026-02-19 | Push Convex backend updates (`convex dev --once`) and run post-deploy workspace smoke queries | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
 
 ## Links
 
@@ -281,3 +294,4 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
 - Admin workspace refactor implementation plan: `docs/plans/2026-02-17-admin-workspace-refactor-plan.md`
 - Trader workspace expansion design: `docs/plans/2026-02-17-trader-workspace-expansion-design.md`
 - Trader workspace expansion implementation plan: `docs/plans/2026-02-17-trader-workspace-expansion-plan.md`
+- Website member experience restructure implementation plan: `docs/plans/2026-02-19-website-experience-restructure-plan.md`

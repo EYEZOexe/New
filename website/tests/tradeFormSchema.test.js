@@ -67,5 +67,35 @@ describe("tradeFormSchema", () => {
       expect(hasExitDateIssue).toBe(true);
     }
   });
-});
 
+  it("requires exit price for closed trades", () => {
+    const parsed = tradeFormSchema.safeParse({
+      ...buildBaseInput(),
+      status: "closed",
+      exitDate: "2026-02-18",
+      exitPrice: null,
+    });
+
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      const hasExitPriceIssue = parsed.error.issues.some((issue) => issue.path.join(".") === "exitPrice");
+      expect(hasExitPriceIssue).toBe(true);
+    }
+  });
+
+  it("enforces directional stop loss placement", () => {
+    const invalidLong = tradeFormSchema.safeParse({
+      ...buildBaseInput(),
+      direction: "long",
+      stopLoss: 67100,
+    });
+    const invalidShort = tradeFormSchema.safeParse({
+      ...buildBaseInput(),
+      direction: "short",
+      stopLoss: 66000,
+    });
+
+    expect(invalidLong.success).toBe(false);
+    expect(invalidShort.success).toBe(false);
+  });
+});

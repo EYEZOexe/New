@@ -55,6 +55,11 @@ export default function IndicatorsPage() {
       <WorkspaceSectionHeader
         title="Indicators"
         description="Oracle-style alerts, watchlist structure shifts, and tactical signal grouping."
+        actions={
+          <Badge variant="outline" className="rounded-full">
+            Derived from live market movers
+          </Badge>
+        }
       />
 
       <Card className="site-panel">

@@ -4,6 +4,7 @@ import { getWorkspaceNavState, normalizeWorkspacePath } from "../lib/workspaceRo
 
 describe("workspaceRoutes", () => {
   it("marks each workspace page with its active nav key", () => {
+    expect(getWorkspaceNavState("/dashboard").activeKey).toBe("overview");
     expect(getWorkspaceNavState("/workspace/overview").activeKey).toBe("overview");
     expect(getWorkspaceNavState("/workspace/markets").activeKey).toBe("markets");
     expect(getWorkspaceNavState("/workspace/live-intel").activeKey).toBe("live-intel");
@@ -14,9 +15,8 @@ describe("workspaceRoutes", () => {
     expect(getWorkspaceNavState("/workspace/news").activeKey).toBe("news");
   });
 
-  it("normalizes dashboard compatibility path to workspace overview", () => {
-    expect(normalizeWorkspacePath("/dashboard")).toBe("/workspace/overview");
-    expect(getWorkspaceNavState("/dashboard").activeKey).toBe("overview");
+  it("normalizes workspace overview compatibility path to dashboard", () => {
+    expect(normalizeWorkspacePath("/workspace/overview")).toBe("/dashboard");
+    expect(getWorkspaceNavState("/workspace/overview").activeKey).toBe("overview");
   });
 });
-

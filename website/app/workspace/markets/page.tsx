@@ -4,6 +4,7 @@ import { makeFunctionReference } from "convex/server";
 import { useQuery } from "convex/react";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { ChartCard } from "@/components/workspace/chart-card";
 import { WorkspaceSectionHeader } from "@/components/workspace/workspace-section-header";
 
@@ -55,6 +56,11 @@ export default function MarketsPage() {
       <WorkspaceSectionHeader
         title="Markets"
         description="Track market structure with a compact universe snapshot and quick direction context."
+        actions={
+          <Badge variant="outline" className="rounded-full">
+            Source: CoinGecko
+          </Badge>
+        }
       />
 
       <MarketsKpiRow

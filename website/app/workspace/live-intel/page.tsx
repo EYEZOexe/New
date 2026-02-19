@@ -46,9 +46,14 @@ export default function LiveIntelPage() {
         title="Live Intel"
         description="Realtime market analysis widgets with fast timeframe pivots and panel-level signal grouping."
         actions={
-          <Badge variant="outline" className="rounded-full border-emerald-500/40 text-emerald-300">
-            Live data • 2m refresh
-          </Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="rounded-full border-emerald-500/40 text-emerald-300">
+              Live data • 2m refresh
+            </Badge>
+            <Badge variant="outline" className="rounded-full">
+              Source: CoinGecko
+            </Badge>
+          </div>
         }
       />
 

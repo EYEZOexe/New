@@ -13,18 +13,21 @@ type ShopHeroProps = {
 };
 
 export function ShopHero(props: ShopHeroProps) {
+  const subscriptionStatus = props.viewer?.subscriptionStatus ?? "inactive";
+  const tier = props.viewer?.tier ?? "none";
+
   return (
     <Card className="site-panel relative overflow-hidden">
       <CardContent className="space-y-5 px-0">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="max-w-4xl">
             <Badge variant="secondary" className="bg-cyan-500/20 text-cyan-100">
               Shop
             </Badge>
-            <h1 className="site-title mt-4">Pick a tier. Pick a duration. Launch checkout.</h1>
+            <h1 className="site-title mt-4">Choose a tier. Select a duration. Launch checkout.</h1>
             <p className="site-subtitle">
-              Plans are mapped to Sell policies from admin, so checkout targets stay aligned with
-              entitlement rules.
+              Plans are policy-linked from admin and entitlement sync is handled in realtime. This
+              keeps purchase, activation, and dashboard visibility in one consistent flow.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -34,17 +37,23 @@ export function ShopHero(props: ShopHeroProps) {
             <Button asChild size="sm" variant="outline">
               <Link href="/dashboard">Dashboard</Link>
             </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/login">Log in</Link>
+            </Button>
           </div>
         </div>
 
-        {props.viewer ? (
-          <p className="text-sm text-muted-foreground">
-            Current access: {props.viewer.subscriptionStatus ?? "inactive"} / tier{" "}
-            {props.viewer.tier ?? "none"}
-          </p>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <span>Current access:</span>
+          <Badge variant="outline" className="capitalize">
+            {subscriptionStatus}
+          </Badge>
+          <Badge variant="outline" className="uppercase">
+            {tier}
+          </Badge>
+        </div>
 
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-4">
           <div className="site-stat">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Published tiers</p>
             <p className="mt-1 text-2xl font-semibold">{props.tierCount}</p>
@@ -56,6 +65,10 @@ export function ShopHero(props: ShopHeroProps) {
           <div className="site-stat">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Realtime sync</p>
             <p className="mt-1 text-2xl font-semibold text-emerald-300">Live</p>
+          </div>
+          <div className="site-stat">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Route model</p>
+            <p className="mt-1 text-2xl font-semibold">Separate pages</p>
           </div>
         </div>
       </CardContent>
