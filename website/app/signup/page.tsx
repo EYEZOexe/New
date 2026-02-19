@@ -1,14 +1,15 @@
 "use client";
 
 import { useAuthActions } from "@convex-dev/auth/react";
-import { BadgeCheck, CheckCircle2, Sparkles, Wallet } from "lucide-react";
+import { ArrowRight, BadgeCheck, Sparkles, Wallet } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 
 import { AuthFormCard } from "@/components/site/auth-form-card";
 import { PageFrame } from "@/components/site/page-frame";
 import { SectionHeader } from "@/components/site/section-header";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 export default function SignupPage() {
@@ -57,53 +58,41 @@ export default function SignupPage() {
           { href: "/", label: "Home" },
           { href: "/shop", label: "Shop" },
         ]}
-        highlights={[
-          { label: "Onboarding", value: "Under 1 minute" },
-          { label: "Commerce", value: "Tier + duration plans" },
-          { label: "Outcome", value: "Dashboard access control" },
-        ]}
       />
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_1.05fr] lg:items-start">
+      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr] xl:items-start">
         <Card className="site-panel">
-          <CardContent className="space-y-5 px-0">
-            <p className="site-kicker">Sequence</p>
-            <h2 className="text-2xl font-semibold tracking-tight">Create account, choose plan, unlock feeds.</h2>
+          <CardContent className="space-y-6 px-0">
+            <div className="space-y-3">
+              <p className="site-kicker">Sequence</p>
+              <h2 className="text-2xl font-semibold tracking-tight">Create account, choose plan, unlock feeds.</h2>
+            </div>
             <p className="text-sm leading-relaxed text-muted-foreground">
               Signup creates your persistent user identity so payment events, entitlements, and
               dashboard visibility rules stay synchronized from checkout through live feed access.
             </p>
 
-            <div className="space-y-3">
-              <div className="site-soft flex items-start gap-3">
-                <Badge variant="outline" className="mt-0.5">
-                  <Wallet className="size-3" />
-                  Billing
-                </Badge>
-                <p className="text-sm text-foreground/90">Select a tier and duration from the shop catalog.</p>
+            <div className="space-y-2 rounded-2xl border border-border/70 bg-background/25 p-4">
+              <div className="flex items-center gap-2 text-sm">
+                <Wallet className="size-4 text-cyan-300" />
+                Select a tier and duration from the catalog.
               </div>
-              <div className="site-soft flex items-start gap-3">
-                <Badge variant="outline" className="mt-0.5">
-                  <BadgeCheck className="size-3" />
-                  Entitlement
-                </Badge>
-                <p className="text-sm text-foreground/90">Checkout return confirms status before feed access opens.</p>
+              <div className="flex items-center gap-2 text-sm">
+                <BadgeCheck className="size-4 text-cyan-300" />
+                Checkout return confirms active entitlement state.
               </div>
-              <div className="site-soft flex items-start gap-3">
-                <Badge variant="outline" className="mt-0.5">
-                  <Sparkles className="size-3" />
-                  Visibility
-                </Badge>
-                <p className="text-sm text-foreground/90">Dashboard shows exactly what channels your tier can view.</p>
-              </div>
-              <div className="site-soft flex items-start gap-3">
-                <Badge variant="outline" className="mt-0.5">
-                  <CheckCircle2 className="size-3" />
-                  Journal
-                </Badge>
-                <p className="text-sm text-foreground/90">Trading journal tools activate immediately once your account is in place.</p>
+              <div className="flex items-center gap-2 text-sm">
+                <Sparkles className="size-4 text-cyan-300" />
+                Dashboard visibility is applied from your tier rules.
               </div>
             </div>
+
+            <Button asChild variant="outline" className="w-fit rounded-full">
+              <Link href="/shop">
+                Browse plans
+                <ArrowRight className="size-4" />
+              </Link>
+            </Button>
           </CardContent>
         </Card>
 

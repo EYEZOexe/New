@@ -24,6 +24,7 @@
 - [x] Run Convex env sync from `website/.env.example` for non-placeholder runtime variables via CLI (excluding deployment-managed/built-in keys). (2026-02-19)
 - [x] Push Convex backend updates using `convex dev --once` from `website` with `.env.example` deployment env context. (2026-02-19)
 - [x] Run post-deploy workspace function smoke checks (`listMarketSnapshots`, `listStrategies`, `listNewsArticles`) confirming callable responses, with CLI post-exit assertion caveat on current Windows/Bun runtime. (2026-02-19)
+- [x] Complete professional SaaS layout polish for `shop`, `login`, and `signup` page composition (hierarchy, spacing rhythm, and card internals). (2026-02-19)
 
 ## Verification Evidence
 

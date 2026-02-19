@@ -74,7 +74,7 @@
   }
 
   .site-wrap {
-    @apply relative z-10 mx-auto w-full max-w-[1780px] space-y-6 md:space-y-8;
+    @apply relative z-10 mx-auto w-full max-w-[1620px] space-y-6 md:space-y-8;
   }
 
   .site-panel {

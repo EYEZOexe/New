@@ -14,6 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Completed SaaS layout quality pass for website auth/shop pages: restructured `shop` hero and pricing cards for cleaner hierarchy/spacing, reduced visual clutter in login/signup informational panes, and standardized auth form card composition for a more professional product surface. Verified with `website` typecheck/build. (2026-02-19)
 - Applied Convex backend rollout for website workspace/journal updates via `bunx convex dev --once --env-file website/.env.example`; post-deploy function smoke queries (`workspace:listMarketSnapshots`, `workspace:listStrategies`, `workspace:listNewsArticles`) returned callable payloads. (2026-02-19)
 - Completed second-pass website workspace polish: improved cross-module visual consistency and interaction behavior across `live-intel`, `indicators`, `strategies`, and `news` surfaces (timeframe-aware live intel filtering, strategy tag filtering, better empty states, and stronger card interaction affordances). Also executed Convex env sync from `website/.env.example` for non-placeholder runtime keys via CLI. (2026-02-19)
 - Completed website member experience restructure: promoted `/dashboard` from compatibility redirect to a real workspace-shell page, widened site layout constraints to better use desktop viewport space, refreshed login/signup/shop IA, made workspace auth gating redirect-safe, and upgraded trading journal to computed analytics (profit factor/expectancy/drawdown), interactive P&L calendar, and equity curve visualization with validated closed-trade persistence + backend P&L fallback calculation. (2026-02-19)
@@ -198,6 +199,8 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
   Exit criteria: module-level cards/filtering/empty states are consistent across key workspace pages and Convex runtime env sync command succeeds for non-placeholder keys.
 - [x] Deploy latest Convex function/schema set from `website` and execute post-deploy workspace query smoke checks. (2026-02-19)
   Exit criteria: `convex dev --once` succeeds with current env file context and workspace queries are callable after deploy.
+- [x] Finalize professional SaaS layout composition for website auth/shop surfaces (hierarchy, spacing, card composition). (2026-02-19)
+  Exit criteria: auth and shop pages avoid crowded blocks, card internals are structured, and `website` typecheck/build pass.
 
 ## Checklists / Hygiene
 
@@ -283,6 +286,7 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
 | 2026-02-19 | Execute website member experience restructure for canonical dashboard routing, wider layout usage, auth/shop refresh, and functional journal analytics | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
 | 2026-02-19 | Execute second-pass workspace UI consistency polish and Convex env sync from `website/.env.example` | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
 | 2026-02-19 | Push Convex backend updates (`convex dev --once`) and run post-deploy workspace smoke queries | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
+| 2026-02-19 | Complete professional SaaS layout pass for website login/signup/shop composition quality | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
 
 ## Links
 

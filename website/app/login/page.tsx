@@ -1,15 +1,16 @@
 "use client";
 
 import { useAuthActions } from "@convex-dev/auth/react";
-import { CheckCircle2, DatabaseZap, LockKeyhole, Route, Zap } from "lucide-react";
+import { ArrowRight, LockKeyhole, Route, Zap } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 
 import { AuthFormCard } from "@/components/site/auth-form-card";
 import { PageFrame } from "@/components/site/page-frame";
 import { SectionHeader } from "@/components/site/section-header";
-import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -57,60 +58,41 @@ export default function LoginPage() {
           { href: "/", label: "Home" },
           { href: "/shop", label: "Shop" },
         ]}
-        highlights={[
-          { label: "Auth", value: "Convex password flow" },
-          { label: "Sync", value: "Realtime entitlement" },
-          { label: "Controls", value: "Dashboard + Discord" },
-        ]}
       />
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_1.05fr] lg:items-start">
+      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr] xl:items-start">
         <Card className="site-panel">
-          <CardContent className="space-y-5 px-0">
-            <p className="site-kicker">Flow</p>
-            <h2 className="text-2xl font-semibold tracking-tight">Fast entry, deterministic routing.</h2>
+          <CardContent className="space-y-6 px-0">
+            <div className="space-y-3">
+              <p className="site-kicker">Flow</p>
+              <h2 className="text-2xl font-semibold tracking-tight">Fast entry, deterministic routing.</h2>
+            </div>
             <p className="text-sm leading-relaxed text-muted-foreground">
               After sign-in, you are routed to your intended page with session-backed Convex auth.
               This keeps dashboard, shop return state, and workspace modules in one identity model.
             </p>
 
-            <div className="space-y-3">
-              <div className="site-soft flex items-start gap-3">
-                <Badge variant="outline" className="mt-0.5">
-                  <LockKeyhole className="size-3" />
-                  Secure
-                </Badge>
-                <p className="text-sm text-foreground/90">Password-based auth backed by Convex identity.</p>
+            <div className="space-y-2 rounded-2xl border border-border/70 bg-background/25 p-4">
+              <div className="flex items-center gap-2 text-sm">
+                <LockKeyhole className="size-4 text-cyan-300" />
+                Password-based auth backed by Convex identity.
               </div>
-              <div className="site-soft flex items-start gap-3">
-                <Badge variant="outline" className="mt-0.5">
-                  <Zap className="size-3" />
-                  Live
-                </Badge>
-                <p className="text-sm text-foreground/90">Account state refreshes in realtime across pages.</p>
+              <div className="flex items-center gap-2 text-sm">
+                <Zap className="size-4 text-cyan-300" />
+                Realtime account state across all workspace pages.
               </div>
-              <div className="site-soft flex items-start gap-3">
-                <Badge variant="outline" className="mt-0.5">
-                  <Route className="size-3" />
-                  Routed
-                </Badge>
-                <p className="text-sm text-foreground/90">Post-login destination is preserved so auth never breaks user flow.</p>
-              </div>
-              <div className="site-soft flex items-start gap-3">
-                <Badge variant="outline" className="mt-0.5">
-                  <DatabaseZap className="size-3" />
-                  Sources
-                </Badge>
-                <p className="text-sm text-foreground/90">Markets/news data is ingested server-side and streamed into Convex-backed modules.</p>
-              </div>
-              <div className="site-soft flex items-start gap-3">
-                <Badge variant="outline" className="mt-0.5">
-                  <CheckCircle2 className="size-3" />
-                  Clear
-                </Badge>
-                <p className="text-sm text-foreground/90">If access is blocked, the dashboard explains exactly why and where to fix it.</p>
+              <div className="flex items-center gap-2 text-sm">
+                <Route className="size-4 text-cyan-300" />
+                Redirect target is preserved after successful login.
               </div>
             </div>
+
+            <Button asChild variant="outline" className="w-fit rounded-full">
+              <Link href="/shop">
+                View plans first
+                <ArrowRight className="size-4" />
+              </Link>
+            </Button>
           </CardContent>
         </Card>
 

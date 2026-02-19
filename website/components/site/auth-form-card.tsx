@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { FormEvent } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,8 +23,11 @@ export function AuthFormCard(props: AuthFormCardProps) {
   const isLogin = props.mode === "login";
 
   return (
-    <Card className="site-panel w-full max-w-lg">
-      <CardHeader className="space-y-2 px-0 pb-2">
+    <Card className="site-panel w-full">
+      <CardHeader className="space-y-3 px-0 pb-1">
+        <Badge variant="secondary" className="w-fit">
+          {isLogin ? "Member Access" : "Create Account"}
+        </Badge>
         <CardTitle className="text-2xl">{isLogin ? "Log in" : "Sign up"}</CardTitle>
         <CardDescription>
           {isLogin
@@ -31,36 +35,38 @@ export function AuthFormCard(props: AuthFormCardProps) {
             : "Create your account and unlock your dashboard."}
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-5 px-0">
+      <CardContent className="space-y-6 px-0">
         <form onSubmit={props.onSubmit} className="space-y-5">
-          <div className="space-y-2.5">
-            <Label htmlFor="auth-email" className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
-              Email
-            </Label>
-            <Input
-              id="auth-email"
-              type="email"
-              required
-              autoComplete="email"
-              value={props.email}
-              className="h-11 rounded-xl bg-background/60"
-              onChange={(event) => props.onEmailChange(event.target.value)}
-            />
-          </div>
+          <div className="space-y-4 rounded-2xl border border-border/70 bg-background/30 p-4">
+            <div className="space-y-2.5">
+              <Label htmlFor="auth-email" className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                Email
+              </Label>
+              <Input
+                id="auth-email"
+                type="email"
+                required
+                autoComplete="email"
+                value={props.email}
+                className="h-11 rounded-xl bg-background/60"
+                onChange={(event) => props.onEmailChange(event.target.value)}
+              />
+            </div>
 
-          <div className="space-y-2.5">
-            <Label htmlFor="auth-password" className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
-              Password
-            </Label>
-            <Input
-              id="auth-password"
-              type="password"
-              required
-              autoComplete={isLogin ? "current-password" : "new-password"}
-              value={props.password}
-              className="h-11 rounded-xl bg-background/60"
-              onChange={(event) => props.onPasswordChange(event.target.value)}
-            />
+            <div className="space-y-2.5">
+              <Label htmlFor="auth-password" className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                Password
+              </Label>
+              <Input
+                id="auth-password"
+                type="password"
+                required
+                autoComplete={isLogin ? "current-password" : "new-password"}
+                value={props.password}
+                className="h-11 rounded-xl bg-background/60"
+                onChange={(event) => props.onPasswordChange(event.target.value)}
+              />
+            </div>
           </div>
 
           {props.error ? (
