@@ -1,16 +1,16 @@
 "use client";
 
 import { useAuthActions } from "@convex-dev/auth/react";
-import { ArrowRight, LockKeyhole, Route, Zap } from "lucide-react";
+import { ArrowRight, LockKeyhole, ShieldCheck, Sparkles } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 
 import { AuthFormCard } from "@/components/site/auth-form-card";
-import { PageFrame } from "@/components/site/page-frame";
-import { SectionHeader } from "@/components/site/section-header";
-import Link from "next/link";
-import { Card, CardContent } from "@/components/ui/card";
+import { MarketingFrame } from "@/components/site/marketing-frame";
+import { MarketingNav } from "@/components/site/marketing-nav";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -36,12 +36,9 @@ export default function LoginPage() {
 
     try {
       await signIn("password", { email, password, flow: "signIn" });
-      console.info(`[auth/login] success email=${email.trim().toLowerCase()} redirect=${redirectTo}`);
       router.push(redirectTo);
     } catch (submitError) {
-      const message =
-        submitError instanceof Error ? submitError.message : "Login failed";
-      console.error(`[auth/login] failed email=${email.trim().toLowerCase()} message=${message}`);
+      const message = submitError instanceof Error ? submitError.message : "Login failed";
       setError(message);
     } finally {
       setIsSubmitting(false);
@@ -49,47 +46,44 @@ export default function LoginPage() {
   }
 
   return (
-    <PageFrame>
-      <SectionHeader
-        badge="Access"
-        title="Enter your trading workspace."
-        subtitle="Authenticate once, then move directly into your dashboard, market modules, and Discord-link controls."
-        navLinks={[
-          { href: "/", label: "Home" },
-          { href: "/shop", label: "Shop" },
-        ]}
-      />
+    <MarketingFrame>
+      <MarketingNav />
 
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr] xl:items-start">
-        <Card className="site-panel">
+      <section className="grid gap-6 xl:grid-cols-[1fr_460px] xl:items-start">
+        <Card className="rounded-3xl border border-border/70 bg-card/85 p-6 backdrop-blur-xl md:p-8">
           <CardContent className="space-y-6 px-0">
             <div className="space-y-3">
-              <p className="site-kicker">Flow</p>
-              <h2 className="text-2xl font-semibold tracking-tight">Fast entry, deterministic routing.</h2>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Welcome back</p>
+              <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">Continue where you left off.</h1>
+              <p className="max-w-2xl text-base leading-relaxed text-muted-foreground">
+                Log in to access your signals, review journal performance, and keep your trading workflow focused.
+              </p>
             </div>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              After sign-in, you are routed to your intended page with session-backed Convex auth.
-              This keeps dashboard, shop return state, and workspace modules in one identity model.
-            </p>
 
-            <div className="space-y-2 rounded-2xl border border-border/70 bg-background/25 p-4">
-              <div className="flex items-center gap-2 text-sm">
-                <LockKeyhole className="size-4 text-cyan-300" />
-                Password-based auth backed by Convex identity.
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-2xl border border-border/70 bg-background/35 p-4 text-sm">
+                <div className="flex items-center gap-2 font-medium">
+                  <LockKeyhole className="size-4 text-cyan-300" />
+                  Secure login
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-sm">
-                <Zap className="size-4 text-cyan-300" />
-                Realtime account state across all workspace pages.
+              <div className="rounded-2xl border border-border/70 bg-background/35 p-4 text-sm">
+                <div className="flex items-center gap-2 font-medium">
+                  <ShieldCheck className="size-4 text-cyan-300" />
+                  Protected access
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-sm">
-                <Route className="size-4 text-cyan-300" />
-                Redirect target is preserved after successful login.
+              <div className="rounded-2xl border border-border/70 bg-background/35 p-4 text-sm">
+                <div className="flex items-center gap-2 font-medium">
+                  <Sparkles className="size-4 text-cyan-300" />
+                  Fast onboarding
+                </div>
               </div>
             </div>
 
             <Button asChild variant="outline" className="w-fit rounded-full">
               <Link href="/shop">
-                View plans first
+                See pricing
                 <ArrowRight className="size-4" />
               </Link>
             </Button>
@@ -106,7 +100,7 @@ export default function LoginPage() {
           onPasswordChange={setPassword}
           onSubmit={onSubmit}
         />
-      </div>
-    </PageFrame>
+      </section>
+    </MarketingFrame>
   );
 }

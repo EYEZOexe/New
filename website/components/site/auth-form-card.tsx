@@ -23,16 +23,16 @@ export function AuthFormCard(props: AuthFormCardProps) {
   const isLogin = props.mode === "login";
 
   return (
-    <Card className="site-panel w-full">
-      <CardHeader className="space-y-3 px-0 pb-1">
+    <Card className="w-full rounded-3xl border border-border/70 bg-card/90 p-6 backdrop-blur-xl md:p-7">
+      <CardHeader className="space-y-3 px-0 pb-2">
         <Badge variant="secondary" className="w-fit">
           {isLogin ? "Member Access" : "Create Account"}
         </Badge>
         <CardTitle className="text-2xl">{isLogin ? "Log in" : "Sign up"}</CardTitle>
         <CardDescription>
           {isLogin
-            ? "Sign in with your email and password."
-            : "Create your account and unlock your dashboard."}
+            ? "Use your email and password to continue."
+            : "Create your account to start your subscription."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6 px-0">

@@ -5,8 +5,8 @@ import { useConvexAuth, useQuery } from "convex/react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import { PageFrame } from "@/components/site/page-frame";
-import { SectionHeader } from "@/components/site/section-header";
+import { MarketingFrame } from "@/components/site/marketing-frame";
+import { MarketingNav } from "@/components/site/marketing-nav";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -53,76 +53,61 @@ export default function CheckoutReturnPage() {
     return "pending";
   })();
 
-  useEffect(() => {
-    if (!viewer) return;
-    console.info(
-      `[checkout-return] state=${status} expected_tier=${expectedTier ?? "none"} actual_tier=${viewer.tier ?? "none"} subscription=${viewer.subscriptionStatus ?? "none"} has_access=${viewer.hasSignalAccess}`,
-    );
-  }, [viewer, status, expectedTier]);
-
   return (
-    <PageFrame>
-      <SectionHeader
-        badge="Checkout Return"
-        title="Entitlement status in realtime."
-        subtitle="Keep this tab open while Convex confirms your subscription state from Sell webhook processing."
-        navLinks={[
-          { href: "/shop", label: "Shop" },
-          { href: "/dashboard", label: "Dashboard" },
-        ]}
-      />
+    <MarketingFrame>
+      <MarketingNav />
 
-      <Card className="site-panel">
-        <CardContent className="space-y-4 px-0">
+      <Card className="rounded-3xl border border-border/70 bg-card/85 p-6 backdrop-blur-xl md:p-8">
+        <CardContent className="space-y-5 px-0">
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Order status</p>
+            <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">We’re confirming your access.</h1>
+            <p className="text-base text-muted-foreground">
+              Keep this page open for a moment while your purchase is finalized.
+            </p>
+          </div>
+
           {status === "pending" ? (
             <Alert>
-              <AlertTitle>Payment is still processing.</AlertTitle>
-              <AlertDescription>
-                Your access will switch to active automatically when entitlement updates.
-              </AlertDescription>
+              <AlertTitle>Still processing</AlertTitle>
+              <AlertDescription>Your account will update automatically as soon as payment is confirmed.</AlertDescription>
             </Alert>
           ) : null}
 
           {status === "success" ? (
             <Alert className="border-emerald-400/40 bg-emerald-500/10">
-              <AlertTitle className="text-emerald-200">Access activated successfully.</AlertTitle>
-              <AlertDescription className="space-y-1 text-emerald-100/90">
-                <p>
-                  Current tier: {viewer?.tier ?? "unknown"}
-                  {expectedTier ? ` (checkout target: ${expectedTier})` : ""}.
-                </p>
-                {viewer?.subscriptionEndsAt ? (
-                  <p>Expires: {new Date(viewer.subscriptionEndsAt).toLocaleString()}</p>
-                ) : null}
+              <AlertTitle className="text-emerald-200">Access is active</AlertTitle>
+              <AlertDescription className="text-emerald-100/90">
+                You can now open your dashboard and start using your plan.
               </AlertDescription>
             </Alert>
           ) : null}
 
           {status === "failure" ? (
             <Alert variant="destructive">
-              <AlertTitle>Access could not be activated.</AlertTitle>
+              <AlertTitle>We couldn’t activate access yet</AlertTitle>
               <AlertDescription>
-                Subscription status is currently {viewer?.subscriptionStatus ?? "unknown"}.
-                Return to shop and verify checkout details.
+                Please return to pricing and verify payment details or contact support.
               </AlertDescription>
             </Alert>
           ) : null}
 
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <Badge variant="outline">State: {status}</Badge>
-            {expectedTier ? <Badge variant="outline">Expected tier: {expectedTier}</Badge> : null}
+            <Badge variant="outline">Status: {status}</Badge>
+            {expectedTier ? <Badge variant="outline">Selected plan: {expectedTier}</Badge> : null}
+            {viewer?.tier ? <Badge variant="outline">Current tier: {viewer.tier}</Badge> : null}
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button asChild variant="outline">
-              <Link href="/shop">Back to shop</Link>
+            <Button asChild variant="outline" className="rounded-full px-5">
+              <Link href="/shop">Back to pricing</Link>
             </Button>
-            <Button asChild>
+            <Button asChild className="rounded-full px-5">
               <Link href="/dashboard">Open dashboard</Link>
             </Button>
           </div>
         </CardContent>
       </Card>
-    </PageFrame>
+    </MarketingFrame>
   );
 }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CircleCheckBig } from "lucide-react";
+import { Check } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,63 +15,56 @@ type ShopTierCardProps = {
 };
 
 export function ShopTierCard(props: ShopTierCardProps) {
-  const tier = props.tier;
-  const selectedDuration = props.selectedVariant?.durationDays ?? null;
+  const selected = props.selectedVariant;
 
   return (
-    <Card
-      className={`site-panel h-full border-border/70 bg-gradient-to-br ${getTierTheme(
-        tier.tier,
-      )}`}
-    >
+    <Card className={`h-full rounded-3xl border border-border/70 bg-gradient-to-br ${getTierTheme(props.tier.tier)} p-6`}>
       <CardContent className="flex h-full flex-col gap-6 px-0">
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xl font-semibold">{tier.title}</p>
-            {tier.badge ? <Badge variant="outline">{tier.badge}</Badge> : null}
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-2xl font-semibold tracking-tight">{props.tier.title}</h2>
+            {props.tier.badge ? <Badge variant="outline">{props.tier.badge}</Badge> : null}
           </div>
-          {tier.subtitle ? <p className="text-sm font-medium text-foreground/90">{tier.subtitle}</p> : null}
-          {tier.description ? <p className="text-sm text-muted-foreground">{tier.description}</p> : null}
+          {props.tier.subtitle ? <p className="text-sm font-medium text-foreground/90">{props.tier.subtitle}</p> : null}
+          {props.tier.description ? <p className="text-sm text-muted-foreground">{props.tier.description}</p> : null}
         </div>
 
         <div className="space-y-2">
-          <p className="site-kicker">Duration</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Duration</p>
           <div className="flex flex-wrap gap-2">
-            {tier.variants.map((variant) => (
+            {props.tier.variants.map((variant) => (
               <Button
                 key={variant._id}
-                type="button"
                 size="sm"
-                variant={variant.durationDays === selectedDuration ? "default" : "outline"}
+                type="button"
+                variant={selected?.durationDays === variant.durationDays ? "default" : "outline"}
                 className="rounded-full px-4"
                 onClick={() => props.onSelectDuration(variant.durationDays)}
               >
-                {variant.durationDays}d
+                {variant.durationDays} days
               </Button>
             ))}
           </div>
         </div>
 
-        {props.selectedVariant ? (
+        {selected ? (
           <>
             <div className="rounded-2xl border border-border/70 bg-background/35 p-4">
-              <p className="site-kicker">Current price</p>
+              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Price</p>
               <p className="mt-2 text-4xl font-semibold leading-none">
-                {props.selectedVariant.displayPrice}
-                {props.selectedVariant.priceSuffix ? (
-                  <span className="ml-1 text-base font-medium text-muted-foreground">
-                    {props.selectedVariant.priceSuffix}
-                  </span>
+                {selected.displayPrice}
+                {selected.priceSuffix ? (
+                  <span className="ml-1 text-base font-medium text-muted-foreground">{selected.priceSuffix}</span>
                 ) : null}
               </p>
             </div>
 
-            {props.selectedVariant.highlights.length > 0 ? (
+            {selected.highlights.length > 0 ? (
               <ul className="space-y-2 rounded-2xl border border-border/70 bg-background/30 p-4 text-sm text-foreground/90">
-                {props.selectedVariant.highlights.map((highlight, index) => (
-                  <li key={`${props.selectedVariant?._id}-${index}`} className="flex items-start gap-2">
-                    <CircleCheckBig className="mt-0.5 size-4 shrink-0 text-emerald-300" />
-                    <span>{highlight}</span>
+                {selected.highlights.map((item, index) => (
+                  <li key={`${selected._id}-${index}`} className="flex items-start gap-2">
+                    <Check className="mt-0.5 size-4 shrink-0 text-emerald-300" />
+                    <span>{item}</span>
                   </li>
                 ))}
               </ul>
@@ -80,34 +73,25 @@ export function ShopTierCard(props: ShopTierCardProps) {
             <div className="mt-auto space-y-3">
               <Button asChild className="h-11 w-full rounded-xl text-sm font-semibold">
                 <a
-                  href={buildCheckoutUrl(
-                    props.selectedVariant.checkoutUrl,
-                    tier.tier,
-                    props.selectedVariant.durationDays,
-                  )}
+                  href={buildCheckoutUrl(selected.checkoutUrl, props.tier.tier, selected.durationDays)}
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Checkout {tier.title}
+                  Start {props.tier.title}
                 </a>
               </Button>
-
-              <div className="rounded-2xl border border-border/70 bg-background/35 p-3 text-xs text-muted-foreground">
-                Tier {tier.tier.toUpperCase()} • {props.selectedVariant.durationDays} days • Policy-linked entitlement confirmation follows checkout return state.
-              </div>
-
               <p className="text-xs text-muted-foreground">
-                After payment, open{" "}
+                Need help after checkout? Open{" "}
                 <Link href="/checkout/return" className="underline underline-offset-4">
-                  checkout status
-                </Link>{" "}
-                for realtime entitlement confirmation.
+                  order status
+                </Link>
+                .
               </p>
             </div>
           </>
         ) : (
-          <div className="rounded-2xl border border-dashed border-border/70 bg-background/25 p-4 text-sm text-muted-foreground">
-            No active duration variants are currently available.
+          <div className="rounded-2xl border border-dashed border-border/70 bg-background/20 p-4 text-sm text-muted-foreground">
+            No active options are available for this plan right now.
           </div>
         )}
       </CardContent>

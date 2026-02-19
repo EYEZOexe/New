@@ -14,6 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Rebuilt all non-dashboard customer pages from scratch (`/`, `/shop`, `/login`, `/signup`, `/checkout/return`) on a dedicated marketing layout system with customer-ready copy and cleaner SaaS page composition (no backend/internal platform messaging). Verified with `website` typecheck/build. (2026-02-19)
 - Completed SaaS layout quality pass for website auth/shop pages: restructured `shop` hero and pricing cards for cleaner hierarchy/spacing, reduced visual clutter in login/signup informational panes, and standardized auth form card composition for a more professional product surface. Verified with `website` typecheck/build. (2026-02-19)
 - Applied Convex backend rollout for website workspace/journal updates via `bunx convex dev --once --env-file website/.env.example`; post-deploy function smoke queries (`workspace:listMarketSnapshots`, `workspace:listStrategies`, `workspace:listNewsArticles`) returned callable payloads. (2026-02-19)
 - Completed second-pass website workspace polish: improved cross-module visual consistency and interaction behavior across `live-intel`, `indicators`, `strategies`, and `news` surfaces (timeframe-aware live intel filtering, strategy tag filtering, better empty states, and stronger card interaction affordances). Also executed Convex env sync from `website/.env.example` for non-placeholder runtime keys via CLI. (2026-02-19)
@@ -201,6 +202,8 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
   Exit criteria: `convex dev --once` succeeds with current env file context and workspace queries are callable after deploy.
 - [x] Finalize professional SaaS layout composition for website auth/shop surfaces (hierarchy, spacing, card composition). (2026-02-19)
   Exit criteria: auth and shop pages avoid crowded blocks, card internals are structured, and `website` typecheck/build pass.
+- [x] Rebuild non-dashboard customer experience from scratch with dedicated marketing layout and customer-first content. (2026-02-19)
+  Exit criteria: `/`, `/shop`, `/login`, `/signup`, and `/checkout/return` use cohesive marketing composition, remove backend jargon, and pass website verification commands.
 
 ## Checklists / Hygiene
 
@@ -287,6 +290,7 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
 | 2026-02-19 | Execute second-pass workspace UI consistency polish and Convex env sync from `website/.env.example` | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
 | 2026-02-19 | Push Convex backend updates (`convex dev --once`) and run post-deploy workspace smoke queries | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
 | 2026-02-19 | Complete professional SaaS layout pass for website login/signup/shop composition quality | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
+| 2026-02-19 | Rebuild non-dashboard website pages from scratch on dedicated marketing layout with customer-facing messaging | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
 
 ## Links
 

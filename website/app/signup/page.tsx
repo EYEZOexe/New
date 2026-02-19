@@ -1,14 +1,14 @@
 "use client";
 
 import { useAuthActions } from "@convex-dev/auth/react";
-import { ArrowRight, BadgeCheck, Sparkles, Wallet } from "lucide-react";
+import { ArrowRight, BadgeCheck, BarChart3, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 
 import { AuthFormCard } from "@/components/site/auth-form-card";
-import { PageFrame } from "@/components/site/page-frame";
-import { SectionHeader } from "@/components/site/section-header";
+import { MarketingFrame } from "@/components/site/marketing-frame";
+import { MarketingNav } from "@/components/site/marketing-nav";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -36,12 +36,9 @@ export default function SignupPage() {
 
     try {
       await signIn("password", { email, password, flow: "signUp" });
-      console.info(`[auth/signup] success email=${email.trim().toLowerCase()} redirect=${redirectTo}`);
       router.push(redirectTo);
     } catch (submitError) {
-      const message =
-        submitError instanceof Error ? submitError.message : "Signup failed";
-      console.error(`[auth/signup] failed email=${email.trim().toLowerCase()} message=${message}`);
+      const message = submitError instanceof Error ? submitError.message : "Signup failed";
       setError(message);
     } finally {
       setIsSubmitting(false);
@@ -49,47 +46,44 @@ export default function SignupPage() {
   }
 
   return (
-    <PageFrame>
-      <SectionHeader
-        badge="Onboarding"
-        title="Create your workspace identity."
-        subtitle="Set up account access first, then continue into plan selection and dashboard activation."
-        navLinks={[
-          { href: "/", label: "Home" },
-          { href: "/shop", label: "Shop" },
-        ]}
-      />
+    <MarketingFrame>
+      <MarketingNav />
 
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr] xl:items-start">
-        <Card className="site-panel">
+      <section className="grid gap-6 xl:grid-cols-[1fr_460px] xl:items-start">
+        <Card className="rounded-3xl border border-border/70 bg-card/85 p-6 backdrop-blur-xl md:p-8">
           <CardContent className="space-y-6 px-0">
             <div className="space-y-3">
-              <p className="site-kicker">Sequence</p>
-              <h2 className="text-2xl font-semibold tracking-tight">Create account, choose plan, unlock feeds.</h2>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Create account</p>
+              <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">Start trading with structure today.</h1>
+              <p className="max-w-2xl text-base leading-relaxed text-muted-foreground">
+                Set up your account in less than a minute, choose a plan, and get immediate access to the trading workspace.
+              </p>
             </div>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              Signup creates your persistent user identity so payment events, entitlements, and
-              dashboard visibility rules stay synchronized from checkout through live feed access.
-            </p>
 
-            <div className="space-y-2 rounded-2xl border border-border/70 bg-background/25 p-4">
-              <div className="flex items-center gap-2 text-sm">
-                <Wallet className="size-4 text-cyan-300" />
-                Select a tier and duration from the catalog.
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-2xl border border-border/70 bg-background/35 p-4 text-sm">
+                <div className="flex items-center gap-2 font-medium">
+                  <Wallet className="size-4 text-cyan-300" />
+                  Pick a plan
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-sm">
-                <BadgeCheck className="size-4 text-cyan-300" />
-                Checkout return confirms active entitlement state.
+              <div className="rounded-2xl border border-border/70 bg-background/35 p-4 text-sm">
+                <div className="flex items-center gap-2 font-medium">
+                  <BadgeCheck className="size-4 text-cyan-300" />
+                  Instant activation
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-sm">
-                <Sparkles className="size-4 text-cyan-300" />
-                Dashboard visibility is applied from your tier rules.
+              <div className="rounded-2xl border border-border/70 bg-background/35 p-4 text-sm">
+                <div className="flex items-center gap-2 font-medium">
+                  <BarChart3 className="size-4 text-cyan-300" />
+                  Track performance
+                </div>
               </div>
             </div>
 
             <Button asChild variant="outline" className="w-fit rounded-full">
               <Link href="/shop">
-                Browse plans
+                Compare plans
                 <ArrowRight className="size-4" />
               </Link>
             </Button>
@@ -106,7 +100,7 @@ export default function SignupPage() {
           onPasswordChange={setPassword}
           onSubmit={onSubmit}
         />
-      </div>
-    </PageFrame>
+      </section>
+    </MarketingFrame>
   );
 }
