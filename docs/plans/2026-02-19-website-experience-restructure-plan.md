@@ -26,6 +26,7 @@
 - [x] Run post-deploy workspace function smoke checks (`listMarketSnapshots`, `listStrategies`, `listNewsArticles`) confirming callable responses, with CLI post-exit assertion caveat on current Windows/Bun runtime. (2026-02-19)
 - [x] Complete professional SaaS layout polish for `shop`, `login`, and `signup` page composition (hierarchy, spacing rhythm, and card internals). (2026-02-19)
 - [x] Rebuild all non-dashboard customer pages from scratch (`/`, `/shop`, `/login`, `/signup`, `/checkout/return`) using dedicated marketing layout components and customer-facing copy only. (2026-02-19)
+- [x] Execute customer-readiness redesign pass for all non-dashboard pages using dashboard-aligned shell structure, clearer conversion-first IA, and simplified pricing/auth composition to remove floating-card clutter. (2026-02-19)
 
 ## Verification Evidence
 
@@ -42,5 +43,8 @@
   - `convex run workspace:listNewsArticles {"limit":1}` returned `[]` (callable)
   - Note: CLI currently exits with `uv` assertion after output on this Windows/Bun runtime.
 - Customer-page redesign verification executed from `website`:
+  - `bun run typecheck` (pass)
+  - `bun run build` (pass)
+- Customer-readiness second-pass verification executed from `website`:
   - `bun run typecheck` (pass)
   - `bun run build` (pass)

@@ -15,9 +15,3 @@ export function buildCheckoutUrl(
     return baseUrl;
   }
 }
-
-export function getTierTheme(tier: SubscriptionTier): string {
-  if (tier === "basic") return "from-cyan-500/20 via-slate-900/70 to-slate-900/80";
-  if (tier === "advanced") return "from-amber-500/20 via-slate-900/70 to-slate-900/80";
-  return "from-fuchsia-500/20 via-slate-900/70 to-slate-900/80";
-}

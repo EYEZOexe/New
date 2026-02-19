@@ -14,6 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Completed customer-readiness redesign pass for all non-dashboard website routes (`/`, `/shop`, `/login`, `/signup`, `/checkout/return`): aligned shell structure with dashboard visual language, replaced cluttered card stacking with clearer section rhythm, and tightened pricing/auth IA for conversion-focused SaaS UX. Verified with `website` typecheck/build. (2026-02-19)
 - Rebuilt all non-dashboard customer pages from scratch (`/`, `/shop`, `/login`, `/signup`, `/checkout/return`) on a dedicated marketing layout system with customer-ready copy and cleaner SaaS page composition (no backend/internal platform messaging). Verified with `website` typecheck/build. (2026-02-19)
 - Completed SaaS layout quality pass for website auth/shop pages: restructured `shop` hero and pricing cards for cleaner hierarchy/spacing, reduced visual clutter in login/signup informational panes, and standardized auth form card composition for a more professional product surface. Verified with `website` typecheck/build. (2026-02-19)
 - Applied Convex backend rollout for website workspace/journal updates via `bunx convex dev --once --env-file website/.env.example`; post-deploy function smoke queries (`workspace:listMarketSnapshots`, `workspace:listStrategies`, `workspace:listNewsArticles`) returned callable payloads. (2026-02-19)
@@ -204,6 +205,8 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
   Exit criteria: auth and shop pages avoid crowded blocks, card internals are structured, and `website` typecheck/build pass.
 - [x] Rebuild non-dashboard customer experience from scratch with dedicated marketing layout and customer-first content. (2026-02-19)
   Exit criteria: `/`, `/shop`, `/login`, `/signup`, and `/checkout/return` use cohesive marketing composition, remove backend jargon, and pass website verification commands.
+- [x] Execute customer-readiness second-pass redesign for non-dashboard pages with dashboard-aligned shell composition and conversion-focused pricing/auth layout. (2026-02-19)
+  Exit criteria: non-dashboard page composition avoids floating-card clutter, uses clearer section hierarchy and responsive spacing, and `website` typecheck/build pass.
 
 ## Checklists / Hygiene
 
@@ -291,6 +294,7 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
 | 2026-02-19 | Push Convex backend updates (`convex dev --once`) and run post-deploy workspace smoke queries | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
 | 2026-02-19 | Complete professional SaaS layout pass for website login/signup/shop composition quality | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
 | 2026-02-19 | Rebuild non-dashboard website pages from scratch on dedicated marketing layout with customer-facing messaging | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
+| 2026-02-19 | Execute customer-readiness second pass for non-dashboard website IA/layout with dashboard-aligned shell and cleaner pricing/auth UX | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
 
 ## Links
 

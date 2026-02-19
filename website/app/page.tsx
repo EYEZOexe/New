@@ -2,7 +2,14 @@
 
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth } from "convex/react";
-import { ArrowRight, ChartLine, ShieldCheck, Timer } from "lucide-react";
+import {
+  ArrowRight,
+  ChartColumn,
+  CheckCircle2,
+  NotebookPen,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
 import Link from "next/link";
 
 import { MarketingFrame } from "@/components/site/marketing-frame";
@@ -10,6 +17,39 @@ import { MarketingNav } from "@/components/site/marketing-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+
+const executionSteps = [
+  {
+    title: "Choose your plan",
+    description: "Pick a tier and duration that matches your trading cadence.",
+  },
+  {
+    title: "Get immediate access",
+    description: "Your account updates quickly so you can start without delays.",
+  },
+  {
+    title: "Trade and review",
+    description: "Use signals and your journal together to improve execution quality.",
+  },
+] as const;
+
+const valuePoints = [
+  {
+    title: "Curated trade signals",
+    description: "Setups are structured for faster decision-making.",
+    icon: ChartColumn,
+  },
+  {
+    title: "Built-in journal",
+    description: "Track entries, exits, and consistency in one workspace.",
+    icon: NotebookPen,
+  },
+  {
+    title: "Secure member access",
+    description: "Account access and plan visibility stay clean and predictable.",
+    icon: ShieldCheck,
+  },
+] as const;
 
 export default function Home() {
   const { signOut } = useAuthActions();
@@ -31,106 +71,128 @@ export default function Home() {
         }
       />
 
-      <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <Card className="rounded-3xl border border-border/70 bg-card/85 p-6 backdrop-blur-xl md:p-8">
-          <CardContent className="space-y-6 px-0">
-            <div className="space-y-4">
-              <Badge variant="secondary" className="rounded-full bg-cyan-500/20 text-cyan-100">
-                Crypto Signals SaaS
-              </Badge>
-              <h1 className="text-4xl font-semibold leading-tight tracking-tight md:text-6xl">
-                Trade with structure.
-                <br />
-                Not noise.
-              </h1>
-              <p className="max-w-2xl text-base leading-relaxed text-muted-foreground md:text-lg">
-                Get curated trade signals, journal your execution, and track performance in one focused workspace built for active traders.
-              </p>
+      <section className="site-panel grid gap-8 xl:grid-cols-[1.06fr_0.94fr]">
+        <div className="space-y-6">
+          <div className="space-y-4">
+            <Badge variant="secondary" className="w-fit rounded-full bg-cyan-500/20 text-cyan-100">
+              Trading Platform
+            </Badge>
+            <h1 className="site-title max-w-3xl text-4xl md:text-6xl">Signal clarity for serious traders.</h1>
+            <p className="site-subtitle max-w-2xl">
+              Replace noisy feeds with a focused trading workspace. Get clear setups, track performance,
+              and keep your process consistent.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <Button asChild className="h-11 rounded-full px-6 text-sm">
+              <Link href="/shop">
+                View pricing
+                <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="h-11 rounded-full px-6 text-sm">
+              <Link href={isAuthenticated ? "/dashboard" : "/login"}>
+                {isAuthenticated ? "Open dashboard" : "Log in"}
+              </Link>
+            </Button>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="site-stat">
+              <p className="site-kicker">Active traders</p>
+              <p className="mt-2 text-2xl font-semibold">2,100+</p>
+            </div>
+            <div className="site-stat">
+              <p className="site-kicker">Average setup</p>
+              <p className="mt-2 text-2xl font-semibold">Under 3 min</p>
+            </div>
+            <div className="site-stat">
+              <p className="site-kicker">Platform uptime</p>
+              <p className="mt-2 text-2xl font-semibold">99.9%</p>
+            </div>
+          </div>
+        </div>
+
+        <Card className="rounded-3xl border border-border/70 bg-background/55 p-5">
+          <CardContent className="space-y-5 px-0">
+            <div className="flex items-center justify-between gap-2 rounded-2xl border border-border/70 bg-background/55 px-4 py-3">
+              <p className="text-sm font-medium">Live workspace snapshot</p>
+              <Badge className="rounded-full bg-emerald-500/20 text-emerald-200">Live</Badge>
             </div>
 
-            <div className="flex flex-wrap gap-3">
-              <Button asChild className="h-11 rounded-full px-6 text-sm">
-                <Link href="/shop">
-                  View plans
-                  <ArrowRight className="size-4" />
-                </Link>
-              </Button>
-              <Button asChild variant="outline" className="h-11 rounded-full px-6 text-sm">
-                <Link href={isAuthenticated ? "/dashboard" : "/login"}>
-                  {isAuthenticated ? "Open dashboard" : "Log in"}
-                </Link>
-              </Button>
+            <div className="space-y-3 rounded-2xl border border-border/70 bg-background/40 p-4">
+              <p className="site-kicker">Today’s highlights</p>
+              <div className="space-y-2">
+                <div className="flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-background/50 p-3">
+                  <div>
+                    <p className="text-sm font-semibold">BTC Momentum Setup</p>
+                    <p className="text-xs text-muted-foreground">Breakout continuation watch</p>
+                  </div>
+                  <span className="text-sm font-semibold text-emerald-300">+1.8%</span>
+                </div>
+                <div className="flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-background/50 p-3">
+                  <div>
+                    <p className="text-sm font-semibold">SOL Pullback Zone</p>
+                    <p className="text-xs text-muted-foreground">Risk-managed re-entry area</p>
+                  </div>
+                  <span className="text-sm font-semibold text-cyan-300">Watch</span>
+                </div>
+              </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-border/70 bg-background/40 p-4">
-                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Traders onboarded</p>
-                <p className="mt-2 text-2xl font-semibold">2,100+</p>
-              </div>
-              <div className="rounded-2xl border border-border/70 bg-background/40 p-4">
-                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Avg setup time</p>
-                <p className="mt-2 text-2xl font-semibold">Under 3 min</p>
-              </div>
-              <div className="rounded-2xl border border-border/70 bg-background/40 p-4">
-                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Uptime</p>
-                <p className="mt-2 text-2xl font-semibold">99.9%</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-3xl border border-border/70 bg-card/85 p-6 backdrop-blur-xl md:p-8">
-          <CardContent className="space-y-4 px-0">
-            <p className="text-sm font-semibold uppercase tracking-[0.12em] text-muted-foreground">Why teams switch</p>
-            <div className="space-y-3">
-              <div className="rounded-2xl border border-border/70 bg-background/35 p-4">
-                <div className="flex items-center gap-2 font-medium">
-                  <ChartLine className="size-4 text-cyan-300" />
-                  Higher signal quality
+            <div className="space-y-2 rounded-2xl border border-border/70 bg-background/40 p-4">
+              <p className="site-kicker">Execution loop</p>
+              {[
+                "Check live signal context",
+                "Execute with your plan",
+                "Log and review performance",
+              ].map((item) => (
+                <div key={item} className="flex items-center gap-2 text-sm text-foreground/90">
+                  <CheckCircle2 className="size-4 text-cyan-300" />
+                  {item}
                 </div>
-                <p className="mt-2 text-sm text-muted-foreground">Actionable setups, not spam feeds.</p>
-              </div>
-              <div className="rounded-2xl border border-border/70 bg-background/35 p-4">
-                <div className="flex items-center gap-2 font-medium">
-                  <ShieldCheck className="size-4 text-cyan-300" />
-                  Clean access control
-                </div>
-                <p className="mt-2 text-sm text-muted-foreground">Every plan unlocks exactly what it should.</p>
-              </div>
-              <div className="rounded-2xl border border-border/70 bg-background/35 p-4">
-                <div className="flex items-center gap-2 font-medium">
-                  <Timer className="size-4 text-cyan-300" />
-                  Faster decision loop
-                </div>
-                <p className="mt-2 text-sm text-muted-foreground">Signals, notes, and tracking in one place.</p>
-              </div>
+              ))}
             </div>
           </CardContent>
         </Card>
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">
-        <Card className="rounded-2xl border border-border/70 bg-card/80 p-5">
-          <CardContent className="space-y-2 px-0">
-            <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Step 1</p>
-            <p className="text-xl font-semibold">Pick your plan</p>
-            <p className="text-sm text-muted-foreground">Choose tier and duration that match your trading style.</p>
-          </CardContent>
-        </Card>
-        <Card className="rounded-2xl border border-border/70 bg-card/80 p-5">
-          <CardContent className="space-y-2 px-0">
-            <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Step 2</p>
-            <p className="text-xl font-semibold">Get access instantly</p>
-            <p className="text-sm text-muted-foreground">Your account updates quickly so you can start right away.</p>
-          </CardContent>
-        </Card>
-        <Card className="rounded-2xl border border-border/70 bg-card/80 p-5">
-          <CardContent className="space-y-2 px-0">
-            <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Step 3</p>
-            <p className="text-xl font-semibold">Trade and journal</p>
-            <p className="text-sm text-muted-foreground">Review signals, log trades, and improve consistency.</p>
-          </CardContent>
-        </Card>
+        {valuePoints.map((item) => (
+          <Card key={item.title} className="rounded-2xl border border-border/70 bg-card/75 p-5">
+            <CardContent className="space-y-3 px-0">
+              <div className="inline-flex size-9 items-center justify-center rounded-xl border border-cyan-300/35 bg-cyan-400/15">
+                <item.icon className="size-4 text-cyan-200" />
+              </div>
+              <p className="text-xl font-semibold tracking-tight">{item.title}</p>
+              <p className="text-sm text-muted-foreground">{item.description}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </section>
+
+      <section className="site-panel space-y-5">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="site-kicker">How it works</p>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight">A cleaner trading workflow in 3 steps.</h2>
+          </div>
+          <Badge variant="outline" className="rounded-full px-3 py-1 text-xs">
+            <Sparkles className="mr-1 size-3.5" />
+            Built for active execution
+          </Badge>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          {executionSteps.map((step, index) => (
+            <div key={step.title} className="rounded-2xl border border-border/70 bg-background/55 p-4">
+              <p className="site-kicker">Step {index + 1}</p>
+              <p className="mt-2 text-xl font-semibold">{step.title}</p>
+              <p className="mt-2 text-sm text-muted-foreground">{step.description}</p>
+            </div>
+          ))}
+        </div>
       </section>
     </MarketingFrame>
   );

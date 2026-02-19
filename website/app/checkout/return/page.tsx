@@ -2,6 +2,7 @@
 
 import { makeFunctionReference } from "convex/server";
 import { useConvexAuth, useQuery } from "convex/react";
+import { CheckCircle2, Clock3, RefreshCw, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
@@ -57,46 +58,43 @@ export default function CheckoutReturnPage() {
     <MarketingFrame>
       <MarketingNav />
 
-      <Card className="rounded-3xl border border-border/70 bg-card/85 p-6 backdrop-blur-xl md:p-8">
-        <CardContent className="space-y-5 px-0">
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Order status</p>
-            <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">We’re confirming your access.</h1>
-            <p className="text-base text-muted-foreground">
-              Keep this page open for a moment while your purchase is finalized.
+      <section className="site-panel grid gap-6 xl:grid-cols-[1fr_330px] xl:items-start">
+        <div className="space-y-5">
+          <div className="space-y-3">
+            <p className="site-kicker">Checkout status</p>
+            <h1 className="site-title text-4xl md:text-6xl">Confirming your account access.</h1>
+            <p className="site-subtitle">
+              Keep this page open while we finalize your payment and activate your plan.
             </p>
           </div>
 
           {status === "pending" ? (
             <Alert>
+              <Clock3 className="size-4" />
               <AlertTitle>Still processing</AlertTitle>
-              <AlertDescription>Your account will update automatically as soon as payment is confirmed.</AlertDescription>
+              <AlertDescription>Your account updates automatically as soon as confirmation is complete.</AlertDescription>
             </Alert>
           ) : null}
 
           {status === "success" ? (
             <Alert className="border-emerald-400/40 bg-emerald-500/10">
+              <CheckCircle2 className="size-4 text-emerald-300" />
               <AlertTitle className="text-emerald-200">Access is active</AlertTitle>
               <AlertDescription className="text-emerald-100/90">
-                You can now open your dashboard and start using your plan.
+                Your plan is live. You can now continue into the dashboard.
               </AlertDescription>
             </Alert>
           ) : null}
 
           {status === "failure" ? (
             <Alert variant="destructive">
-              <AlertTitle>We couldn’t activate access yet</AlertTitle>
+              <XCircle className="size-4" />
+              <AlertTitle>Activation incomplete</AlertTitle>
               <AlertDescription>
-                Please return to pricing and verify payment details or contact support.
+                We could not activate access yet. Please return to pricing and verify your payment details.
               </AlertDescription>
             </Alert>
           ) : null}
-
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <Badge variant="outline">Status: {status}</Badge>
-            {expectedTier ? <Badge variant="outline">Selected plan: {expectedTier}</Badge> : null}
-            {viewer?.tier ? <Badge variant="outline">Current tier: {viewer.tier}</Badge> : null}
-          </div>
 
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline" className="rounded-full px-5">
@@ -106,8 +104,28 @@ export default function CheckoutReturnPage() {
               <Link href="/dashboard">Open dashboard</Link>
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+
+        <Card className="rounded-2xl border border-border/70 bg-background/45 p-4">
+          <CardContent className="space-y-3 px-0 text-sm">
+            <p className="site-kicker">Status details</p>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline" className="rounded-full">Status: {status}</Badge>
+              {expectedTier ? <Badge variant="outline" className="rounded-full">Selected: {expectedTier}</Badge> : null}
+              {viewer?.tier ? <Badge variant="outline" className="rounded-full">Current: {viewer.tier}</Badge> : null}
+            </div>
+            <p className="text-muted-foreground">
+              If this takes longer than expected, refresh this page or return to pricing.
+            </p>
+            <Button asChild variant="ghost" className="w-full rounded-xl border border-border/70">
+              <Link href="/checkout/return">
+                <RefreshCw className="size-4" />
+                Refresh status
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </section>
     </MarketingFrame>
   );
 }
