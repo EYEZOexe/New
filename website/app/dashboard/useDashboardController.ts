@@ -19,6 +19,10 @@ import type {
   ViewerRow,
 } from "./types";
 import { formatRemainingMs, tierRank } from "./utils";
+import {
+  toUserFacingDiscordCallbackError,
+  toUserFacingDiscordError,
+} from "@/lib/userFacingErrors";
 
 const viewerRef = makeFunctionReference<"query", Record<string, never>, ViewerRow | null>(
   "users:viewer",
@@ -143,7 +147,7 @@ export function useDashboardController() {
     if (!discordCallbackError) return;
     console.error(`[dashboard] discord oauth callback error=${discordCallbackError}`);
     setDiscordStatusMessage(null);
-    setDiscordErrorMessage(`Discord linking failed (${discordCallbackError.replaceAll("_", " ")}).`);
+    setDiscordErrorMessage(toUserFacingDiscordCallbackError(discordCallbackError));
   }, [discordCallbackError]);
 
   useEffect(() => {
@@ -189,7 +193,7 @@ export function useDashboardController() {
           window.history.replaceState(null, "", "/dashboard");
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Discord linking failed";
+        const message = toUserFacingDiscordError(error);
         if (!cancelled) {
           setDiscordStatusMessage(null);
           setDiscordErrorMessage(message);
@@ -243,7 +247,7 @@ export function useDashboardController() {
         setDiscordStatusMessage("No linked Discord account found.");
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to unlink Discord";
+      const message = toUserFacingDiscordError(error);
       setDiscordErrorMessage(message);
       console.error(`[dashboard] discord unlink failed: ${message}`);
     } finally {

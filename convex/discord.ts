@@ -1,5 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -24,6 +24,28 @@ function normalizeUsername(username: string | undefined): string | undefined {
   if (!username) return undefined;
   const trimmed = username.trim();
   return trimmed ? trimmed : undefined;
+}
+
+async function enqueueRoleSyncJobsForSubscriptionSafe(
+  ctx: MutationCtx,
+  args: {
+    userId: Id<"users">;
+    discordUserId: string;
+    subscriptionStatus: "active" | "inactive" | "canceled" | "past_due";
+    tier: "basic" | "advanced" | "pro" | null;
+    source: string;
+    now: number;
+  },
+) {
+  try {
+    return await enqueueRoleSyncJobsForSubscription(ctx, args);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(
+      `[discord-link] role sync enqueue failed source=${args.source} user=${args.userId} discord_user=${args.discordUserId} error=${message}`,
+    );
+    return null;
+  }
 }
 
 export const viewerLink = query({
@@ -61,12 +83,12 @@ export const linkViewerDiscord = mutation({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
-      throw new Error("unauthenticated");
+      throw new ConvexError("unauthenticated");
     }
 
     const discordUserId = args.discordUserId.trim();
     if (!discordUserId) {
-      throw new Error("discord_user_id_required");
+      throw new ConvexError("discord_user_id_required");
     }
 
     const now = args.linkedAt ?? Date.now();
@@ -81,7 +103,7 @@ export const linkViewerDiscord = mutation({
       (row) => row.unlinkedAt === undefined && row.userId !== userId,
     );
     if (conflict) {
-      throw new Error("discord_account_already_linked");
+      throw new ConvexError("discord_account_already_linked");
     }
 
     const existingByUser = await listLinksByUserId(ctx, userId);
@@ -90,7 +112,7 @@ export const linkViewerDiscord = mutation({
         await ctx.db.patch(row._id, { unlinkedAt: now });
 
         if (row.discordUserId !== discordUserId) {
-          const revokeResult = await enqueueRoleSyncJobsForSubscription(ctx, {
+          const revokeResult = await enqueueRoleSyncJobsForSubscriptionSafe(ctx, {
             userId,
             discordUserId: row.discordUserId,
             subscriptionStatus: "inactive",
@@ -98,6 +120,9 @@ export const linkViewerDiscord = mutation({
             source: "discord_link_replaced",
             now,
           });
+          if (!revokeResult) {
+            continue;
+          }
           if (revokeResult.mappingSource === "none") {
             console.warn(
               `[discord-link] role sync queue not configured; skipped revoke enqueue user=${userId} discord_user=${row.discordUserId}`,
@@ -138,7 +163,7 @@ export const linkViewerDiscord = mutation({
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .first();
     if (subscription?.status === "active") {
-      const grantResult = await enqueueRoleSyncJobsForSubscription(ctx, {
+      const grantResult = await enqueueRoleSyncJobsForSubscriptionSafe(ctx, {
         userId,
         discordUserId,
         subscriptionStatus: subscription.status,
@@ -146,6 +171,15 @@ export const linkViewerDiscord = mutation({
         source: "discord_linked_active_subscription",
         now,
       });
+      if (!grantResult) {
+        return {
+          ok: true,
+          isLinked: true,
+          discordUserId,
+          username: username ?? null,
+          linkedAt: now,
+        };
+      }
       if (grantResult.mappingSource === "none") {
         console.warn(
           `[discord-link] role sync queue not configured; skipped grant enqueue user=${userId} discord_user=${discordUserId}`,
@@ -172,7 +206,7 @@ export const unlinkViewerDiscord = mutation({
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
-      throw new Error("unauthenticated");
+      throw new ConvexError("unauthenticated");
     }
 
     const now = Date.now();
@@ -185,7 +219,7 @@ export const unlinkViewerDiscord = mutation({
     for (const row of activeRows) {
       await ctx.db.patch(row._id, { unlinkedAt: now });
 
-      const revokeResult = await enqueueRoleSyncJobsForSubscription(ctx, {
+      const revokeResult = await enqueueRoleSyncJobsForSubscriptionSafe(ctx, {
         userId,
         discordUserId: row.discordUserId,
         subscriptionStatus: "inactive",
@@ -193,6 +227,9 @@ export const unlinkViewerDiscord = mutation({
         source: "discord_unlinked",
         now,
       });
+      if (!revokeResult) {
+        continue;
+      }
       if (revokeResult.mappingSource === "none") {
         console.warn(
           `[discord-link] role sync queue not configured; skipped revoke enqueue user=${userId} discord_user=${row.discordUserId}`,

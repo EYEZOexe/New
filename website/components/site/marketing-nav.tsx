@@ -27,6 +27,7 @@ export function MarketingNav(props: MarketingNavProps) {
   const pathname = usePathname();
   const { isAuthenticated, isLoading } = useConvexAuth();
   const shouldShowLogin = !isLoading && !isAuthenticated;
+  const shouldShowDashboard = !isLoading && isAuthenticated;
 
   return (
     <header className="site-panel sticky top-4 z-40 px-4 py-3 md:px-5 md:py-4">
@@ -59,6 +60,20 @@ export function MarketingNav(props: MarketingNavProps) {
               <Link href={link.href}>{link.label}</Link>
             </Button>
           ))}
+          {shouldShowDashboard ? (
+            <Button
+              asChild
+              size="sm"
+              variant={isActive(pathname, "/dashboard") ? "secondary" : "ghost"}
+              className={
+                isActive(pathname, "/dashboard")
+                  ? "rounded-full border border-cyan-300/35 bg-cyan-400/20 px-4 text-cyan-100 hover:bg-cyan-400/26"
+                  : "rounded-full px-4"
+              }
+            >
+              <Link href="/dashboard">Dashboard</Link>
+            </Button>
+          ) : null}
           {shouldShowLogin ? (
             <Button
               asChild

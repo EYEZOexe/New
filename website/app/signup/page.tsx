@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuthActions } from "@convex-dev/auth/react";
+import { useConvexAuth } from "convex/react";
 import { ArrowRight, CheckCircle2, Rocket, WalletCards } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -13,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { sanitizeAppRedirectPath } from "@/lib/redirectPath";
+import { toUserFacingAuthError } from "@/lib/userFacingErrors";
 
 const signupSteps = [
   "Create your account with email and password.",
@@ -23,6 +25,7 @@ const signupSteps = [
 export default function SignupPage() {
   const router = useRouter();
   const { signIn } = useAuthActions();
+  const { isAuthenticated, isLoading } = useConvexAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -35,6 +38,11 @@ export default function SignupPage() {
     setRedirectTo(sanitizeAppRedirectPath(redirectToRaw, "/shop"));
   }, []);
 
+  useEffect(() => {
+    if (isLoading || !isAuthenticated) return;
+    router.replace(redirectTo);
+  }, [isAuthenticated, isLoading, redirectTo, router]);
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSubmitting(true);
@@ -42,10 +50,9 @@ export default function SignupPage() {
 
     try {
       await signIn("password", { email, password, flow: "signUp" });
-      router.push(redirectTo);
+      router.replace(redirectTo);
     } catch (submitError) {
-      const message = submitError instanceof Error ? submitError.message : "Signup failed";
-      setError(message);
+      setError(toUserFacingAuthError(submitError, "signup"));
     } finally {
       setIsSubmitting(false);
     }
