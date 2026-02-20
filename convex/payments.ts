@@ -1,8 +1,18 @@
+import {
+  invalidateSessions,
+  modifyAccountCredentials,
+} from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
-import type { MutationCtx } from "./_generated/server";
-import { internalMutation, internalQuery, query } from "./_generated/server";
+import type { ActionCtx, MutationCtx } from "./_generated/server";
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 import {
   normalizeEmail,
   projectSellWebhookPayload,
@@ -17,14 +27,71 @@ import {
 } from "./roleSyncQueue";
 
 const PROVIDER = "sellapp";
+const PASSWORD_PROVIDER = "password";
 type UserResolutionMethod =
   | "payment_subscription_id"
   | "payment_customer_id"
   | "email";
+type OperatorResult<T extends Record<string, unknown>> =
+  | ({ ok: true } & T)
+  | {
+      ok: false;
+      error: {
+        code: string;
+        message: string;
+      };
+    };
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   return String(error);
+}
+
+function asOperatorError(error: unknown): { code: string; message: string } {
+  const raw = getErrorMessage(error).trim();
+  switch (raw) {
+    case "user_not_found":
+      return { code: raw, message: "User not found." };
+    case "email_invalid":
+      return { code: raw, message: "A valid email address is required." };
+    case "email_in_use":
+      return {
+        code: raw,
+        message: "That email is already used by another account.",
+      };
+    case "password_invalid":
+      return {
+        code: raw,
+        message: "Password must be at least 8 characters long.",
+      };
+    case "password_account_not_found":
+      return {
+        code: raw,
+        message: "No password account exists for this user.",
+      };
+    case "duration_days_invalid":
+      return {
+        code: raw,
+        message: "Duration days must be a positive integer.",
+      };
+    default:
+      return {
+        code: "operator_action_failed",
+        message: raw || "Operator action failed.",
+      };
+  }
+}
+
+function isValidEmailAddress(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function normalizeRequiredDurationDays(raw: number | undefined): number {
+  const parsed = Math.floor(raw ?? 14);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error("duration_days_invalid");
+  }
+  return parsed;
 }
 
 async function getWebhookEventByKey(
@@ -573,6 +640,309 @@ export const expireFixedTermSubscriptions = internalMutation({
   },
 });
 
+export const adminUpdatePaymentCustomerEmail = mutation({
+  args: {
+    userId: v.id("users"),
+    email: v.string(),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<OperatorResult<{ userId: Id<"users">; email: string }>> => {
+    try {
+      const user = await ctx.db.get(args.userId);
+      if (!user) {
+        throw new Error("user_not_found");
+      }
+
+      const normalizedEmail = normalizeEmail(args.email);
+      if (!normalizedEmail || !isValidEmailAddress(normalizedEmail)) {
+        throw new Error("email_invalid");
+      }
+
+      const users = await ctx.db.query("users").collect();
+      const existingUser = users.find(
+        (row) =>
+          normalizeEmail(typeof row.email === "string" ? row.email : null) === normalizedEmail &&
+          row._id !== args.userId,
+      );
+      if (existingUser) {
+        throw new Error("email_in_use");
+      }
+
+      const passwordAccount = await ctx.db
+        .query("authAccounts")
+        .withIndex("userIdAndProvider", (q) =>
+          q.eq("userId", args.userId).eq("provider", PASSWORD_PROVIDER),
+        )
+        .first();
+      if (passwordAccount) {
+        const allPasswordAccounts = await ctx.db.query("authAccounts").collect();
+        const conflictingAccount = allPasswordAccounts.find(
+          (account) =>
+            account.provider === PASSWORD_PROVIDER &&
+            normalizeEmail(account.providerAccountId) === normalizedEmail &&
+            account._id !== passwordAccount._id,
+        );
+        if (conflictingAccount) {
+          throw new Error("email_in_use");
+        }
+
+        await ctx.db.patch(passwordAccount._id, {
+          providerAccountId: normalizedEmail,
+        });
+      }
+
+      await ctx.db.patch(args.userId, {
+        email: normalizedEmail,
+      });
+
+      const trackingRows = await ctx.db
+        .query("paymentCustomers")
+        .withIndex("by_provider_userId", (q) =>
+          q.eq("provider", PROVIDER).eq("userId", args.userId),
+        )
+        .collect();
+      const now = Date.now();
+      for (const row of trackingRows) {
+        await ctx.db.patch(row._id, {
+          customerEmail: normalizedEmail,
+          updatedAt: now,
+        });
+      }
+
+      console.info(
+        `[payments] operator updated customer email user=${args.userId} email=${normalizedEmail} payment_rows=${trackingRows.length}`,
+      );
+
+      return {
+        ok: true,
+        userId: args.userId,
+        email: normalizedEmail,
+      };
+    } catch (error) {
+      const shaped = asOperatorError(error);
+      console.error(
+        `[payments] operator update email failed user=${args.userId} code=${shaped.code} message=${shaped.message}`,
+      );
+      return {
+        ok: false,
+        error: shaped,
+      };
+    }
+  },
+});
+
+export const adminSetPaymentCustomerPassword = action({
+  args: {
+    userId: v.id("users"),
+    password: v.string(),
+    invalidateExistingSessions: v.optional(v.boolean()),
+  },
+  handler: async (
+    ctx: ActionCtx,
+    args,
+  ): Promise<OperatorResult<{ userId: Id<"users">; sessionsInvalidated: boolean }>> => {
+    try {
+      const user = await ctx.db.get(args.userId);
+      if (!user) {
+        throw new Error("user_not_found");
+      }
+
+      const password = args.password.trim();
+      if (!password || password.length < 8) {
+        throw new Error("password_invalid");
+      }
+
+      const passwordAccount = await ctx.db
+        .query("authAccounts")
+        .withIndex("userIdAndProvider", (q) =>
+          q.eq("userId", args.userId).eq("provider", PASSWORD_PROVIDER),
+        )
+        .first();
+      if (!passwordAccount) {
+        throw new Error("password_account_not_found");
+      }
+
+      await modifyAccountCredentials(ctx, {
+        provider: PASSWORD_PROVIDER,
+        account: {
+          id: passwordAccount.providerAccountId,
+          secret: password,
+        },
+      });
+
+      const sessionsInvalidated = args.invalidateExistingSessions ?? true;
+      if (sessionsInvalidated) {
+        await invalidateSessions(ctx, {
+          userId: args.userId,
+        });
+      }
+
+      console.info(
+        `[payments] operator reset password user=${args.userId} sessions_invalidated=${sessionsInvalidated}`,
+      );
+
+      return {
+        ok: true,
+        userId: args.userId,
+        sessionsInvalidated,
+      };
+    } catch (error) {
+      const shaped = asOperatorError(error);
+      console.error(
+        `[payments] operator reset password failed user=${args.userId} code=${shaped.code} message=${shaped.message}`,
+      );
+      return {
+        ok: false,
+        error: shaped,
+      };
+    }
+  },
+});
+
+export const adminSetPaymentCustomerSubscription = mutation({
+  args: {
+    userId: v.id("users"),
+    action: v.union(v.literal("grant"), v.literal("revoke")),
+    tier: v.optional(
+      v.union(v.literal("basic"), v.literal("advanced"), v.literal("pro")),
+    ),
+    durationDays: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    OperatorResult<{
+      userId: Id<"users">;
+      subscriptionStatus: SubscriptionStatus;
+      tier: SubscriptionTier | null;
+      endsAt: number | null;
+      roleSyncQueued: number;
+    }>
+  > => {
+    try {
+      const user = await ctx.db.get(args.userId);
+      if (!user) {
+        throw new Error("user_not_found");
+      }
+
+      const now = Date.now();
+      const existing = await ctx.db
+        .query("subscriptions")
+        .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+        .first();
+
+      let nextStatus: SubscriptionStatus = "inactive";
+      let nextTier: SubscriptionTier | null = existing?.tier ?? null;
+      let nextEndsAt: number | null = existing?.endsAt ?? null;
+
+      if (args.action === "grant") {
+        const tier = args.tier ?? existing?.tier ?? "basic";
+        const durationDays = normalizeRequiredDurationDays(args.durationDays);
+        const durationMs = durationDays * 24 * 60 * 60 * 1000;
+        const canExtend =
+          existing?.status === "active" &&
+          existing.tier === tier &&
+          Number.isFinite(existing.endsAt) &&
+          (existing.endsAt ?? 0) > now;
+        const base = canExtend ? (existing!.endsAt as number) : now;
+        const startedAt = canExtend ? (existing?.startedAt ?? now) : now;
+        const endsAt = base + durationMs;
+        nextStatus = "active";
+        nextTier = tier;
+        nextEndsAt = endsAt;
+
+        if (existing) {
+          await ctx.db.patch(existing._id, {
+            status: nextStatus,
+            tier,
+            billingMode: "fixed_term",
+            startedAt,
+            endsAt,
+            source: "admin_manual_grant",
+            updatedAt: now,
+          });
+        } else {
+          await ctx.db.insert("subscriptions", {
+            userId: args.userId,
+            status: nextStatus,
+            tier,
+            billingMode: "fixed_term",
+            startedAt,
+            endsAt,
+            source: "admin_manual_grant",
+            updatedAt: now,
+          });
+        }
+      } else {
+        nextStatus = "inactive";
+        nextTier = existing?.tier ?? args.tier ?? null;
+        nextEndsAt = now;
+
+        if (existing) {
+          await ctx.db.patch(existing._id, {
+            status: nextStatus,
+            endsAt: now,
+            source: "admin_manual_revoke",
+            updatedAt: now,
+          });
+        } else {
+          await ctx.db.insert("subscriptions", {
+            userId: args.userId,
+            status: nextStatus,
+            tier: nextTier ?? undefined,
+            billingMode: "fixed_term",
+            endsAt: now,
+            source: "admin_manual_revoke",
+            updatedAt: now,
+          });
+        }
+      }
+
+      let roleSyncQueued = 0;
+      const activeLinks = await listActiveDiscordLinksForUser(ctx, args.userId);
+      for (const link of activeLinks) {
+        const enqueueResult = await enqueueRoleSyncJobsForSubscription(ctx, {
+          userId: args.userId,
+          discordUserId: link.discordUserId,
+          subscriptionStatus: nextStatus,
+          tier: nextTier,
+          source:
+            args.action === "grant"
+              ? "admin_manual_subscription_grant"
+              : "admin_manual_subscription_revoke",
+          now,
+        });
+        roleSyncQueued += enqueueResult.granted + enqueueResult.revoked;
+      }
+
+      console.info(
+        `[payments] operator subscription update user=${args.userId} action=${args.action} status=${nextStatus} tier=${nextTier ?? "none"} ends_at=${nextEndsAt ?? 0} role_sync_jobs=${roleSyncQueued}`,
+      );
+
+      return {
+        ok: true,
+        userId: args.userId,
+        subscriptionStatus: nextStatus,
+        tier: nextTier,
+        endsAt: nextEndsAt,
+        roleSyncQueued,
+      };
+    } catch (error) {
+      const shaped = asOperatorError(error);
+      console.error(
+        `[payments] operator subscription update failed user=${args.userId} action=${args.action} code=${shaped.code} message=${shaped.message}`,
+      );
+      return {
+        ok: false,
+        error: shaped,
+      };
+    }
+  },
+});
+
 export const listPaymentCustomers = query({
   args: {
     limit: v.optional(v.number()),
@@ -589,6 +959,7 @@ export const listPaymentCustomers = query({
       ? rows.filter((row) => {
           const haystack = [
             row.provider,
+            row.userId,
             row.customerEmail ?? "",
             row.externalCustomerId ?? "",
             row.externalSubscriptionId ?? "",

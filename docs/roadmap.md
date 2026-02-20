@@ -14,6 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Enabled free-trial and customer-lifecycle operator controls in admin: catalog wizard now accepts non-negative display prices (including `0`) and forwards zero-cent variant payloads to Sell API, and `/shop/customers` now supports inline email updates, password resets (with session invalidation), and manual subscription grant/revoke with tier+duration plus role-sync enqueue logging via new Convex operator functions (`payments:adminUpdatePaymentCustomerEmail`, `payments:adminSetPaymentCustomerPassword`, `payments:adminSetPaymentCustomerSubscription`). Verified with `admin` tests/typecheck/build (build run with `NEXT_PUBLIC_CONVEX_URL` in shell) and `website` typecheck. (2026-02-20)
 - Expanded workspace strategy library + discoverability in `website`/Convex: strategy defaults now synchronize (upsert) instead of one-time seeding, analyst naming now includes requested profiles (`Prestige`, `Grasady`, etc.) with additional playbooks (`Standard Entry Reversal Model`, `HTF Macro-Aligned Framework`, `Harmonic Trading`), and `/workspace/strategies` now supports free-text search across analyst/strategy/tag metadata in addition to tag chips. Verified with `website` typecheck. (2026-02-20)
 - Fixed login/session redirect and Discord link reliability issues in `website`: `/login` and `/signup` now auto-redirect authenticated sessions to their resolved destination and use `router.replace` after auth completion, `discord:linkViewerDiscord` / `discord:unlinkViewerDiscord` now persist link-state even when downstream role-sync enqueue operations fail (with backend error logging retained), strict one-account-per-Discord-user conflict checks remain enforced, and both auth + Discord flows now map backend errors to friendly UI messages instead of Convex/internal phrasing. Verified with `website` typecheck, Discord OAuth tests, user-facing error mapping tests, and `website` build. (2026-02-20)
 - Updated shared website marketing navbar so authenticated users now see a top-level `Dashboard` button (alongside Home/Pricing) while unauthenticated users continue to see `Log in`, improving post-login navigation clarity on the home page. Verified with `website` typecheck. (2026-02-20)
@@ -101,6 +102,7 @@ Backend is Convex.
 - Local Windows/Bun CLI caveat during `convex run` smoke checks: command returns valid payload output but exits with a post-output `uv` assertion (`!(handle->flags & UV_HANDLE_CLOSING)`); deploy operations still succeed, but local CLI verification ergonomics are degraded until runtime/tooling update.
 - External provider dependency for workspace feeds. Market/news ingestion relies on public upstream APIs (CoinGecko/CryptoCompare); provider outages, schema changes, or rate limits can temporarily reduce feed freshness.
 - Sell product CRUD in admin depends on `SELLAPP_API_TOKEN` being configured in Convex runtime env; missing token causes product list/create/update actions to fail (`sell_api_token_missing`).
+- Sell free/zero-price variant behavior may differ per Sell account/store rules; admin now permits `0` pricing, but operators should monitor Sell API responses and use manual admin grants as fallback if provider-side validation rejects zero-value variants.
 - Data migration. We need a clear plan to migrate users/subscriptions/signals into Convex without downtime.
 - Auth and identity mapping. We need one stable user identifier across web, bot, and webhook processing.
 - Convex Auth configuration. Self-hosted Convex must be configured with signing keys/JWKS and correct site URL, otherwise auth flows will fail at runtime.
@@ -151,6 +153,8 @@ Goal: payments reliably grant/revoke access even if the website is down.
   Exit criteria: active subscription access is policy-driven by product/variant mapping, and fixed-term access auto-expires with role revocation via scheduled jobs.
 - [x] Move to fixed-term-only subscription windows + dashboard remaining-time visibility (2026-02-16)
   Exit criteria: policies are duration-driven without recurring mode selection, and customer dashboard shows live time left from Convex `endsAt`.
+- [x] Add customer-support operator controls for email/password/subscription management in admin (`/shop/customers`). (2026-02-20)
+  Exit criteria: operators can update customer email, reset password with session invalidation, and manually grant/revoke subscription access (tier + duration) from admin with backend/frontend outcome logs.
 
 ### Phase 3: Discord Linking (customer identity + roles)
 

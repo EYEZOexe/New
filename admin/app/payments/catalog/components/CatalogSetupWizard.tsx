@@ -119,7 +119,7 @@ function parseDisplayPriceToCents(displayPrice: string): number | null {
   const normalized = displayPrice.trim().replace(/[^0-9.]/g, "");
   if (!normalized) return null;
   const value = Number.parseFloat(normalized);
-  if (!Number.isFinite(value) || value <= 0) return null;
+  if (!Number.isFinite(value) || value < 0) return null;
   return Math.round(value * 100);
 }
 
@@ -499,8 +499,8 @@ export function CatalogSetupWizard({
         throw new Error("Could not resolve product ID from selected policy key.");
       }
       const priceCents = parseDisplayPriceToCents(variantPrice);
-      if (!priceCents) {
-        throw new Error("Display price must contain a positive number.");
+      if (priceCents === null) {
+        throw new Error("Display price must contain a valid non-negative number.");
       }
       const checkoutUrl = buildAutoCheckoutUrl({
         storefrontUrl,

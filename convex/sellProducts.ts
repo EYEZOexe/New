@@ -113,6 +113,13 @@ function normalizePositiveInteger(value: number, fieldName: string): number {
   return value;
 }
 
+function normalizeNonNegativeInteger(value: number, fieldName: string): number {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`${fieldName}_invalid`);
+  }
+  return value;
+}
+
 function normalizeSellPaymentMethods(methods: string[] | undefined): SellPaymentMethod[] {
   const cleaned = (methods ?? [])
     .map((method) => method.trim().toUpperCase())
@@ -539,7 +546,7 @@ export const upsertSellProductVariant = action({
       });
       const title = normalizeRequired(args.title, "title");
       const description = normalizeRequired(args.description, "description");
-      const priceCents = normalizePositiveInteger(args.priceCents, "price_cents");
+      const priceCents = normalizeNonNegativeInteger(args.priceCents, "price_cents");
       const currency = (args.currency ?? "USD").trim().toUpperCase();
       const providedPaymentMethods = normalizeSellPaymentMethods(args.paymentMethods);
       const configuredDefaults = getConfiguredDefaultPaymentMethods();
