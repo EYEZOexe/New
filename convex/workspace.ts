@@ -61,6 +61,192 @@ const NewsArticleInput = v.object({
 const DEFAULT_MARKET_LIMIT = 80;
 const DEFAULT_NEWS_LIMIT = 60;
 
+type StrategyLibrarySection = {
+  title: string;
+  body: string;
+};
+
+type StrategyLibraryEntry = {
+  analyst: string;
+  strategy: string;
+  description: string;
+  tags: string[];
+  sections: StrategyLibrarySection[];
+};
+
+const DEFAULT_STRATEGY_LIBRARY: StrategyLibraryEntry[] = [
+  {
+    analyst: "Prestige",
+    strategy: "Breakout Framework",
+    description:
+      "Volume-based breakout strategy focused on clean breaks through resistance with clear expansion space.",
+    tags: ["Breakout", "Momentum", "5m", "1h"],
+    sections: [
+      {
+        title: "Identifying Resistance",
+        body: "Use 1h resistance levels that have multiple respected touches. Avoid random lines with no clear reaction history.",
+      },
+      {
+        title: "Volume Gap Analysis",
+        body: "Check for low-volume space above resistance. If overhead is crowded with volume, skip the setup and wait.",
+      },
+      {
+        title: "Execution Model",
+        body: "As price approaches resistance, drop to 5m and mark the final bearish block below the level for execution reference.",
+      },
+      {
+        title: "Trade Validation",
+        body: "Only execute if the break is clean and has room to run before the next high-volume zone.",
+      },
+      {
+        title: "Core Principle",
+        body: "Take trades only when the path forward is clear. If the market offers no space, do not force execution.",
+      },
+    ],
+  },
+  {
+    analyst: "Soul",
+    strategy: "Level-to-Level Scalping",
+    description:
+      "Momentum-based scalping using volume profile and confirmation entry models for precise level-to-level execution.",
+    tags: ["Scalping", "Momentum", "1m", "3m", "15m"],
+    sections: [
+      {
+        title: "Trading Philosophy",
+        body: "Scalping is focused on momentum moves from one clear level into the next, not passive limit order catching.",
+      },
+      {
+        title: "Strategy 1: Volume Profile",
+        body: "Use previous-session profile levels and align them with local confluence like FVG, order blocks, and structure.",
+      },
+      {
+        title: "Strategy 2: Confirmation Entry Model",
+        body: "Primary executions are on 1m and 3m confirmations after reaction at mapped levels.",
+      },
+      {
+        title: "Additional Tools",
+        body: "Supplement with harmonic context, stochastic RSI, and basic supply-demand zones for cleaner execution bias.",
+      },
+    ],
+  },
+  {
+    analyst: "Badillusion",
+    strategy: "Multi-Timeframe Structure Trading",
+    description:
+      "Comprehensive framework combining macro analysis, higher timeframe structure, and pattern-based entries with defined TP ladders.",
+    tags: ["Swing", "Intraday", "1h", "4h", "1d"],
+    sections: [
+      {
+        title: "Daily Macro Checks",
+        body: "Start with USDT.D, stablecoin dominance, BTC, Total, Total3, and BTC.D to establish directional bias.",
+      },
+      {
+        title: "Structure Analysis",
+        body: "Map HTF structure using key ranges, fib levels, and bullish or bearish MSS-BOS context before looking for entries.",
+      },
+      {
+        title: "Intraday Entry Model",
+        body: "Use trendline context, S-R flips, and clean pattern continuation only when aligned with HTF bias.",
+      },
+      {
+        title: "Swing Entry Model",
+        body: "Favor strong coins for HTF swings and wait for confirmed flips before committing directional size.",
+      },
+      {
+        title: "Take Profit Strategy",
+        body: "Use staged take-profits with runner logic and tighten risk after TP1 by moving stops to entry.",
+      },
+    ],
+  },
+  {
+    analyst: "Prestige",
+    strategy: "Standard Entry Reversal Model",
+    description:
+      "Pattern-based reversal framework that waits for confirmation around POIs instead of blind limit entries.",
+    tags: ["Reversal", "Confirmation", "15m", "1m", "POI"],
+    sections: [
+      {
+        title: "Model Overview",
+        body: "The model prioritizes confirmation at POIs to improve risk-reward and reduce losses from blind level entries.",
+      },
+      {
+        title: "Entry Process",
+        body: "Wait for approach into POI, structure formation, sweep, shift confirmation, then define the dealing range before entry.",
+      },
+      {
+        title: "Execution",
+        body: "Execute on retrace into discount or premium of the dealing range at OTE, OB, or FVG zones.",
+      },
+      {
+        title: "Targets and POIs",
+        body: "Target recent or higher-timeframe swing points and prioritize major POIs like S-R, supply-demand, and key opens.",
+      },
+      {
+        title: "Why Confirmation Matters",
+        body: "Confirmation reduces failed POI reactions and improves consistency versus immediate unconfirmed entries.",
+      },
+    ],
+  },
+  {
+    analyst: "Scient",
+    strategy: "HTF Macro-Aligned Framework",
+    description:
+      "High-timeframe, patience-focused approach built on institutional levels and macro alignment for asymmetric risk.",
+    tags: ["Swing", "Position", "1d", "3d", "1w", "Macro"],
+    sections: [
+      {
+        title: "Trading Philosophy",
+        body: "Trade fewer, higher quality setups where risk is clearly defined and reward is meaningful.",
+      },
+      {
+        title: "HTF Levels (Foundation)",
+        body: "Core decision points are built from high-timeframe support and resistance on 1D, 3D, and 1W charts.",
+      },
+      {
+        title: "Macro Bias",
+        body: "Build directional bias from USDT.D, BTC.D, TOTAL, and TOTAL2 before selecting assets and setups.",
+      },
+      {
+        title: "Trend and Market Environment",
+        body: "React to higher-high and higher-low or lower-high and lower-low structure. Avoid predicting reversals.",
+      },
+      {
+        title: "Range Identification",
+        body: "Use AMD, PO3, and premium-discount concepts to avoid mid-range entries and execute near extremes.",
+      },
+    ],
+  },
+  {
+    analyst: "Grasady",
+    strategy: "Harmonic Trading",
+    description:
+      "Macro harmonic patterns on higher timeframes combined with lower timeframe confirmation for precise entries.",
+    tags: ["Harmonic", "Multi-Timeframe", "1h", "4h", "1d", "1w"],
+    sections: [
+      {
+        title: "Trading Philosophy",
+        body: "The process is simple: map higher-timeframe harmonics first, then execute only on confirmed reactions.",
+      },
+      {
+        title: "Mapping Macro Harmonics",
+        body: "Start from daily and weekly structure to map significant harmonic levels that can drive directional bias.",
+      },
+      {
+        title: "Forming Bias",
+        body: "Use mapped harmonic zones to define directional scenarios and no-trade areas.",
+      },
+      {
+        title: "Lower Timeframe Patterns",
+        body: "When price reaches mapped zones, drop to 4h or 1h and wait for lower-timeframe pattern confirmation.",
+      },
+      {
+        title: "Execution and Risk Management",
+        body: "Execute only after reaction confirmation; manage SL from structure and set TP around major fib reaction zones.",
+      },
+    ],
+  },
+];
+
 type CoinGeckoMarketRow = {
   symbol?: string;
   name?: string;
@@ -87,6 +273,26 @@ type CryptoCompareNewsResponse = {
 
 function toFiniteNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function normalizeStrategyKey(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function areStringArraysEqual(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
+}
+
+function areStrategySectionsEqual(
+  left: StrategyLibrarySection[],
+  right: StrategyLibrarySection[],
+): boolean {
+  if (left.length !== right.length) return false;
+  return left.every(
+    (section, index) =>
+      section.title === right[index]?.title && section.body === right[index]?.body,
+  );
 }
 
 function toUsdPrice(value: number): string {
@@ -604,98 +810,69 @@ export const replaceNewsArticles = internalMutation({
 export const seedStrategiesIfMissing = internalMutation({
   args: {},
   handler: async (ctx) => {
-    const existing = await ctx.db.query("strategyEntries").take(1);
-    if (existing.length > 0) {
-      return { inserted: 0, skipped: true as const };
+    const now = Date.now();
+    const existing = await ctx.db.query("strategyEntries").collect();
+    const existingByStrategy = new Map<string, (typeof existing)[number]>();
+    for (const row of existing) {
+      const key = normalizeStrategyKey(row.strategy);
+      if (!existingByStrategy.has(key)) {
+        existingByStrategy.set(key, row);
+      }
     }
 
-    const now = Date.now();
-    const defaults: Array<{
-      analyst: string;
-      strategy: string;
-      description: string;
-      tags: string[];
-      sections: Array<{ title: string; body: string }>;
-    }> = [
-      {
-        analyst: "Sveezy",
-        strategy: "Breakout Framework",
-        description:
-          "Volume-based breakout strategy focused on clean breaks through resistance with clear expansion space.",
-        tags: ["Breakout", "Momentum", "5m", "1h"],
-        sections: [
-          {
-            title: "Identifying Resistance",
-            body: "Start with repeated resistance tests on the 1h chart. Ignore weak levels with no rejection history.",
-          },
-          {
-            title: "Execution Model",
-            body: "On approach, drop to 5m and wait for structure break plus volume confirmation before entry.",
-          },
-          {
-            title: "Trade Validation",
-            body: "Pass on crowded overhead volume. Only execute when expansion path is clear.",
-          },
-        ],
-      },
-      {
-        analyst: "Soul",
-        strategy: "Level-to-Level Scalping",
-        description:
-          "Momentum-based scalping using volume profile and confirmation entries for precise level-to-level execution.",
-        tags: ["Scalping", "Momentum", "1m", "3m", "15m"],
-        sections: [
-          {
-            title: "Session Bias",
-            body: "Set directional bias from higher timeframe structure before selecting lower timeframe entries.",
-          },
-          {
-            title: "Entry Trigger",
-            body: "Use reaction zones with reclaim plus displacement candle as the trigger.",
-          },
-          {
-            title: "Risk Control",
-            body: "Cut quickly on failed reclaims and re-enter only after structure resets.",
-          },
-        ],
-      },
-      {
-        analyst: "Badillusion",
-        strategy: "Multi-Timeframe Structure Trading",
-        description:
-          "Comprehensive framework combining macro trend alignment with lower timeframe execution triggers.",
-        tags: ["Swing", "Structure", "4h", "1d"],
-        sections: [
-          {
-            title: "Macro Context",
-            body: "Align 4h and 1d structure before entering. Avoid counter-trend setups unless invalidation is tight.",
-          },
-          {
-            title: "Trigger Zone",
-            body: "Wait for pullback into value zone and watch for momentum re-acceleration.",
-          },
-          {
-            title: "Management",
-            body: "Scale partially at first target and trail remainder beneath reclaimed structure.",
-          },
-        ],
-      },
-    ];
+    let inserted = 0;
+    let updated = 0;
 
-    for (const entry of defaults) {
-      await ctx.db.insert("strategyEntries", {
+    for (const entry of DEFAULT_STRATEGY_LIBRARY) {
+      const key = normalizeStrategyKey(entry.strategy);
+      const current = existingByStrategy.get(key);
+
+      if (!current) {
+        await ctx.db.insert("strategyEntries", {
+          analyst: entry.analyst,
+          strategy: entry.strategy,
+          description: entry.description,
+          tags: entry.tags,
+          sections: entry.sections,
+          active: true,
+          updatedAt: now,
+        });
+        inserted += 1;
+        continue;
+      }
+
+      const currentTags = current.tags ?? [];
+      const currentSections = current.sections ?? [];
+      const needsUpdate =
+        current.analyst !== entry.analyst ||
+        current.description !== entry.description ||
+        current.active !== true ||
+        !areStringArraysEqual(currentTags, entry.tags) ||
+        !areStrategySectionsEqual(currentSections, entry.sections);
+
+      if (!needsUpdate) {
+        continue;
+      }
+
+      await ctx.db.patch(current._id, {
         analyst: entry.analyst,
-        strategy: entry.strategy,
         description: entry.description,
         tags: entry.tags,
         sections: entry.sections,
         active: true,
         updatedAt: now,
       });
+      updated += 1;
     }
 
-    console.info(`[workspace/ingest] seeded default strategies inserted=${defaults.length}`);
-    return { inserted: defaults.length, skipped: false as const };
+    console.info(
+      `[workspace/ingest] synchronized default strategies inserted=${inserted} updated=${updated} defaults=${DEFAULT_STRATEGY_LIBRARY.length}`,
+    );
+    return {
+      inserted,
+      updated,
+      skipped: inserted === 0 && updated === 0 ? (true as const) : (false as const),
+    };
   },
 });
 
@@ -824,7 +1001,7 @@ export const refreshExternalWorkspaceFeeds = internalAction({
     const strategySeedResult = await ctx.runMutation(internal.workspace.seedStrategiesIfMissing, {});
 
     console.info(
-      `[workspace/ingest] refresh complete markets_inserted=${marketResult.inserted} markets_updated=${marketResult.updated} live_intel_inserted=${liveIntelResult.inserted} indicator_inserted=${indicatorResult.inserted} news_inserted=${newsResult.inserted} strategy_seed_inserted=${strategySeedResult.inserted}`,
+      `[workspace/ingest] refresh complete markets_inserted=${marketResult.inserted} markets_updated=${marketResult.updated} live_intel_inserted=${liveIntelResult.inserted} indicator_inserted=${indicatorResult.inserted} news_inserted=${newsResult.inserted} strategy_seed_inserted=${strategySeedResult.inserted} strategy_seed_updated=${strategySeedResult.updated}`,
     );
 
     return {

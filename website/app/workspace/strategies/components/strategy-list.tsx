@@ -28,7 +28,7 @@ export function StrategyList(props: StrategyListProps) {
     return (
       <Card className="site-panel">
         <CardContent className="px-0 py-6 text-sm text-muted-foreground">
-          No strategies match the active filter.
+          No strategies match your current filter or search.
         </CardContent>
       </Card>
     );
