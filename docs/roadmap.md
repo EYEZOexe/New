@@ -14,6 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Refreshed website shop product cards to a premium tiered design system: `ShopTierCard` now uses tier-specific palette treatments, richer duration-selection tiles with inline price context, stronger selected-billing emphasis, and upgraded highlight/CTA composition to improve perceived quality and pricing clarity without changing checkout logic. Verified with `website` typecheck/build. (2026-02-20)
 - Completed comprehensive website design improvement pass across shared styling, shell/navigation, and high-traffic module surfaces: upgraded global visual tokens and background atmosphere, improved marketing/workspace nav hierarchy, unified card depth/hover interactions across dashboard/workspace/shop/auth pages, and tightened composition rhythm on home/shop/auth/checkout routes. Verified with `website` typecheck/build. (2026-02-20)
 - Refined website auth-page composition to fix off-axis form alignment on wide viewports: `/login` and `/signup` now render inside a centered max-width grid shell with a constrained centered form column (`~460px`) plus full-width auth card sizing, producing a more balanced professional layout on desktop while preserving mobile flow. Verified with `website` typecheck/build. (2026-02-20)
 - Completed website production-readiness pass focused on real-data UX + auth/security hardening: homepage KPI/highlight cards now read live Convex snapshot data (`workspace:publicLandingSnapshot`), dashboard/signals connector context now comes from tier-visible connector options (`signals:listViewerConnectorOptions`) with no hardcoded `t1/conn_01` defaults, login/signup redirect handling is centrally sanitized, Discord OAuth callback now handles upstream timeout/network failures with controlled redirects, workspace topbar search now performs real module navigation, and both Next.js apps now ship baseline security headers. Verified with `bun test website/tests`, `website` typecheck/build, and `admin` typecheck/build (admin build run with `NEXT_PUBLIC_CONVEX_URL` set in shell). (2026-02-20)
@@ -218,6 +219,8 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
   Exit criteria: auth forms render in a constrained centered column, surrounding informational panel remains balanced, and `website` typecheck/build pass.
 - [x] Execute comprehensive website design-system polish across shared styling, shell/navigation, and workspace module surfaces. (2026-02-20)
   Exit criteria: visual hierarchy/interaction depth is consistent across marketing and workspace routes, shared components carry updated styling primitives, and `website` typecheck/build pass.
+- [x] Refresh shop product cards with a premium visual treatment and clearer pricing-selection hierarchy. (2026-02-20)
+  Exit criteria: tier cards present stronger premium differentiation, selected duration/price context is immediately legible, and `website` typecheck/build pass.
 
 ## Checklists / Hygiene
 
@@ -308,6 +311,7 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
 | 2026-02-19 | Execute customer-readiness second pass for non-dashboard website IA/layout with dashboard-aligned shell and cleaner pricing/auth UX | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
 | 2026-02-20 | Execute production-readiness pass for live-data UX, connector-source integrity, auth redirect hardening, and baseline security headers | `docs/plans/2026-02-20-website-production-readiness-pass.md` |
 | 2026-02-20 | Execute comprehensive website design improvement pass spanning global visual system, shell/nav composition, and module-level consistency polish | `docs/plans/2026-02-20-website-design-improvement-plan.md` |
+| 2026-02-20 | Refresh website shop product cards to a premium tiered composition with stronger duration/price affordances | `docs/plans/2026-02-20-shop-premium-cards-refresh-plan.md` |
 
 ## Links
 
@@ -322,3 +326,4 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
 - Website member experience restructure implementation plan: `docs/plans/2026-02-19-website-experience-restructure-plan.md`
 - Website production-readiness pass: `docs/plans/2026-02-20-website-production-readiness-pass.md`
 - Website design improvement plan: `docs/plans/2026-02-20-website-design-improvement-plan.md`
+- Shop premium cards refresh plan: `docs/plans/2026-02-20-shop-premium-cards-refresh-plan.md`
