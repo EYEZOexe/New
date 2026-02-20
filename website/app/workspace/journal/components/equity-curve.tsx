@@ -20,7 +20,7 @@ function formatUsd(value: number): string {
 export function EquityCurve(props: EquityCurveProps) {
   if (props.points.length < 2) {
     return (
-      <Card className="site-panel">
+      <Card className="site-panel site-card-hover">
         <CardHeader className="px-0 pb-2">
           <CardTitle className="text-base">Equity Curve</CardTitle>
         </CardHeader>
@@ -32,7 +32,7 @@ export function EquityCurve(props: EquityCurveProps) {
   }
 
   return (
-    <Card className="site-panel">
+    <Card className="site-panel site-card-hover">
       <CardHeader className="px-0 pb-2">
         <CardTitle className="text-base">Equity Curve</CardTitle>
       </CardHeader>

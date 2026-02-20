@@ -11,7 +11,7 @@ type WorkspaceAppFrameProps = {
 export function WorkspaceAppFrame(props: WorkspaceAppFrameProps) {
   return (
     <PageFrame>
-      <section className="site-panel overflow-hidden p-0">
+      <section className="site-panel site-animate-in overflow-hidden p-0">
         <WorkspaceShell>{props.children}</WorkspaceShell>
       </section>
     </PageFrame>

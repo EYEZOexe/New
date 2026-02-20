@@ -25,7 +25,7 @@ export function ChartCard(props: ChartCardProps) {
   const stroke = props.color ?? "oklch(0.73 0.16 215)";
 
   return (
-    <Card className="site-soft h-full">
+    <Card className="site-soft site-card-hover h-full">
       <CardHeader className="px-0 pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">{props.title}</CardTitle>
       </CardHeader>

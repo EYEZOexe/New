@@ -30,7 +30,7 @@ export function JournalKpis(props: JournalKpisProps) {
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
       {cells.map((cell) => (
-        <Card key={cell.label} className="site-soft">
+        <Card key={cell.label} className="site-soft site-card-hover">
           <CardContent className="space-y-1 px-0">
             <p className="site-kicker">{cell.label}</p>
             <p className="text-2xl font-semibold">{cell.value}</p>
@@ -40,4 +40,3 @@ export function JournalKpis(props: JournalKpisProps) {
     </div>
   );
 }
-

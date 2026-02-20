@@ -44,7 +44,7 @@ export function TradeLogTable(props: TradeLogTableProps) {
   }, [props.rows.length, rows.length, statusFilter]);
 
   return (
-    <Card className="site-panel">
+    <Card className="site-panel site-card-hover">
       <CardHeader className="flex flex-row items-center justify-between px-0 pb-3">
         <CardTitle className="text-base">Trade Log</CardTitle>
         <div className="flex gap-2">
@@ -83,7 +83,10 @@ export function TradeLogTable(props: TradeLogTableProps) {
                 </tr>
               ) : null}
               {rows.map((row) => (
-                <tr key={row.id} className="border-b border-border/50 last:border-b-0">
+                <tr
+                  key={row.id}
+                  className="border-b border-border/50 transition-colors last:border-b-0 hover:bg-cyan-500/6"
+                >
                   <td className="px-4 py-3">
                     <p className="font-semibold">{row.symbol}</p>
                     <p className="text-xs text-muted-foreground">{row.date}</p>

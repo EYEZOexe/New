@@ -26,31 +26,49 @@ export function MarketingNav(props: MarketingNavProps) {
   const pathname = usePathname();
 
   return (
-    <header className="site-panel px-4 py-3 md:px-5 md:py-4">
+    <header className="site-panel sticky top-4 z-40 px-4 py-3 md:px-5 md:py-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link href="/" className="flex items-center gap-3">
-          <span className="inline-flex h-8 items-center rounded-full border border-cyan-300/35 bg-cyan-400/15 px-3 text-sm font-semibold text-cyan-100">
-            Sleep Crypto
+        <Link href="/" className="group flex items-center gap-3">
+          <span className="inline-flex size-9 items-center justify-center rounded-xl border border-cyan-300/40 bg-cyan-400/18 text-sm font-semibold text-cyan-100 shadow-[0_12px_34px_-20px_rgba(39,209,255,0.8)] transition-colors group-hover:bg-cyan-400/24">
+            SC
           </span>
-          <span className="hidden text-sm text-muted-foreground md:inline">Signal workspace for disciplined traders</span>
+          <div className="leading-tight">
+            <p className="text-sm font-semibold text-foreground">Sleep Crypto</p>
+            <p className="hidden text-[11px] uppercase tracking-[0.12em] text-muted-foreground sm:block">
+              Signal workspace for disciplined traders
+            </p>
+          </div>
         </Link>
 
-        <nav className="flex items-center gap-2">
+        <nav className="flex flex-wrap items-center gap-2">
           {links.map((link) => (
             <Button
               asChild
               key={link.href}
               size="sm"
               variant={isActive(pathname, link.href) ? "secondary" : "ghost"}
-              className="rounded-full px-4"
+              className={
+                isActive(pathname, link.href)
+                  ? "rounded-full border border-cyan-300/35 bg-cyan-400/20 px-4 text-cyan-100 hover:bg-cyan-400/26"
+                  : "rounded-full px-4"
+              }
             >
               <Link href={link.href}>{link.label}</Link>
             </Button>
           ))}
-          <Button asChild size="sm" variant={isActive(pathname, "/login") ? "secondary" : "ghost"} className="rounded-full px-4">
+          <Button
+            asChild
+            size="sm"
+            variant={isActive(pathname, "/login") ? "secondary" : "ghost"}
+            className={
+              isActive(pathname, "/login")
+                ? "rounded-full border border-cyan-300/35 bg-cyan-400/20 px-4 text-cyan-100 hover:bg-cyan-400/26"
+                : "rounded-full px-4"
+            }
+          >
             <Link href="/login">Log in</Link>
           </Button>
-          {props.rightSlot}
+          {props.rightSlot ? <div className="ml-1">{props.rightSlot}</div> : null}
         </nav>
       </div>
     </header>

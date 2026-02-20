@@ -23,9 +23,9 @@ export function AuthFormCard(props: AuthFormCardProps) {
   const isLogin = props.mode === "login";
 
   return (
-    <Card className="h-fit w-full rounded-3xl border border-border/70 bg-card/90 p-6 shadow-[0_32px_90px_-65px_rgba(14,170,231,0.95)] backdrop-blur-xl md:p-7">
+    <Card className="site-card-hover h-fit w-full rounded-3xl border border-border/70 bg-card/90 p-6 shadow-[0_32px_90px_-65px_rgba(14,170,231,0.95)] backdrop-blur-xl md:p-7">
       <CardHeader className="space-y-3 px-0 pb-1">
-        <Badge variant="secondary" className="w-fit rounded-full">
+        <Badge variant="secondary" className="w-fit rounded-full border border-cyan-300/30 bg-cyan-400/15 text-cyan-100">
           {isLogin ? "Member Login" : "Start Your Account"}
         </Badge>
         <CardTitle className="text-3xl leading-tight tracking-tight">{isLogin ? "Welcome back" : "Create your account"}</CardTitle>

@@ -56,7 +56,7 @@ export default function LoginPage() {
       <MarketingNav />
 
       <section className="mx-auto grid w-full max-w-6xl gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(420px,460px)] xl:items-center xl:gap-8">
-        <Card className="rounded-3xl border border-border/70 bg-card/85 p-6 backdrop-blur-xl md:p-8">
+        <Card className="site-animate-in site-card-hover rounded-3xl border border-border/70 bg-card/85 p-6 backdrop-blur-xl md:p-8">
           <CardContent className="space-y-7 px-0">
             <div className="space-y-4">
               <Badge variant="secondary" className="w-fit rounded-full bg-cyan-500/20 text-cyan-100">
@@ -104,7 +104,7 @@ export default function LoginPage() {
           </CardContent>
         </Card>
 
-        <div className="w-full max-w-[460px] justify-self-center">
+        <div className="site-animate-in site-animate-in-delay-1 w-full max-w-[460px] justify-self-center">
           <AuthFormCard
             mode="login"
             email={email}

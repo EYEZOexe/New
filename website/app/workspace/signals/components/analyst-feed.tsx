@@ -35,7 +35,7 @@ export function AnalystFeed(props: AnalystFeedProps) {
   }, [filteredItems.length, props.items.length, selectedAnalyst]);
 
   return (
-    <Card className="site-panel">
+    <Card className="site-panel site-card-hover">
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 px-0 pb-3">
         <CardTitle className="text-base">Analyst Feed</CardTitle>
         <div className="flex flex-wrap gap-2">
@@ -68,7 +68,7 @@ export function AnalystFeed(props: AnalystFeedProps) {
           </div>
         ) : null}
         {filteredItems.map((item) => (
-          <article key={item.id} className="rounded-2xl border border-border/70 bg-background/45 p-4">
+          <article key={item.id} className="site-card-hover rounded-2xl border border-border/70 bg-background/45 p-4">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div>
                 <p className="font-semibold">{item.analyst}</p>

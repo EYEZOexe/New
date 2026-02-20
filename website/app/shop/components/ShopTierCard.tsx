@@ -25,7 +25,7 @@ export function ShopTierCard(props: ShopTierCardProps) {
   const tierIsFeatured = props.tier.variants.some((variant) => variant.isFeatured);
 
   return (
-    <Card className="relative h-full overflow-hidden rounded-3xl border border-border/70 bg-card/85">
+    <Card className="site-card-hover relative h-full overflow-hidden rounded-3xl border border-border/70 bg-card/85">
       <div className={`pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${getTierAccentClass(props.tier.tier)}`} />
       <CardContent className="flex h-full flex-col gap-5 p-6">
         <div className="space-y-2">

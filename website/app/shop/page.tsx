@@ -51,7 +51,7 @@ export default function ShopPage() {
           Plans are being prepared. Please check back shortly.
         </div>
       ) : (
-        <section className="space-y-5">
+        <section className="site-animate-in site-animate-in-delay-1 space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="site-kicker">Plans</p>
@@ -75,8 +75,8 @@ export default function ShopPage() {
         </section>
       )}
 
-      <section className="grid gap-4 xl:grid-cols-[1fr_320px]">
-        <Card className="rounded-3xl border border-border/70 bg-card/80 p-6">
+      <section className="site-animate-in site-animate-in-delay-2 grid gap-4 xl:grid-cols-[1fr_320px]">
+        <Card className="site-card-hover rounded-3xl border border-border/70 bg-card/80 p-6">
           <CardContent className="space-y-4 px-0">
             <p className="site-kicker">All plans include</p>
             <div className="grid gap-3 md:grid-cols-2">
@@ -97,7 +97,7 @@ export default function ShopPage() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-3xl border border-border/70 bg-card/80 p-6">
+        <Card className="site-card-hover rounded-3xl border border-border/70 bg-card/80 p-6">
           <CardContent className="space-y-4 px-0">
             <p className="site-kicker">Need help choosing?</p>
             <h3 className="text-2xl font-semibold tracking-tight">We can help you pick the right tier.</h3>

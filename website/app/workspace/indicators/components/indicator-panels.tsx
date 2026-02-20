@@ -27,7 +27,10 @@ function AlertList(props: { alerts: IndicatorAlert[] }) {
   return (
     <div className="space-y-3">
       {props.alerts.map((alert) => (
-        <article key={alert.id} className="rounded-xl border border-border/70 bg-background/45 p-3.5 transition-colors hover:border-primary/45 hover:bg-background/55">
+        <article
+          key={alert.id}
+          className="site-card-hover rounded-xl border border-border/70 bg-background/45 p-3.5 transition-colors hover:border-primary/45 hover:bg-background/55"
+        >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="font-semibold">{alert.title}</p>
             <p className="text-xs text-muted-foreground">{alert.date}</p>
@@ -51,7 +54,7 @@ function AlertList(props: { alerts: IndicatorAlert[] }) {
 export function IndicatorPanels(props: IndicatorPanelsProps) {
   return (
     <div className="grid gap-4 xl:grid-cols-2">
-      <Card className="site-panel">
+      <Card className="site-panel site-card-hover">
         <CardHeader className="px-0 pb-3">
           <CardTitle className="text-base">Oracle Alerts</CardTitle>
         </CardHeader>
@@ -60,7 +63,7 @@ export function IndicatorPanels(props: IndicatorPanelsProps) {
         </CardContent>
       </Card>
 
-      <Card className="site-panel">
+      <Card className="site-panel site-card-hover">
         <CardHeader className="px-0 pb-3">
           <CardTitle className="text-base">MSS Watchlist</CardTitle>
         </CardHeader>

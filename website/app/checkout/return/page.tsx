@@ -58,7 +58,7 @@ export default function CheckoutReturnPage() {
     <MarketingFrame>
       <MarketingNav />
 
-      <section className="site-panel grid gap-6 xl:grid-cols-[1fr_330px] xl:items-start">
+      <section className="site-panel site-animate-in grid gap-6 xl:grid-cols-[1fr_330px] xl:items-start">
         <div className="space-y-5">
           <div className="space-y-3">
             <p className="site-kicker">Checkout status</p>
@@ -106,7 +106,7 @@ export default function CheckoutReturnPage() {
           </div>
         </div>
 
-        <Card className="rounded-2xl border border-border/70 bg-background/45 p-4">
+        <Card className="site-card-hover rounded-2xl border border-border/70 bg-background/45 p-4">
           <CardContent className="space-y-3 px-0 text-sm">
             <p className="site-kicker">Status details</p>
             <div className="flex flex-wrap gap-2">

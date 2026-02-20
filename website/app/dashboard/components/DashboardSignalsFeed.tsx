@@ -69,7 +69,7 @@ function EmptyState(props: { signalState: SignalState }) {
 
 export function DashboardSignalsFeed(props: DashboardSignalsFeedProps) {
   return (
-    <Card className="site-panel">
+    <Card className="site-panel site-card-hover">
       <CardHeader className="px-0 pb-3">
         <CardTitle className="text-base">Signals</CardTitle>
       </CardHeader>
@@ -118,7 +118,7 @@ export function DashboardSignalsFeed(props: DashboardSignalsFeedProps) {
 
         {props.signalState === "has_signals"
           ? props.signals?.map((signal) => (
-              <Card key={signal._id} className="site-soft overflow-hidden">
+              <Card key={signal._id} className="site-soft site-card-hover overflow-hidden">
                 <CardContent className="space-y-4 px-0">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="space-y-1">

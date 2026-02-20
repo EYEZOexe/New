@@ -28,7 +28,7 @@ type DashboardOverviewProps = {
 export function DashboardOverview(props: DashboardOverviewProps) {
   return (
     <div className="grid gap-5 lg:grid-cols-3">
-      <Card className="site-panel h-full">
+      <Card className="site-panel site-card-hover h-full">
         <CardHeader className="px-0 pb-3">
           <CardTitle className="text-base">Subscription</CardTitle>
         </CardHeader>
@@ -65,7 +65,7 @@ export function DashboardOverview(props: DashboardOverviewProps) {
         </CardContent>
       </Card>
 
-      <Card className="site-panel h-full">
+      <Card className="site-panel site-card-hover h-full">
         <CardHeader className="px-0 pb-3">
           <CardTitle className="text-base">Visibility</CardTitle>
         </CardHeader>
@@ -93,7 +93,7 @@ export function DashboardOverview(props: DashboardOverviewProps) {
         </CardContent>
       </Card>
 
-      <Card className="site-panel h-full">
+      <Card className="site-panel site-card-hover h-full">
         <CardHeader className="px-0 pb-3">
           <CardTitle className="text-base">Discord Link</CardTitle>
         </CardHeader>

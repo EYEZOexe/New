@@ -1,8 +1,8 @@
 "use client";
 
-import { Search, Wifi } from "lucide-react";
+import { Clock3, Search, Wifi } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -11,8 +11,14 @@ import { workspaceRoutes } from "@/lib/workspaceRoutes";
 
 export function WorkspaceTopbar() {
   const [query, setQuery] = useState("");
+  const [clock, setClock] = useState(() => new Date());
   const pathname = usePathname();
   const router = useRouter();
+
+  useEffect(() => {
+    const interval = setInterval(() => setClock(new Date()), 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const activeRouteLabel = useMemo(() => {
     const matched = workspaceRoutes.find(
@@ -41,15 +47,21 @@ export function WorkspaceTopbar() {
   }
 
   return (
-    <div className="workspace-topbar flex items-center justify-between gap-3 border-b border-border/70 px-4 py-3 md:px-5">
+    <div className="workspace-topbar flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3 md:px-5">
       <div className="flex items-center gap-2">
-        <SidebarTrigger className="rounded-full border border-border/70 bg-background/40" />
-        <Badge variant="outline" className="hidden rounded-full bg-background/50 md:inline-flex">
-          {activeRouteLabel}
-        </Badge>
+        <SidebarTrigger className="rounded-full border border-border/70 bg-background/40 transition-colors hover:bg-background/60" />
+        <div className="hidden items-center gap-2 md:flex">
+          <Badge
+            variant="outline"
+            className="rounded-full border-cyan-300/35 bg-cyan-400/12 px-3 text-cyan-100"
+          >
+            {activeRouteLabel}
+          </Badge>
+          <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Command Surface</p>
+        </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
         <form onSubmit={onSearchSubmit} className="relative hidden min-w-60 md:block">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -61,6 +73,10 @@ export function WorkspaceTopbar() {
             aria-description="Type a workspace module and press enter to navigate"
           />
         </form>
+        <Badge variant="outline" className="rounded-full border-border/70 bg-background/45 text-foreground/90">
+          <Clock3 className="size-3" />
+          {clock.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+        </Badge>
         <Badge variant="outline" className="rounded-full border-emerald-400/45 bg-emerald-500/15 text-emerald-200">
           <Wifi className="size-3" />
           Live

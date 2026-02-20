@@ -35,7 +35,7 @@ export function LiveIntelGrid(props: LiveIntelGridProps) {
   return (
     <div className="grid gap-4 xl:grid-cols-3">
       {groups.map(([group, cards]) => (
-        <Card key={group} className="site-panel h-full">
+        <Card key={group} className="site-panel site-card-hover h-full">
           <CardHeader className="space-y-3 px-0 pb-2">
             <div className="flex items-center justify-between gap-2">
               <CardTitle className="text-base capitalize">{group.replaceAll("-", " ")}</CardTitle>
@@ -59,7 +59,7 @@ export function LiveIntelGrid(props: LiveIntelGridProps) {
             ).map((card) => (
               <div
                 key={card.id}
-                className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-background/45 px-3 py-2.5 transition-colors hover:border-primary/45 hover:bg-background/55"
+                className="site-card-hover flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-background/45 px-3 py-2.5 transition-colors hover:border-primary/45 hover:bg-background/55"
               >
                 <div>
                   <p className="font-semibold">{card.title}</p>

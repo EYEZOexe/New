@@ -37,7 +37,7 @@ export function StrategyList(props: StrategyListProps) {
   return (
     <div className="grid gap-3 xl:grid-cols-2">
       {props.items.map((item) => (
-        <Card key={item.id} className="site-panel h-full transition-colors hover:border-primary/45">
+        <Card key={item.id} className="site-panel site-card-hover h-full transition-colors hover:border-primary/45">
           <CardContent className="space-y-3 px-0">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>

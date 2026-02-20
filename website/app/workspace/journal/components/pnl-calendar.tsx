@@ -66,7 +66,7 @@ export function PnlCalendar(props: PnlCalendarProps) {
   }, [monthCursor, pointsByDate]);
 
   return (
-    <Card className="site-panel">
+    <Card className="site-panel site-card-hover">
       <CardHeader className="flex flex-row items-center justify-between px-0 pb-2">
         <CardTitle className="text-base">P&L Calendar</CardTitle>
         <div className="flex items-center gap-2">

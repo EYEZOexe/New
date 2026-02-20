@@ -37,7 +37,9 @@ export function SectionHeader(props: SectionHeaderProps) {
             >
               {props.badge}
             </Badge>
-            <span className="text-xs font-medium text-muted-foreground">Realtime signal workspace</span>
+            <span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              Realtime signal workspace
+            </span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {props.navLinks?.map((link) => (
@@ -46,7 +48,7 @@ export function SectionHeader(props: SectionHeaderProps) {
                 asChild
                 size="sm"
                 variant="ghost"
-                className="rounded-full border border-border/70 bg-background/35 px-4"
+                className="rounded-full border border-border/70 bg-background/35 px-4 hover:border-cyan-300/35 hover:bg-cyan-400/12 hover:text-cyan-100"
               >
                 <Link href={link.href}>{link.label}</Link>
               </Button>
@@ -64,7 +66,7 @@ export function SectionHeader(props: SectionHeaderProps) {
           {props.highlights?.length ? (
             <div className="grid gap-2 sm:grid-cols-3 lg:w-[340px] lg:grid-cols-1">
               {props.highlights.map((item) => (
-                <div key={item.label} className="site-metric">
+                <div key={item.label} className="site-metric site-card-hover">
                   <p className="site-kicker">{item.label}</p>
                   <p className="mt-1 text-sm font-semibold text-foreground">{item.value}</p>
                 </div>

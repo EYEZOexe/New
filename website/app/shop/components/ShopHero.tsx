@@ -20,7 +20,7 @@ function normalizeStatus(status: ViewerRow["subscriptionStatus"]): string {
 
 export function ShopHero(props: ShopHeroProps) {
   return (
-    <section className="site-panel space-y-6">
+    <section className="site-panel site-animate-in space-y-6">
       <div className="grid gap-6 xl:grid-cols-[1fr_360px] xl:items-start">
         <div className="space-y-4">
           <Badge variant="secondary" className="w-fit rounded-full bg-cyan-500/20 text-cyan-100">
@@ -33,7 +33,7 @@ export function ShopHero(props: ShopHeroProps) {
           </p>
         </div>
 
-        <Card className="rounded-2xl border border-border/70 bg-background/45 p-4">
+        <Card className="site-card-hover rounded-2xl border border-border/70 bg-background/45 p-4">
           <CardContent className="space-y-4 px-0">
             <p className="site-kicker">Your account summary</p>
             <div className="space-y-3 text-sm">
@@ -57,34 +57,34 @@ export function ShopHero(props: ShopHeroProps) {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <div className="site-stat">
+        <div className="site-stat site-card-hover">
           <p className="site-kicker">Plans available</p>
           <p className="mt-2 text-2xl font-semibold">{props.tierCount}</p>
         </div>
-        <div className="site-stat">
+        <div className="site-stat site-card-hover">
           <p className="site-kicker">Billing options</p>
           <p className="mt-2 text-2xl font-semibold">{props.totalVariants}</p>
         </div>
-        <div className="site-stat">
+        <div className="site-stat site-card-hover">
           <p className="site-kicker">Checkout experience</p>
           <p className="mt-2 text-2xl font-semibold text-emerald-300">Fast</p>
         </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-border/70 bg-background/45 p-4 text-sm">
+        <div className="site-card-hover rounded-2xl border border-border/70 bg-background/45 p-4 text-sm">
           <p className="flex items-center gap-2 font-medium">
             <BadgeCheck className="size-4 text-cyan-300" />
             Instant plan activation
           </p>
         </div>
-        <div className="rounded-2xl border border-border/70 bg-background/45 p-4 text-sm">
+        <div className="site-card-hover rounded-2xl border border-border/70 bg-background/45 p-4 text-sm">
           <p className="flex items-center gap-2 font-medium">
             <ShieldCheck className="size-4 text-cyan-300" />
             Secure account controls
           </p>
         </div>
-        <div className="rounded-2xl border border-border/70 bg-background/45 p-4 text-sm">
+        <div className="site-card-hover rounded-2xl border border-border/70 bg-background/45 p-4 text-sm">
           <p className="flex items-center gap-2 font-medium">
             <Sparkles className="size-4 text-cyan-300" />
             Built for active traders

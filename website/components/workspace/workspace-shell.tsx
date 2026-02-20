@@ -41,7 +41,9 @@ export function WorkspaceShell(props: WorkspaceShellProps) {
       <WorkspaceSidebar />
       <SidebarInset className="min-h-[72vh] bg-transparent">
         <WorkspaceTopbar />
-        <div className="workspace-main space-y-6 px-4 py-4 md:px-5 md:py-5">{props.children}</div>
+        <div className="workspace-main space-y-6 px-4 py-4 md:px-5 md:py-5">
+          {props.children}
+        </div>
       </SidebarInset>
     </SidebarProvider>
   );

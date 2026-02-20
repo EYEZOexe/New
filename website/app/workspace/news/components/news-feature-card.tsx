@@ -8,7 +8,7 @@ type NewsFeatureCardProps = {
 
 export function NewsFeatureCard(props: NewsFeatureCardProps) {
   return (
-    <Card className="site-panel">
+    <Card className="site-panel site-card-hover">
       <CardContent className="grid gap-4 px-0 lg:grid-cols-[1fr_1.35fr] lg:items-stretch">
         <div className="rounded-2xl border border-border/70 bg-background/45 p-5">
           <p className="site-kicker">Source</p>
@@ -34,4 +34,3 @@ export function NewsFeatureCard(props: NewsFeatureCardProps) {
     </Card>
   );
 }
-

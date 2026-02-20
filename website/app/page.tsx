@@ -108,7 +108,7 @@ export default function Home() {
         }
       />
 
-      <section className="site-panel grid gap-8 xl:grid-cols-[1.06fr_0.94fr]">
+      <section className="site-panel site-animate-in grid gap-8 xl:grid-cols-[1.06fr_0.94fr]">
         <div className="space-y-6">
           <div className="space-y-4">
             <Badge variant="secondary" className="w-fit rounded-full bg-cyan-500/20 text-cyan-100">
@@ -136,13 +136,13 @@ export default function Home() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="site-stat">
+            <div className="site-stat site-card-hover">
               <p className="site-kicker">Tracked markets</p>
               <p className="mt-2 text-2xl font-semibold">
                 {landingSnapshot ? landingSnapshot.marketCount : "Loading"}
               </p>
             </div>
-            <div className="site-stat">
+            <div className="site-stat site-card-hover">
               <p className="site-kicker">Top 24h mover</p>
               <p className="mt-2 text-2xl font-semibold">
                 {landingSnapshot?.topGainer
@@ -150,7 +150,7 @@ export default function Home() {
                   : "No live data"}
               </p>
             </div>
-            <div className="site-stat">
+            <div className="site-stat site-card-hover">
               <p className="site-kicker">Feed freshness</p>
               <p className="mt-2 text-2xl font-semibold">
                 {landingSnapshot ? formatRelativeTime(landingSnapshot.lastMarketUpdateAt) : "Loading"}
@@ -159,7 +159,7 @@ export default function Home() {
           </div>
         </div>
 
-        <Card className="rounded-3xl border border-border/70 bg-background/55 p-5">
+        <Card className="site-card-hover rounded-3xl border border-border/70 bg-background/55 p-5">
           <CardContent className="space-y-5 px-0">
             <div className="flex items-center justify-between gap-2 rounded-2xl border border-border/70 bg-background/55 px-4 py-3">
               <p className="text-sm font-medium">Live workspace snapshot</p>
@@ -174,7 +174,7 @@ export default function Home() {
                 {landingSnapshot?.latestNews.slice(0, 2).map((article) => (
                   <a
                     key={article.url}
-                    className="flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-background/50 p-3 transition-colors hover:bg-background/65"
+                    className="site-card-hover flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-background/50 p-3 transition-colors hover:bg-background/65"
                     href={article.url}
                     target="_blank"
                     rel="noreferrer"
@@ -224,9 +224,9 @@ export default function Home() {
         </Card>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="site-animate-in site-animate-in-delay-1 grid gap-4 md:grid-cols-3">
         {valuePoints.map((item) => (
-          <Card key={item.title} className="rounded-2xl border border-border/70 bg-card/75 p-5">
+          <Card key={item.title} className="site-card-hover rounded-2xl border border-border/70 bg-card/75 p-5">
             <CardContent className="space-y-3 px-0">
               <div className="inline-flex size-9 items-center justify-center rounded-xl border border-cyan-300/35 bg-cyan-400/15">
                 <item.icon className="size-4 text-cyan-200" />
@@ -238,7 +238,7 @@ export default function Home() {
         ))}
       </section>
 
-      <section className="site-panel space-y-5">
+      <section className="site-panel site-animate-in site-animate-in-delay-2 space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="site-kicker">How it works</p>
