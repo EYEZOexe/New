@@ -41,6 +41,36 @@ describe("paymentsUtils", () => {
     expect(projected.subscriptionStatus).toBe("active");
   });
 
+  it("projects nested sell invoice/order payload fields", () => {
+    const payload = {
+      event: "order.created",
+      data: {
+        id: 2892943,
+        customer_information: {
+          email: "eyezo@gmail.com",
+          id: 1270524,
+        },
+        products: [350194],
+        product_variants: [{ product_variant_id: 377193 }],
+        status: {
+          status: {
+            status: "PENDING",
+          },
+        },
+      },
+    };
+
+    const projected = projectSellWebhookPayload(payload);
+    expect(projected.eventId).toBe("2892943");
+    expect(projected.eventType).toBe("order.created");
+    expect(projected.customerEmail).toBe("eyezo@gmail.com");
+    expect(projected.externalCustomerId).toBe("1270524");
+    expect(projected.productId).toBe("350194");
+    expect(projected.variantId).toBe("377193");
+    expect(projected.rawStatus).toBe("PENDING");
+    expect(projected.subscriptionStatus).toBe("inactive");
+  });
+
   it("maps failed lifecycle states to past_due", () => {
     expect(
       mapSellLifecycleToSubscriptionStatus({

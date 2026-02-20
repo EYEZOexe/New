@@ -42,6 +42,24 @@ type OperatorResult<T extends Record<string, unknown>> =
       };
     };
 
+function getSellWebhookIgnoreReason(args: {
+  eventType: string;
+  rawStatus: string | null;
+}): string | null {
+  const eventType = args.eventType.trim().toLowerCase();
+  const rawStatus = (args.rawStatus ?? "").trim().toLowerCase();
+
+  if (eventType === "order.created" && (!rawStatus || rawStatus === "pending")) {
+    return "pre_checkout_order_created";
+  }
+
+  if (rawStatus === "pending") {
+    return "pre_checkout_pending_status";
+  }
+
+  return null;
+}
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   return String(error);
@@ -438,6 +456,35 @@ export const processSellWebhookEvent = internalMutation({
     const projected = projectSellWebhookPayload(event.payload, event.eventId);
 
     try {
+      const ignoreReason = getSellWebhookIgnoreReason({
+        eventType: projected.eventType,
+        rawStatus: projected.rawStatus,
+      });
+      if (ignoreReason) {
+        await ctx.db.patch(event._id, {
+          eventType: projected.eventType,
+          customerEmail: projected.customerEmail ?? undefined,
+          externalCustomerId: projected.externalCustomerId ?? undefined,
+          externalSubscriptionId: projected.externalSubscriptionId ?? undefined,
+          resolvedVia: ignoreReason,
+          status: "processed",
+          processedAt: args.attemptedAt,
+          lastAttemptAt: args.attemptedAt,
+          error: undefined,
+        });
+
+        console.info(
+          `[payments] ignored webhook provider=${args.provider} event=${args.eventId} event_type=${projected.eventType} raw_status=${projected.rawStatus ?? "none"} reason=${ignoreReason} attempts=${nextAttempt}`,
+        );
+
+        return {
+          ok: true as const,
+          deduped: false,
+          subscriptionStatus: projected.subscriptionStatus,
+          userId: null as Id<"users"> | null,
+        };
+      }
+
       const accessPolicy = await resolveEnabledSellAccessPolicy(ctx, {
         productId: projected.productId,
         variantId: projected.variantId,

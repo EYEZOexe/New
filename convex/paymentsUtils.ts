@@ -23,6 +23,14 @@ function readPath(payload: unknown, path: string): unknown {
   const parts = path.split(".");
   let cursor: unknown = payload;
   for (const part of parts) {
+    if (Array.isArray(cursor)) {
+      const index = Number.parseInt(part, 10);
+      if (!Number.isInteger(index) || index < 0 || index >= cursor.length) {
+        return undefined;
+      }
+      cursor = cursor[index];
+      continue;
+    }
     if (!isRecord(cursor)) return undefined;
     cursor = cursor[part];
   }
@@ -72,33 +80,51 @@ const CUSTOMER_EMAIL_PATHS = [
   "email",
   "customer.email",
   "buyer.email",
+  "payment.gateway.data.customer_email",
+  "payment.gateway.data.email",
+  "customer_information.email",
+  "customers.0.email",
   "data.customer_email",
   "data.email",
   "data.customer.email",
   "data.buyer.email",
+  "data.payment.gateway.data.customer_email",
+  "data.payment.gateway.data.email",
+  "data.customer_information.email",
+  "data.customers.0.email",
 ] as const;
 
 const PRODUCT_ID_PATHS = [
   "product_id",
   "product.id",
+  "products.0",
   "data.product_id",
   "data.product.id",
+  "data.products.0",
 ] as const;
 
 const VARIANT_ID_PATHS = [
   "variant_id",
   "variant.id",
+  "product_variant_id",
+  "product_variants.0.product_variant_id",
   "data.variant_id",
   "data.variant.id",
+  "data.product_variant_id",
+  "data.product_variants.0.product_variant_id",
 ] as const;
 
 const CUSTOMER_ID_PATHS = [
   "customer_id",
   "customer.id",
   "buyer.id",
+  "customer_information.id",
+  "customers.0.id",
   "data.customer_id",
   "data.customer.id",
   "data.buyer.id",
+  "data.customer_information.id",
+  "data.customers.0.id",
 ] as const;
 
 const SUBSCRIPTION_ID_PATHS = [
@@ -111,9 +137,13 @@ const SUBSCRIPTION_ID_PATHS = [
 const STATUS_PATHS = [
   "subscription_status",
   "status",
+  "status.status",
+  "status.status.status",
   "payment_status",
   "data.subscription_status",
   "data.status",
+  "data.status.status",
+  "data.status.status.status",
   "data.payment_status",
 ] as const;
 
