@@ -40,6 +40,24 @@ function readAccessToken(payload: unknown): string | null {
   return typeof token === "string" && token.trim() ? token.trim() : null;
 }
 
+async function safeDiscordFetch(
+  label: string,
+  url: string,
+  init: RequestInit,
+): Promise<Response | null> {
+  try {
+    return await fetch(url, {
+      ...init,
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[discord-oauth] ${label} request failed: ${message}`);
+    return null;
+  }
+}
+
 export async function GET(request: Request) {
   const cookieStore = await cookies();
   const url = new URL(request.url);
@@ -116,14 +134,21 @@ export async function GET(request: Request) {
     redirect_uri: callbackUrl,
   });
 
-  const tokenResponse = await fetch("https://discord.com/api/v10/oauth2/token", {
+  const tokenResponse = await safeDiscordFetch("token", "https://discord.com/api/v10/oauth2/token", {
     method: "POST",
     headers: {
       "content-type": "application/x-www-form-urlencoded",
     },
-    cache: "no-store",
     body: tokenBody.toString(),
   });
+  if (!tokenResponse) {
+    const response = redirectToDashboard(request, redirectPath, {
+      discordError: "token_request_failed",
+    });
+    response.cookies.delete(DISCORD_OAUTH_STATE_COOKIE);
+    response.cookies.delete(DISCORD_OAUTH_RESULT_COOKIE);
+    return response;
+  }
 
   if (!tokenResponse.ok) {
     console.error(
@@ -149,13 +174,20 @@ export async function GET(request: Request) {
     return response;
   }
 
-  const profileResponse = await fetch("https://discord.com/api/v10/users/@me", {
+  const profileResponse = await safeDiscordFetch("profile", "https://discord.com/api/v10/users/@me", {
     method: "GET",
     headers: {
       authorization: `Bearer ${accessToken}`,
     },
-    cache: "no-store",
   });
+  if (!profileResponse) {
+    const response = redirectToDashboard(request, redirectPath, {
+      discordError: "profile_request_failed",
+    });
+    response.cookies.delete(DISCORD_OAUTH_STATE_COOKIE);
+    response.cookies.delete(DISCORD_OAUTH_RESULT_COOKIE);
+    return response;
+  }
 
   if (!profileResponse.ok) {
     console.error(
@@ -205,4 +237,3 @@ export async function GET(request: Request) {
 
   return response;
 }
-

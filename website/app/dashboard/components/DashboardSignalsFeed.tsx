@@ -3,18 +3,22 @@ import Link from "next/link";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 
-import type { SignalRow, SignalState } from "../types";
+import type { SignalRow, SignalState, ViewerConnectorOption } from "../types";
 import { classifyAttachment, formatBytes, MAX_ATTACHMENT_BYTES } from "../utils";
 
 type DashboardSignalsFeedProps = {
   signals: SignalRow[] | undefined;
+  connectorOptions: ViewerConnectorOption[] | undefined;
+  selectedConnectorValue: string;
+  onConnectorSelectionChange: (value: string) => void;
   tenantKey: string;
   connectorId: string;
-  onTenantKeyChange: (value: string) => void;
-  onConnectorIdChange: (value: string) => void;
   signalState: SignalState;
 };
 
@@ -72,28 +76,41 @@ export function DashboardSignalsFeed(props: DashboardSignalsFeedProps) {
       <CardContent className="space-y-4 px-0">
         <div className="site-soft grid gap-3 md:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="tenant-key" className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
-              Tenant
+            <Label htmlFor="connector-select" className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+              Signal source
             </Label>
-            <Input
-              id="tenant-key"
-              value={props.tenantKey}
-              onChange={(event) => props.onTenantKeyChange(event.target.value)}
-              placeholder="t1"
-              className="h-10 rounded-xl bg-background/60"
-            />
+            <NativeSelect
+              id="connector-select"
+              value={props.selectedConnectorValue}
+              className="h-10 w-full rounded-xl bg-background/60"
+              onChange={(event) => props.onConnectorSelectionChange(event.target.value)}
+              disabled={!props.connectorOptions || props.connectorOptions.length === 0}
+              aria-label="Select visible connector source"
+            >
+              {!props.connectorOptions ? (
+                <NativeSelectOption value="">Loading connector sources...</NativeSelectOption>
+              ) : null}
+              {props.connectorOptions?.length === 0 ? (
+                <NativeSelectOption value="">No visible connector sources configured</NativeSelectOption>
+              ) : null}
+              {props.connectorOptions?.map((option) => {
+                const value = `${option.tenantKey}::${option.connectorId}`;
+                const label = `${option.tenantKey} / ${option.connectorId} (${option.visibleChannelCount} visible)`;
+                return (
+                  <NativeSelectOption key={value} value={value}>
+                    {label}
+                  </NativeSelectOption>
+                );
+              })}
+            </NativeSelect>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="connector-id" className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
-              Connector
-            </Label>
-            <Input
-              id="connector-id"
-              value={props.connectorId}
-              onChange={(event) => props.onConnectorIdChange(event.target.value)}
-              placeholder="conn_01"
-              className="h-10 rounded-xl bg-background/60"
-            />
+            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Selected context</p>
+            <div className="h-10 rounded-xl border border-border/70 bg-background/60 px-3 py-2 text-sm">
+              {props.tenantKey && props.connectorId
+                ? `${props.tenantKey} / ${props.connectorId}`
+                : "No connector context selected"}
+            </div>
           </div>
         </div>
 

@@ -12,6 +12,7 @@ import { MarketingNav } from "@/components/site/marketing-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { sanitizeAppRedirectPath } from "@/lib/redirectPath";
 
 const loginBenefits = [
   "See live signal context and your modules in one view.",
@@ -31,9 +32,7 @@ export default function LoginPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const redirectToRaw = params.get("redirectTo");
-    if (typeof redirectToRaw === "string" && redirectToRaw.startsWith("/")) {
-      setRedirectTo(redirectToRaw);
-    }
+    setRedirectTo(sanitizeAppRedirectPath(redirectToRaw, "/dashboard"));
   }, []);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {

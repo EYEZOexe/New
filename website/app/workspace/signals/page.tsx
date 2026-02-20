@@ -3,12 +3,14 @@
 import { makeFunctionReference } from "convex/server";
 import { useQuery } from "convex/react";
 import { Bell, Zap } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
-import { Input } from "@/components/ui/input";
 import { WorkspaceSectionHeader } from "@/components/workspace/workspace-section-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { useViewerConnectorSelection } from "@/app/workspace/lib/useViewerConnectorSelection";
 
 import { AnalystFeed } from "./components/analyst-feed";
 
@@ -57,15 +59,19 @@ function findImageAttachment(signal: { attachments?: Array<{ url: string; conten
 }
 
 export default function SignalsPage() {
-  const [tenantKey, setTenantKey] = useState("t1");
-  const [connectorId, setConnectorId] = useState("conn_01");
-
   const viewer = useQuery(viewerRef, {});
-  const signals = useQuery(listRecentSignalsRef, {
+  const hasSignalAccess = viewer?.hasSignalAccess === true;
+  const {
+    connectorOptions,
+    selectionValue,
     tenantKey,
     connectorId,
-    limit: 50,
-  });
+    setSelectionByValue,
+  } = useViewerConnectorSelection(hasSignalAccess);
+  const signals = useQuery(
+    listRecentSignalsRef,
+    hasSignalAccess && tenantKey && connectorId ? { tenantKey, connectorId, limit: 50 } : "skip",
+  );
 
   const feedItems = useMemo(
     () =>
@@ -109,31 +115,68 @@ export default function SignalsPage() {
 
       <Card className="site-soft">
         <CardContent className="grid gap-3 px-0 md:grid-cols-2">
-          <Input
-            value={tenantKey}
-            onChange={(event) => setTenantKey(event.target.value)}
-            placeholder="Tenant key"
-            className="h-10 rounded-xl bg-background/60"
-          />
-          <Input
-            value={connectorId}
-            onChange={(event) => setConnectorId(event.target.value)}
-            placeholder="Connector id"
-            className="h-10 rounded-xl bg-background/60"
-          />
+          <div className="space-y-2">
+            <Label htmlFor="signals-connector-select" className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+              Signal source
+            </Label>
+            <NativeSelect
+              id="signals-connector-select"
+              value={selectionValue}
+              className="h-10 w-full rounded-xl bg-background/60"
+              onChange={(event) => setSelectionByValue(event.target.value)}
+              disabled={!connectorOptions || connectorOptions.length === 0}
+              aria-label="Select connector source"
+            >
+              {!connectorOptions ? (
+                <NativeSelectOption value="">Loading connector sources...</NativeSelectOption>
+              ) : null}
+              {connectorOptions?.length === 0 ? (
+                <NativeSelectOption value="">No visible connector sources configured</NativeSelectOption>
+              ) : null}
+              {connectorOptions?.map((option) => {
+                const value = `${option.tenantKey}::${option.connectorId}`;
+                const label = `${option.tenantKey} / ${option.connectorId} (${option.visibleChannelCount} visible)`;
+                return (
+                  <NativeSelectOption key={value} value={value}>
+                    {label}
+                  </NativeSelectOption>
+                );
+              })}
+            </NativeSelect>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Selected context</p>
+            <div className="h-10 rounded-xl border border-border/70 bg-background/60 px-3 py-2 text-sm">
+              {tenantKey && connectorId
+                ? `${tenantKey} / ${connectorId}`
+                : "No connector context selected"}
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      {signals === undefined ? (
-        <Card className="site-panel">
-          <CardContent className="px-0 py-6 text-sm text-muted-foreground">
-            Loading analyst feed...
-          </CardContent>
-        </Card>
-      ) : viewer && !viewer.hasSignalAccess ? (
+      {viewer && !viewer.hasSignalAccess ? (
         <Card className="site-panel">
           <CardContent className="px-0 py-6 text-sm text-muted-foreground">
             Signal access is gated by subscription status.
+          </CardContent>
+        </Card>
+      ) : connectorOptions === undefined ? (
+        <Card className="site-panel">
+          <CardContent className="px-0 py-6 text-sm text-muted-foreground">
+            Loading connector visibility...
+          </CardContent>
+        </Card>
+      ) : connectorOptions.length === 0 ? (
+        <Card className="site-panel">
+          <CardContent className="px-0 py-6 text-sm text-muted-foreground">
+            No dashboard-visible connector channels are configured for your tier.
+          </CardContent>
+        </Card>
+      ) : signals === undefined ? (
+        <Card className="site-panel">
+          <CardContent className="px-0 py-6 text-sm text-muted-foreground">
+            Loading analyst feed...
           </CardContent>
         </Card>
       ) : (

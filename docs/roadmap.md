@@ -14,6 +14,8 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Completed website production-readiness pass focused on real-data UX + auth/security hardening: homepage KPI/highlight cards now read live Convex snapshot data (`workspace:publicLandingSnapshot`), dashboard/signals connector context now comes from tier-visible connector options (`signals:listViewerConnectorOptions`) with no hardcoded `t1/conn_01` defaults, login/signup redirect handling is centrally sanitized, Discord OAuth callback now handles upstream timeout/network failures with controlled redirects, workspace topbar search now performs real module navigation, and both Next.js apps now ship baseline security headers. Verified with `bun test website/tests`, `website` typecheck/build, and `admin` typecheck/build (admin build run with `NEXT_PUBLIC_CONVEX_URL` set in shell). (2026-02-20)
+- Removed hardcoded market placeholder payload from website news quick-view: `/workspace/news` now sources quick-view symbol/price/change/volume/high/low/funding values from live Convex `workspace:listMarketSnapshots` query data (BTC-preferred, first-market fallback) instead of fixed literals, preserving UI behavior while enforcing DB-backed values. Verified with `website` typecheck/build. (2026-02-20)
 - Fixed sparse attachment-update ingest regression causing some signal rows to lose text content: Convex ingest now preserves existing non-empty content when update payloads arrive attachment-only, legacy Discord plugin now accepts attachment-only `MESSAGE_UPDATE` events (while skipping truly empty sparse updates), and new regression coverage was added in `website/tests/ingestContentMerge.test.js`. Verified with `bun test website/tests/ingestContentMerge.test.js website/tests/ingestAttachmentMerge.test.js website/tests/ingestUtils.test.js`, `website` typecheck, and `Discord-Bot` typecheck. (2026-02-19)
 - Completed customer-readiness redesign pass for all non-dashboard website routes (`/`, `/shop`, `/login`, `/signup`, `/checkout/return`): aligned shell structure with dashboard visual language, replaced cluttered card stacking with clearer section rhythm, and tightened pricing/auth IA for conversion-focused SaaS UX. Verified with `website` typecheck/build. (2026-02-19)
 - Rebuilt all non-dashboard customer pages from scratch (`/`, `/shop`, `/login`, `/signup`, `/checkout/return`) on a dedicated marketing layout system with customer-ready copy and cleaner SaaS page composition (no backend/internal platform messaging). Verified with `website` typecheck/build. (2026-02-19)
@@ -208,6 +210,8 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
   Exit criteria: `/`, `/shop`, `/login`, `/signup`, and `/checkout/return` use cohesive marketing composition, remove backend jargon, and pass website verification commands.
 - [x] Execute customer-readiness second-pass redesign for non-dashboard pages with dashboard-aligned shell composition and conversion-focused pricing/auth layout. (2026-02-19)
   Exit criteria: non-dashboard page composition avoids floating-card clutter, uses clearer section hierarchy and responsive spacing, and `website` typecheck/build pass.
+- [x] Execute production-readiness hardening pass for real-data rendering, connector-source selection, and baseline auth/security safeguards across `website` and `admin`. (2026-02-20)
+  Exit criteria: homepage uses live Convex snapshot data (no placeholder KPI/sample feed values), dashboard/signals connector selection uses real visible connector options, redirect/OAuth edge cases return controlled outcomes, and verification commands pass for tests/typecheck/build.
 
 ## Checklists / Hygiene
 
@@ -296,6 +300,7 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
 | 2026-02-19 | Complete professional SaaS layout pass for website login/signup/shop composition quality | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
 | 2026-02-19 | Rebuild non-dashboard website pages from scratch on dedicated marketing layout with customer-facing messaging | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
 | 2026-02-19 | Execute customer-readiness second pass for non-dashboard website IA/layout with dashboard-aligned shell and cleaner pricing/auth UX | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
+| 2026-02-20 | Execute production-readiness pass for live-data UX, connector-source integrity, auth redirect hardening, and baseline security headers | `docs/plans/2026-02-20-website-production-readiness-pass.md` |
 
 ## Links
 
@@ -308,3 +313,4 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
 - Trader workspace expansion design: `docs/plans/2026-02-17-trader-workspace-expansion-design.md`
 - Trader workspace expansion implementation plan: `docs/plans/2026-02-17-trader-workspace-expansion-plan.md`
 - Website member experience restructure implementation plan: `docs/plans/2026-02-19-website-experience-restructure-plan.md`
+- Website production-readiness pass: `docs/plans/2026-02-20-website-production-readiness-pass.md`

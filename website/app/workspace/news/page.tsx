@@ -28,8 +28,42 @@ const listNewsArticlesRef = makeFunctionReference<
   }>
 >("workspace:listNewsArticles");
 
+const listMarketSnapshotsRef = makeFunctionReference<
+  "query",
+  { limit?: number },
+  Array<{
+    _id: string;
+    symbol: string;
+    name: string;
+    price: number;
+    change1h: number;
+    change24h: number;
+    marketCap: number;
+    volume24h: number;
+    fundingRate?: number;
+    high24h?: number;
+    low24h?: number;
+    sparkline7d?: number[];
+    updatedAt: number;
+  }>
+>("workspace:listMarketSnapshots");
+
+function formatUsd(value: number): string {
+  return `$${value.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+}
+
+function formatUsdCompact(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    notation: "compact",
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
 export default function NewsPage() {
   const newsRows = useQuery(listNewsArticlesRef, { limit: 80 });
+  const marketRows = useQuery(listMarketSnapshotsRef, { limit: 120 });
   const normalizedNews = normalizeNewsArticles(
     (newsRows ?? []).map((row) => ({
       id: row._id,
@@ -43,6 +77,9 @@ export default function NewsPage() {
   );
   const partitioned = partitionFeaturedNews(normalizedNews);
   const featured = partitioned.featured;
+  const quickViewRow =
+    (marketRows ?? []).find((row) => row.symbol.toUpperCase() === "BTC") ??
+    (marketRows ?? [])[0];
 
   return (
     <>
@@ -57,21 +94,27 @@ export default function NewsPage() {
             <Badge variant="outline" className="rounded-full">
               Source: CryptoCompare
             </Badge>
-            <SymbolQuickViewDialog
-              trigger={
-                <Button variant="outline" className="rounded-full">
-                  Quick View BTCUSDT
-                </Button>
-              }
-              symbol="BTCUSDT"
-              contract="Perpetual Contract"
-              price={67781.6}
-              changePct={-1.08}
-              volume24h="$4.51B"
-              fundingRate="0.0019%"
-              high24h="$70,099.1"
-              low24h="$67,243.6"
-            />
+            {quickViewRow ? (
+              <SymbolQuickViewDialog
+                trigger={
+                  <Button variant="outline" className="rounded-full">
+                    Quick View {quickViewRow.symbol.toUpperCase()}
+                  </Button>
+                }
+                symbol={quickViewRow.symbol.toUpperCase()}
+                contract={quickViewRow.name}
+                price={quickViewRow.price}
+                changePct={quickViewRow.change24h}
+                volume24h={formatUsdCompact(quickViewRow.volume24h)}
+                fundingRate={
+                  typeof quickViewRow.fundingRate === "number"
+                    ? `${quickViewRow.fundingRate.toFixed(4)}%`
+                    : "n/a"
+                }
+                high24h={formatUsd(quickViewRow.high24h ?? quickViewRow.price)}
+                low24h={formatUsd(quickViewRow.low24h ?? quickViewRow.price)}
+              />
+            ) : null}
           </div>
         }
       />

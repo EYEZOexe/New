@@ -309,6 +309,69 @@ export const listNewsArticles = query({
   },
 });
 
+export const publicLandingSnapshot = query({
+  args: {},
+  handler: async (ctx) => {
+    const recentMarketRows = await ctx.db
+      .query("marketSnapshots")
+      .withIndex("by_updatedAt")
+      .order("desc")
+      .take(300);
+    const latestBySymbol = new Map<string, (typeof recentMarketRows)[number]>();
+    for (const row of recentMarketRows) {
+      if (!latestBySymbol.has(row.symbol)) {
+        latestBySymbol.set(row.symbol, row);
+      }
+    }
+    const marketRows = Array.from(latestBySymbol.values());
+
+    const topGainer =
+      marketRows.length > 0
+        ? marketRows.reduce((best, row) => (row.change24h > best.change24h ? row : best), marketRows[0])
+        : null;
+    const topVolume =
+      marketRows.length > 0
+        ? marketRows.reduce((best, row) => (row.volume24h > best.volume24h ? row : best), marketRows[0])
+        : null;
+
+    const latestNewsRows = await ctx.db
+      .query("newsArticles")
+      .withIndex("by_publishedAt")
+      .order("desc")
+      .take(3);
+
+    const snapshot = {
+      marketCount: marketRows.length,
+      lastMarketUpdateAt: recentMarketRows[0]?.updatedAt ?? null,
+      topGainer: topGainer
+        ? {
+            symbol: topGainer.symbol,
+            change24h: topGainer.change24h,
+            price: topGainer.price,
+          }
+        : null,
+      topVolume: topVolume
+        ? {
+            symbol: topVolume.symbol,
+            volume24h: topVolume.volume24h,
+            change24h: topVolume.change24h,
+          }
+        : null,
+      latestNews: latestNewsRows.map((row) => ({
+        title: row.title,
+        source: row.source,
+        url: row.url,
+        publishedAt: row.publishedAt,
+      })),
+    };
+
+    console.info(
+      `[workspace/public] landing snapshot markets=${snapshot.marketCount} news=${snapshot.latestNews.length} top_gainer=${snapshot.topGainer?.symbol ?? "none"}`,
+    );
+    return snapshot;
+  },
+});
+
 export const listJournalTrades = query({
   args: {
     limit: v.optional(v.number()),

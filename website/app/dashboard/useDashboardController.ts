@@ -6,6 +6,8 @@ import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useViewerConnectorSelection } from "@/app/workspace/lib/useViewerConnectorSelection";
+
 import type {
   CheckoutDiscordCompletePayload,
   DiscordLinkRow,
@@ -60,8 +62,6 @@ export function useDashboardController() {
   const [discordCallbackLinkState, setDiscordCallbackLinkState] = useState<string | null>(null);
   const [discordCallbackError, setDiscordCallbackError] = useState<string | null>(null);
   const [countdownNow, setCountdownNow] = useState(() => Date.now());
-  const [tenantKey, setTenantKey] = useState("t1");
-  const [connectorId, setConnectorId] = useState("conn_01");
 
   const viewer = useQuery(viewerRef, isAuthenticated ? {} : "skip");
   const viewerDiscordLink = useQuery(viewerDiscordLinkRef, isAuthenticated ? {} : "skip");
@@ -69,13 +69,24 @@ export function useDashboardController() {
   const unlinkViewerDiscord = useMutation(unlinkViewerDiscordRef);
   const hasSignalAccess = viewer?.hasSignalAccess === true;
   const isDiscordLinked = viewerDiscordLink?.isLinked === true;
+  const {
+    connectorOptions,
+    selectionValue: selectedConnectorValue,
+    tenantKey,
+    connectorId,
+    setSelectionByValue: onConnectorSelectionChange,
+  } = useViewerConnectorSelection(isAuthenticated && hasSignalAccess);
   const signals = useQuery(
     listRecentSignalsRef,
-    isAuthenticated && hasSignalAccess ? { tenantKey, connectorId, limit: 50 } : "skip",
+    isAuthenticated && hasSignalAccess && tenantKey && connectorId
+      ? { tenantKey, connectorId, limit: 50 }
+      : "skip",
   );
   const mappings = useQuery(
     listMappingsRef,
-    isAuthenticated && hasSignalAccess ? { tenantKey, connectorId } : "skip",
+    isAuthenticated && hasSignalAccess && tenantKey && connectorId
+      ? { tenantKey, connectorId }
+      : "skip",
   );
 
   useEffect(() => {
@@ -253,12 +264,24 @@ export function useDashboardController() {
 
   const signalState = useMemo<SignalState>(() => {
     if (!hasSignalAccess) return "no_access";
+    if (connectorOptions === undefined) return "loading";
+    if (connectorOptions.length === 0) return "no_visible_config";
+    if (!selectedConnectorValue || !tenantKey || !connectorId) return "loading";
     if (!signals) return "loading";
     if (signals.length > 0) return "has_signals";
     if (configuredVisibleMappings.length === 0) return "no_visible_config";
     if (visibleMappingsForTier.length === 0) return "tier_locked";
     return "empty";
-  }, [configuredVisibleMappings.length, hasSignalAccess, signals, visibleMappingsForTier.length]);
+  }, [
+    configuredVisibleMappings.length,
+    connectorId,
+    connectorOptions,
+    hasSignalAccess,
+    selectedConnectorValue,
+    signals,
+    tenantKey,
+    visibleMappingsForTier.length,
+  ]);
 
   return {
     isAuthenticated,
@@ -268,10 +291,11 @@ export function useDashboardController() {
     hasSignalAccess,
     isDiscordLinked,
     signals,
+    connectorOptions,
+    selectedConnectorValue,
     tenantKey,
-    setTenantKey,
     connectorId,
-    setConnectorId,
+    onConnectorSelectionChange,
     isLoggingOut,
     onLogout,
     isUnlinkingDiscord,

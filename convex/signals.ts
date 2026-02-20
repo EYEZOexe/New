@@ -86,12 +86,19 @@ export const listRecent = query({
       return [];
     }
 
+    const tenantKey = args.tenantKey.trim();
+    const connectorId = args.connectorId.trim();
+    if (!tenantKey || !connectorId) {
+      console.info("[signals] listRecent skipped missing tenant/connector");
+      return [];
+    }
+
     const limit = Math.max(1, Math.min(200, args.limit ?? 50));
 
     const mappingRules = await ctx.db
       .query("connectorMappings")
       .withIndex("by_tenant_connectorId", (q) =>
-        q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+        q.eq("tenantKey", tenantKey).eq("connectorId", connectorId),
       )
       .collect();
     const viewerTier = (subscription?.tier ?? null) as SubscriptionTier | null;
@@ -106,7 +113,7 @@ export const listRecent = query({
     const visibleChannelSet = new Set(visibleChannelIds);
     if (visibleChannelSet.size === 0) {
       console.info(
-        `[signals] listRecent gated_no_visible_channels tenant=${args.tenantKey} connector=${args.connectorId} tier=${viewerTier ?? "none"} mappings=${mappingRules.length}`,
+        `[signals] listRecent gated_no_visible_channels tenant=${tenantKey} connector=${connectorId} tier=${viewerTier ?? "none"} mappings=${mappingRules.length}`,
       );
       return [];
     }
@@ -114,7 +121,7 @@ export const listRecent = query({
     const candidateRows = await ctx.db
       .query("signals")
       .withIndex("by_createdAt", (q) =>
-        q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+        q.eq("tenantKey", tenantKey).eq("connectorId", connectorId),
       )
       .order("desc")
       .take(Math.min(2000, limit * 10));
@@ -159,10 +166,100 @@ export const listRecent = query({
       0,
     );
     console.info(
-      `[signals] listRecent tenant=${args.tenantKey} connector=${args.connectorId} tier=${viewerTier ?? "none"} visible_channels=${visibleChannelSet.size} scanned=${candidateRows.length} returned=${sanitized.length} attachment_refs=${attachmentCount}`,
+      `[signals] listRecent tenant=${tenantKey} connector=${connectorId} tier=${viewerTier ?? "none"} visible_channels=${visibleChannelSet.size} scanned=${candidateRows.length} returned=${sanitized.length} attachment_refs=${attachmentCount}`,
     );
 
     return sanitized;
+  },
+});
+
+export const listViewerConnectorOptions = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      console.info("[signals] blocked unauthenticated listViewerConnectorOptions request");
+      return [];
+    }
+
+    const subscription = await ctx.db
+      .query("subscriptions")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .first();
+    if (!hasActiveSubscriptionAccess(subscription, Date.now())) {
+      console.info(
+        `[signals] listViewerConnectorOptions blocked user=${String(userId)} status=${subscription?.status ?? "none"}`,
+      );
+      return [];
+    }
+
+    const viewerTier = (subscription?.tier ?? null) as SubscriptionTier | null;
+    const mappingRows = await ctx.db.query("connectorMappings").collect();
+    const grouped = new Map<
+      string,
+      {
+        tenantKey: string;
+        connectorId: string;
+        configuredChannelCount: number;
+        rules: Array<{
+          channelId: string;
+          dashboardEnabled?: boolean;
+          minimumTier?: SubscriptionTier | null;
+        }>;
+      }
+    >();
+
+    for (const row of mappingRows) {
+      const tenantKey = row.tenantKey.trim();
+      const connectorId = row.connectorId.trim();
+      if (!tenantKey || !connectorId) continue;
+
+      const key = `${tenantKey}::${connectorId}`;
+      const current = grouped.get(key) ?? {
+        tenantKey,
+        connectorId,
+        configuredChannelCount: 0,
+        rules: [],
+      };
+      current.rules.push({
+        channelId: row.sourceChannelId,
+        dashboardEnabled: row.dashboardEnabled,
+        minimumTier: row.minimumTier ?? null,
+      });
+      if (row.dashboardEnabled === true && row.minimumTier) {
+        current.configuredChannelCount += 1;
+      }
+      grouped.set(key, current);
+    }
+
+    const options = Array.from(grouped.values())
+      .map((group) => {
+        const visibleChannelCount = filterVisibleChannelIdsForTier(viewerTier, group.rules).length;
+        return {
+          tenantKey: group.tenantKey,
+          connectorId: group.connectorId,
+          configuredChannelCount: group.configuredChannelCount,
+          visibleChannelCount,
+        };
+      })
+      .filter((row) => row.visibleChannelCount > 0)
+      .sort((left, right) => {
+        if (left.visibleChannelCount !== right.visibleChannelCount) {
+          return right.visibleChannelCount - left.visibleChannelCount;
+        }
+        if (left.configuredChannelCount !== right.configuredChannelCount) {
+          return right.configuredChannelCount - left.configuredChannelCount;
+        }
+        const tenantDiff = left.tenantKey.localeCompare(right.tenantKey);
+        if (tenantDiff !== 0) return tenantDiff;
+        return left.connectorId.localeCompare(right.connectorId);
+      })
+      .slice(0, 100);
+
+    console.info(
+      `[signals] listViewerConnectorOptions user=${String(userId)} tier=${viewerTier ?? "none"} mappings_scanned=${mappingRows.length} connectors_visible=${options.length}`,
+    );
+    return options;
   },
 });
 

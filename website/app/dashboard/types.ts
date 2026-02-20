@@ -1,3 +1,5 @@
+import type { ViewerConnectorOption } from "@/app/workspace/lib/connectorSelection";
+
 export type SubscriptionTier = "basic" | "advanced" | "pro";
 
 export type SignalAttachment = {
@@ -71,3 +73,5 @@ export type CheckoutDiscordCompletePayload = {
   linked_at?: number;
   message?: string;
 };
+
+export type { ViewerConnectorOption };

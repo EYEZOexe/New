@@ -12,6 +12,7 @@ import { MarketingNav } from "@/components/site/marketing-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { sanitizeAppRedirectPath } from "@/lib/redirectPath";
 
 const signupSteps = [
   "Create your account with email and password.",
@@ -31,9 +32,7 @@ export default function SignupPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const redirectToRaw = params.get("redirectTo");
-    if (typeof redirectToRaw === "string" && redirectToRaw.startsWith("/")) {
-      setRedirectTo(redirectToRaw);
-    }
+    setRedirectTo(sanitizeAppRedirectPath(redirectToRaw, "/shop"));
   }, []);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {

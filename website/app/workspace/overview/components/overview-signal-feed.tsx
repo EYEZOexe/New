@@ -12,12 +12,12 @@ export function OverviewSignalFeed(props: OverviewSignalFeedProps) {
   return (
     <DashboardSignalsFeed
       signals={overview.signals}
+      connectorOptions={overview.connectorOptions}
+      selectedConnectorValue={overview.selectedConnectorValue}
+      onConnectorSelectionChange={overview.onConnectorSelectionChange}
       tenantKey={overview.tenantKey}
       connectorId={overview.connectorId}
-      onTenantKeyChange={overview.setTenantKey}
-      onConnectorIdChange={overview.setConnectorId}
       signalState={overview.signalState}
     />
   );
 }
-

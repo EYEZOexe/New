@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sanitizeAppRedirectPath } from "./redirectPath";
 
 export const DISCORD_OAUTH_STATE_COOKIE = "discord_oauth_state";
 export const DISCORD_OAUTH_RESULT_COOKIE = "discord_oauth_result";
@@ -21,11 +22,7 @@ type DiscordOAuthState = z.infer<typeof discordOAuthStateSchema>;
 type DiscordOAuthResult = z.infer<typeof discordOAuthResultSchema>;
 
 export function sanitizeRedirectPath(rawPath: string | null | undefined): string {
-  const path = (rawPath ?? "").trim();
-  if (!path) return "/dashboard";
-  if (!path.startsWith("/")) return "/dashboard";
-  if (path.startsWith("//")) return "/dashboard";
-  return path;
+  return sanitizeAppRedirectPath(rawPath, "/dashboard");
 }
 
 export function generateDiscordOAuthState(): string {
@@ -113,4 +110,3 @@ export function parseDiscordOAuthProfile(payload: unknown): {
     username: globalName || username || null,
   };
 }
-
