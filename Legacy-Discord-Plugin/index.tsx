@@ -1253,7 +1253,15 @@ export default definePlugin({
             void handleMessage(message, false);
         },
         MESSAGE_UPDATE({ message }: { message: FluxMessage; }) {
-            if (!message.content && message.content !== "") return;
+            const hasStringContent = typeof (message as { content?: unknown }).content === "string";
+            const hasAttachmentArray = Array.isArray((message as { attachments?: unknown }).attachments);
+            const attachmentCount = hasAttachmentArray
+                ? (message as { attachments?: unknown[] }).attachments?.length ?? 0
+                : 0;
+            if (!hasStringContent && attachmentCount === 0) {
+                console.debug("[ChannelScraper] Skipping sparse MESSAGE_UPDATE without content or attachments.");
+                return;
+            }
             void handleMessage(message, true);
         },
         MESSAGE_DELETE(payload: FluxMessageDeleteEvent) {

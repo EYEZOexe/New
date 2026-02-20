@@ -2,6 +2,7 @@ import { v } from "convex/values";
 
 import { internalMutation } from "./_generated/server";
 import { resolveAttachmentsForExistingSignalPatch } from "./ingestAttachmentMerge";
+import { resolveContentForExistingSignalPatch } from "./ingestContentMerge";
 import { messageEventToSignalFields } from "./ingestUtils";
 import { enqueueMirrorJobsForSignal } from "./mirrorQueue";
 
@@ -168,6 +169,12 @@ export const ingestMessageBatch = internalMutation({
           incomingAttachments: fields.attachments,
           existingAttachments: existing.attachments,
         });
+        const contentResolution = resolveContentForExistingSignalPatch({
+          eventType: message.event_type,
+          incomingContent: fields.content,
+          incomingAttachments: fields.attachments,
+          existingContent: existing.content,
+        });
 
         if (message.event_type === "delete") {
           patch.deletedAt = fields.deletedAt ?? args.receivedAt;
@@ -176,7 +183,7 @@ export const ingestMessageBatch = internalMutation({
             patch.attachments = attachmentResolution.attachments;
           }
         } else {
-          patch.content = fields.content;
+          patch.content = contentResolution.content;
           patch.attachments = attachmentResolution.attachments;
 
           if (message.event_type === "update") {
@@ -195,6 +202,11 @@ export const ingestMessageBatch = internalMutation({
             `[ingest] preserved existing attachment refs for sparse event tenant=${args.tenantKey} connector=${args.connectorId} message=${fields.sourceMessageId} event=${message.event_type} existing_refs=${Array.isArray(existing.attachments) ? existing.attachments.length : 0}`,
           );
         }
+        if (contentResolution.preservedExisting) {
+          console.info(
+            `[ingest] preserved existing signal content for sparse attachment update tenant=${args.tenantKey} connector=${args.connectorId} message=${fields.sourceMessageId}`,
+          );
+        }
 
         await ctx.db.patch(existing._id, patch as any);
 
@@ -209,7 +221,8 @@ export const ingestMessageBatch = internalMutation({
           : fields.attachments;
 
         attachmentRefsPersisted += patchedAttachments.length;
-        mirrorContent = patch.content ? String(patch.content) : existing.content;
+        mirrorContent =
+          typeof patch.content === "string" ? patch.content : existing.content;
         mirrorAttachments = patchedAttachments;
       }
 
