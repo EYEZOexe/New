@@ -263,6 +263,7 @@ function bytesToBase64(bytes: Uint8Array): string {
 
 export function readSellWebhookSignature(headers: Headers): string | null {
   const candidates = [
+    headers.get("signature"),
     headers.get("x-sellapp-signature"),
     headers.get("x-sellapp-hmac-sha256"),
     headers.get("x-signature"),

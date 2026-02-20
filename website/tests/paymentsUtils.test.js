@@ -4,6 +4,7 @@ import {
   extractSellWebhookEventMeta,
   mapSellLifecycleToSubscriptionStatus,
   projectSellWebhookPayload,
+  readSellWebhookSignature,
   verifySellWebhookSignature,
 } from "../../convex/paymentsUtils";
 
@@ -82,5 +83,14 @@ describe("paymentsUtils", () => {
       signatureHeader: `sha256=${hex}`,
     });
     expect(valid).toBe(true);
+  });
+
+  it("reads sell signature from the standard signature header", () => {
+    const headers = new Headers({
+      signature: "abc123",
+    });
+
+    const signature = readSellWebhookSignature(headers);
+    expect(signature).toBe("abc123");
   });
 });
