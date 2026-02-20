@@ -23,6 +23,7 @@ import type * as httpIngest from "../httpIngest.js";
 import type * as httpPayments from "../httpPayments.js";
 import type * as ingest from "../ingest.js";
 import type * as ingestAttachmentMerge from "../ingestAttachmentMerge.js";
+import type * as ingestContentMerge from "../ingestContentMerge.js";
 import type * as ingestUtils from "../ingestUtils.js";
 import type * as mirror from "../mirror.js";
 import type * as mirrorQueue from "../mirrorQueue.js";
@@ -63,6 +64,7 @@ declare const fullApi: ApiFromModules<{
   httpPayments: typeof httpPayments;
   ingest: typeof ingest;
   ingestAttachmentMerge: typeof ingestAttachmentMerge;
+  ingestContentMerge: typeof ingestContentMerge;
   ingestUtils: typeof ingestUtils;
   mirror: typeof mirror;
   mirrorQueue: typeof mirrorQueue;
