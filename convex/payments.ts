@@ -42,18 +42,83 @@ type OperatorResult<T extends Record<string, unknown>> =
       };
     };
 
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function readUnknownPath(payload: unknown, path: string): unknown {
+  const parts = path.split(".");
+  let cursor: unknown = payload;
+  for (const part of parts) {
+    if (Array.isArray(cursor)) {
+      const index = Number.parseInt(part, 10);
+      if (!Number.isInteger(index) || index < 0 || index >= cursor.length) {
+        return undefined;
+      }
+      cursor = cursor[index];
+      continue;
+    }
+    if (!isRecordValue(cursor)) return undefined;
+    cursor = cursor[part];
+  }
+  return cursor;
+}
+
+function coerceFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number.parseFloat(trimmed);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function readFirstNumber(payload: unknown, paths: readonly string[]): number | null {
+  for (const path of paths) {
+    const value = coerceFiniteNumber(readUnknownPath(payload, path));
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+const SELL_ORDER_TOTAL_PATHS = [
+  "data.payment.total.total_usd",
+  "data.payment.total.payment_details.total",
+  "data.payment.full_price.base",
+  "payment.total.total_usd",
+  "payment.total.payment_details.total",
+  "payment.full_price.base",
+] as const;
+
+function isFreeSellOrderCreatedEvent(args: {
+  eventType: string;
+  payload: unknown;
+}): boolean {
+  const eventType = args.eventType.trim().toLowerCase();
+  if (eventType !== "order.created") return false;
+  const total = readFirstNumber(args.payload, SELL_ORDER_TOTAL_PATHS);
+  return total !== null && Math.abs(total) < 0.0000001;
+}
+
 function getSellWebhookIgnoreReason(args: {
   eventType: string;
   rawStatus: string | null;
+  isFreeOrderCreated: boolean;
 }): string | null {
   const eventType = args.eventType.trim().toLowerCase();
   const rawStatus = (args.rawStatus ?? "").trim().toLowerCase();
 
-  if (eventType === "order.created" && (!rawStatus || rawStatus === "pending")) {
+  if (
+    eventType === "order.created" &&
+    (!rawStatus || rawStatus === "pending") &&
+    !args.isFreeOrderCreated
+  ) {
     return "pre_checkout_order_created";
   }
 
-  if (rawStatus === "pending") {
+  if (rawStatus === "pending" && !args.isFreeOrderCreated) {
     return "pre_checkout_pending_status";
   }
 
@@ -456,9 +521,25 @@ export const processSellWebhookEvent = internalMutation({
     const projected = projectSellWebhookPayload(event.payload, event.eventId);
 
     try {
+      const isFreeOrderCreated = isFreeSellOrderCreatedEvent({
+        eventType: projected.eventType,
+        payload: event.payload,
+      });
+      const effectiveSubscriptionStatus: SubscriptionStatus =
+        isFreeOrderCreated && projected.subscriptionStatus !== "active"
+          ? "active"
+          : projected.subscriptionStatus;
+
+      if (isFreeOrderCreated && projected.subscriptionStatus !== "active") {
+        console.info(
+          `[payments] promoting webhook lifecycle provider=${args.provider} event=${args.eventId} event_type=${projected.eventType} raw_status=${projected.rawStatus ?? "none"} to_status=${effectiveSubscriptionStatus} reason=zero_total_order_created`,
+        );
+      }
+
       const ignoreReason = getSellWebhookIgnoreReason({
         eventType: projected.eventType,
         rawStatus: projected.rawStatus,
+        isFreeOrderCreated,
       });
       if (ignoreReason) {
         await ctx.db.patch(event._id, {
@@ -480,7 +561,7 @@ export const processSellWebhookEvent = internalMutation({
         return {
           ok: true as const,
           deduped: false,
-          subscriptionStatus: projected.subscriptionStatus,
+          subscriptionStatus: effectiveSubscriptionStatus,
           userId: null as Id<"users"> | null,
         };
       }
@@ -501,7 +582,7 @@ export const processSellWebhookEvent = internalMutation({
         );
       }
 
-      if (projected.subscriptionStatus === "active" && !accessPolicy) {
+      if (effectiveSubscriptionStatus === "active" && !accessPolicy) {
         throw new Error(
           `sell_access_policy_missing:product=${projected.productId ?? "none"} variant=${projected.variantId ?? "none"}`,
         );
@@ -509,7 +590,7 @@ export const processSellWebhookEvent = internalMutation({
 
       const subscription = await upsertSubscriptionForUser(ctx, {
         userId: resolvedUser.id,
-        status: projected.subscriptionStatus,
+        status: effectiveSubscriptionStatus,
         productId: projected.productId,
         variantId: projected.variantId,
         tier: accessPolicy?.tier ?? null,
@@ -525,7 +606,7 @@ export const processSellWebhookEvent = internalMutation({
         const enqueueResult = await enqueueRoleSyncJobsForSubscription(ctx, {
           userId: resolvedUser.id,
           discordUserId: link.discordUserId,
-          subscriptionStatus: projected.subscriptionStatus,
+          subscriptionStatus: effectiveSubscriptionStatus,
           tier: subscription.tier,
           source: `payment_${projected.eventType}`,
           now: args.attemptedAt,
@@ -533,11 +614,11 @@ export const processSellWebhookEvent = internalMutation({
 
         if (enqueueResult.mappingSource === "none") {
           console.warn(
-            `[payments] role sync queue not configured; skipped enqueue user=${resolvedUser.id} discord_user=${link.discordUserId} status=${projected.subscriptionStatus}`,
+            `[payments] role sync queue not configured; skipped enqueue user=${resolvedUser.id} discord_user=${link.discordUserId} status=${effectiveSubscriptionStatus}`,
           );
         } else {
           console.info(
-            `[payments] role sync enqueue user=${resolvedUser.id} discord_user=${link.discordUserId} status=${projected.subscriptionStatus} tier=${subscription.tier ?? "none"} mapped_tier=${enqueueResult.mappedTier ?? "none"} source=${enqueueResult.mappingSource} granted=${enqueueResult.granted} revoked=${enqueueResult.revoked} deduped=${enqueueResult.deduped} skipped=${enqueueResult.skipped}`,
+            `[payments] role sync enqueue user=${resolvedUser.id} discord_user=${link.discordUserId} status=${effectiveSubscriptionStatus} tier=${subscription.tier ?? "none"} mapped_tier=${enqueueResult.mappedTier ?? "none"} source=${enqueueResult.mappingSource} granted=${enqueueResult.granted} revoked=${enqueueResult.revoked} deduped=${enqueueResult.deduped} skipped=${enqueueResult.skipped}`,
           );
         }
       }
@@ -565,13 +646,13 @@ export const processSellWebhookEvent = internalMutation({
       });
 
       console.info(
-        `[payments] processed webhook provider=${args.provider} event=${args.eventId} user=${resolvedUser.email ?? "unknown"} status=${projected.subscriptionStatus} tier=${subscription.tier ?? "none"} ends_at=${subscription.endsAt ?? 0} attempts=${nextAttempt} resolvedVia=${resolvedUser.method} customer=${projected.externalCustomerId ?? "none"} subscription=${projected.externalSubscriptionId ?? "none"}`,
+        `[payments] processed webhook provider=${args.provider} event=${args.eventId} user=${resolvedUser.email ?? "unknown"} status=${effectiveSubscriptionStatus} tier=${subscription.tier ?? "none"} ends_at=${subscription.endsAt ?? 0} attempts=${nextAttempt} resolvedVia=${resolvedUser.method} customer=${projected.externalCustomerId ?? "none"} subscription=${projected.externalSubscriptionId ?? "none"}`,
       );
 
       return {
         ok: true as const,
         deduped: false,
-        subscriptionStatus: projected.subscriptionStatus,
+        subscriptionStatus: effectiveSubscriptionStatus,
         userId: resolvedUser.id,
       };
     } catch (error) {
