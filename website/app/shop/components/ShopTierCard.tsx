@@ -13,6 +13,7 @@ type ShopTierCardProps = {
   tier: CatalogTier;
   selectedVariant: CatalogVariant | null;
   onSelectDuration: (durationDays: number) => void;
+  viewerEmail?: string | null;
 };
 
 function getTierAccentClass(tier: CatalogTier["tier"]) {
@@ -74,6 +75,14 @@ export function ShopTierCard(props: ShopTierCardProps) {
   const subtitle = props.tier.subtitle?.trim() ?? "";
   const description = props.tier.description?.trim() ?? "";
   const highlights = selected?.highlights ?? [];
+  const checkoutUrl = selected
+    ? buildCheckoutUrl(
+        selected.checkoutUrl,
+        props.tier.tier,
+        selected.durationDays,
+        props.viewerEmail,
+      )
+    : undefined;
 
   return (
     <Card
@@ -209,9 +218,14 @@ export function ShopTierCard(props: ShopTierCardProps) {
             <div className="mt-auto space-y-3 pt-1">
               <Button asChild className={cn("h-11 w-full rounded-xl text-sm font-semibold", palette.cta)}>
                 <a
-                  href={buildCheckoutUrl(selected.checkoutUrl, props.tier.tier, selected.durationDays)}
+                  href={checkoutUrl ?? selected.checkoutUrl}
                   target="_blank"
                   rel="noreferrer"
+                  onClick={() => {
+                    console.info(
+                      `[shop] checkout launch tier=${props.tier.tier} duration_days=${selected.durationDays} email_prefill=${props.viewerEmail ? "yes" : "no"}`,
+                    );
+                  }}
                 >
                   Start {props.tier.title}
                 </a>

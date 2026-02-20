@@ -27,7 +27,10 @@ export type CatalogQueryResult = {
 
 export type ViewerRow = {
   userId: string;
+  email: string | null;
+  name: string | null;
   tier: SubscriptionTier | null;
   subscriptionStatus: "active" | "inactive" | "canceled" | "past_due" | null;
+  subscriptionEndsAt: number | null;
   hasSignalAccess: boolean;
 };

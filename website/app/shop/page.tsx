@@ -69,6 +69,7 @@ export default function ShopPage() {
                 tier={tier}
                 selectedVariant={shop.resolveSelectedVariant(tier)}
                 onSelectDuration={(durationDays) => shop.onSelectDuration(tier.tier, durationDays)}
+                viewerEmail={shop.viewer?.email ?? null}
               />
             ))}
           </div>
