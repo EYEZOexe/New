@@ -55,38 +55,57 @@ export default function SignupPage() {
     <MarketingFrame>
       <MarketingNav />
 
-      <section className="mx-auto grid w-full max-w-6xl gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(420px,460px)] xl:items-center xl:gap-8">
-        <Card className="site-animate-in site-card-hover rounded-3xl border border-border/70 bg-card/85 p-6 backdrop-blur-xl md:p-8">
-          <CardContent className="space-y-7 px-0">
-            <div className="space-y-4">
+      <section className="mx-auto grid w-full max-w-5xl gap-6 xl:grid-cols-[minmax(0,460px)_minmax(0,1fr)] xl:items-start">
+        <div className="site-animate-in w-full max-w-[460px] justify-self-center xl:justify-self-start">
+          <AuthFormCard
+            mode="signup"
+            email={email}
+            password={password}
+            isSubmitting={isSubmitting}
+            error={error}
+            onEmailChange={setEmail}
+            onPasswordChange={setPassword}
+            onSubmit={onSubmit}
+          />
+        </div>
+
+        <Card className="site-animate-in site-animate-in-delay-1 site-card-hover rounded-3xl border border-border/70 bg-card/85 p-6 backdrop-blur-xl md:p-7">
+          <CardContent className="space-y-6 px-0">
+            <div className="space-y-3">
               <Badge variant="secondary" className="w-fit rounded-full bg-cyan-500/20 text-cyan-100">
                 Start Your Access
               </Badge>
-              <h1 className="site-title text-4xl md:text-6xl">Create your account and start trading smarter.</h1>
-              <p className="site-subtitle max-w-2xl">
-                Join in minutes, activate your plan, and move into a structured workspace designed for
-                execution consistency.
+              <h1 className="text-balance text-3xl font-semibold tracking-tight md:text-4xl">
+                Create your G3n S1gnals account.
+              </h1>
+              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base">
+                Join in minutes, activate your plan, and move into a structured workspace built for
+                consistent execution.
               </p>
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-2xl border border-border/70 bg-background/45 p-4">
+              <div className="site-soft">
                 <p className="flex items-center gap-2 text-sm font-medium">
                   <WalletCards className="size-4 text-cyan-300" />
                   Flexible plan options
                 </p>
-                <p className="mt-2 text-sm text-muted-foreground">Choose your tier and duration based on your current trading pace.</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Choose tier and duration based on your current trading pace.
+                </p>
               </div>
-              <div className="rounded-2xl border border-border/70 bg-background/45 p-4">
+              <div className="site-soft">
                 <p className="flex items-center gap-2 text-sm font-medium">
                   <Rocket className="size-4 text-cyan-300" />
                   Quick onboarding
                 </p>
-                <p className="mt-2 text-sm text-muted-foreground">From signup to dashboard access with minimal friction.</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Go from account creation to dashboard access with minimal friction.
+                </p>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border/70 bg-background/45 p-4">
+            <div className="site-soft">
               <p className="site-kicker">Getting started</p>
               <div className="mt-3 space-y-2">
                 {signupSteps.map((item) => (
@@ -106,19 +125,6 @@ export default function SignupPage() {
             </Button>
           </CardContent>
         </Card>
-
-        <div className="site-animate-in site-animate-in-delay-1 w-full max-w-[460px] justify-self-center">
-          <AuthFormCard
-            mode="signup"
-            email={email}
-            password={password}
-            isSubmitting={isSubmitting}
-            error={error}
-            onEmailChange={setEmail}
-            onPasswordChange={setPassword}
-            onSubmit={onSubmit}
-          />
-        </div>
       </section>
     </MarketingFrame>
   );

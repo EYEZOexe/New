@@ -55,38 +55,57 @@ export default function LoginPage() {
     <MarketingFrame>
       <MarketingNav />
 
-      <section className="mx-auto grid w-full max-w-6xl gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(420px,460px)] xl:items-center xl:gap-8">
-        <Card className="site-animate-in site-card-hover rounded-3xl border border-border/70 bg-card/85 p-6 backdrop-blur-xl md:p-8">
-          <CardContent className="space-y-7 px-0">
-            <div className="space-y-4">
+      <section className="mx-auto grid w-full max-w-5xl gap-6 xl:grid-cols-[minmax(0,460px)_minmax(0,1fr)] xl:items-start">
+        <div className="site-animate-in w-full max-w-[460px] justify-self-center xl:justify-self-start">
+          <AuthFormCard
+            mode="login"
+            email={email}
+            password={password}
+            isSubmitting={isSubmitting}
+            error={error}
+            onEmailChange={setEmail}
+            onPasswordChange={setPassword}
+            onSubmit={onSubmit}
+          />
+        </div>
+
+        <Card className="site-animate-in site-animate-in-delay-1 site-card-hover rounded-3xl border border-border/70 bg-card/85 p-6 backdrop-blur-xl md:p-7">
+          <CardContent className="space-y-6 px-0">
+            <div className="space-y-3">
               <Badge variant="secondary" className="w-fit rounded-full bg-cyan-500/20 text-cyan-100">
                 Welcome Back
               </Badge>
-              <h1 className="site-title text-4xl md:text-6xl">Enter your trading workspace.</h1>
-              <p className="site-subtitle max-w-2xl">
-                Sign in once and continue with your dashboard, market tools, and journal data exactly where
-                you left off.
+              <h1 className="text-balance text-3xl font-semibold tracking-tight md:text-4xl">
+                Welcome back to G3n S1gnals.
+              </h1>
+              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base">
+                Sign in and continue with your dashboard, market tools, and journal workflow without
+                resetting your setup.
               </p>
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-2xl border border-border/70 bg-background/45 p-4">
+              <div className="site-soft">
                 <p className="flex items-center gap-2 text-sm font-medium">
                   <ShieldCheck className="size-4 text-cyan-300" />
                   Secure account access
                 </p>
-                <p className="mt-2 text-sm text-muted-foreground">Your account credentials protect workspace visibility and saved activity.</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Credentials protect workspace visibility and saved activity.
+                </p>
               </div>
-              <div className="rounded-2xl border border-border/70 bg-background/45 p-4">
+              <div className="site-soft">
                 <p className="flex items-center gap-2 text-sm font-medium">
                   <ArrowRight className="size-4 text-cyan-300" />
                   Fast route to dashboard
                 </p>
-                <p className="mt-2 text-sm text-muted-foreground">After sign-in, you land directly in your workspace flow.</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  After sign-in, you land directly inside your member workspace.
+                </p>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border/70 bg-background/45 p-4">
+            <div className="site-soft">
               <p className="site-kicker">What you get right away</p>
               <div className="mt-3 space-y-2">
                 {loginBenefits.map((item) => (
@@ -103,19 +122,6 @@ export default function LoginPage() {
             </Button>
           </CardContent>
         </Card>
-
-        <div className="site-animate-in site-animate-in-delay-1 w-full max-w-[460px] justify-self-center">
-          <AuthFormCard
-            mode="login"
-            email={email}
-            password={password}
-            isSubmitting={isSubmitting}
-            error={error}
-            onEmailChange={setEmail}
-            onPasswordChange={setPassword}
-            onSubmit={onSubmit}
-          />
-        </div>
       </section>
     </MarketingFrame>
   );

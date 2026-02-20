@@ -52,7 +52,7 @@ export function WorkspaceSidebar() {
             <ShieldAlert className="size-4" />
           </div>
           <div>
-            <p className="text-sm font-semibold leading-none">Sleep Crypto Console</p>
+            <p className="text-sm font-semibold leading-none">G3n S1gnals</p>
             <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Member Workspace</p>
           </div>
         </Link>

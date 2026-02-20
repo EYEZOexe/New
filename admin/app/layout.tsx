@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sleep Crypto Console Admin",
+  title: "G3n S1gnals Admin",
   description: "Operational control plane for connectors, Discord bot runtime, and shop configuration.",
 };
 

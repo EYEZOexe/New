@@ -20,7 +20,7 @@ const jetBrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sleep Crypto Console",
+  title: "G3n S1gnals",
   description:
     "Tier-gated signal workspace for trading intel, subscription visibility, and Discord linking.",
 };

@@ -14,6 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Fixed website auth + branding UX issues: login/signup page composition is now balanced around a primary auth form column with cleaner supporting content density, website branding is updated to `G3n S1gnals`, and marketing nav now hides `Log in` for authenticated users (preventing simultaneous `Log in` + `Log out` actions on home). Verified with `website` typecheck/build and `admin` typecheck. (2026-02-20)
 - Refreshed website shop product cards to a premium tiered design system: `ShopTierCard` now uses tier-specific palette treatments, richer duration-selection tiles with inline price context, stronger selected-billing emphasis, and upgraded highlight/CTA composition to improve perceived quality and pricing clarity without changing checkout logic. Verified with `website` typecheck/build. (2026-02-20)
 - Completed comprehensive website design improvement pass across shared styling, shell/navigation, and high-traffic module surfaces: upgraded global visual tokens and background atmosphere, improved marketing/workspace nav hierarchy, unified card depth/hover interactions across dashboard/workspace/shop/auth pages, and tightened composition rhythm on home/shop/auth/checkout routes. Verified with `website` typecheck/build. (2026-02-20)
 - Refined website auth-page composition to fix off-axis form alignment on wide viewports: `/login` and `/signup` now render inside a centered max-width grid shell with a constrained centered form column (`~460px`) plus full-width auth card sizing, producing a more balanced professional layout on desktop while preserving mobile flow. Verified with `website` typecheck/build. (2026-02-20)
@@ -221,6 +222,8 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
   Exit criteria: visual hierarchy/interaction depth is consistent across marketing and workspace routes, shared components carry updated styling primitives, and `website` typecheck/build pass.
 - [x] Refresh shop product cards with a premium visual treatment and clearer pricing-selection hierarchy. (2026-02-20)
   Exit criteria: tier cards present stronger premium differentiation, selected duration/price context is immediately legible, and `website` typecheck/build pass.
+- [x] Fix auth-page visual balance, apply `G3n S1gnals` branding across website surfaces, and hide top-nav `Log in` for authenticated sessions. (2026-02-20)
+  Exit criteria: `/login` and `/signup` layouts are no longer lopsided on wide viewports, website-facing brand labels/metadata use `G3n S1gnals`, and authenticated users no longer see the marketing-nav `Log in` action.
 
 ## Checklists / Hygiene
 
@@ -312,6 +315,7 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
 | 2026-02-20 | Execute production-readiness pass for live-data UX, connector-source integrity, auth redirect hardening, and baseline security headers | `docs/plans/2026-02-20-website-production-readiness-pass.md` |
 | 2026-02-20 | Execute comprehensive website design improvement pass spanning global visual system, shell/nav composition, and module-level consistency polish | `docs/plans/2026-02-20-website-design-improvement-plan.md` |
 | 2026-02-20 | Refresh website shop product cards to a premium tiered composition with stronger duration/price affordances | `docs/plans/2026-02-20-shop-premium-cards-refresh-plan.md` |
+| 2026-02-20 | Fix auth layout composition, website branding rename to `G3n S1gnals`, and authenticated marketing-nav login visibility | `docs/plans/2026-02-20-auth-layout-brand-nav-fix-plan.md` |
 
 ## Links
 
@@ -327,3 +331,4 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
 - Website production-readiness pass: `docs/plans/2026-02-20-website-production-readiness-pass.md`
 - Website design improvement plan: `docs/plans/2026-02-20-website-design-improvement-plan.md`
 - Shop premium cards refresh plan: `docs/plans/2026-02-20-shop-premium-cards-refresh-plan.md`
+- Auth layout + brand + nav visibility fix plan: `docs/plans/2026-02-20-auth-layout-brand-nav-fix-plan.md`
