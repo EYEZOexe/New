@@ -14,6 +14,7 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Hardened Discord mirror content role-mention filtering: Discord-Bot now cross-checks `<@&roleId>` mentions from stored signal content against roles in the target guild and strips only missing-role mentions while preserving the rest of the message text, with runtime logs for skipped/failed/stripped checks and regression coverage in `Discord-Bot/tests/discordSignalMirrorManager.test.ts`. Verified with `bun test tests/discordSignalMirrorManager.test.ts`, `bun run typecheck`, and `bun run build` in `Discord-Bot`. (2026-02-21)
 - Fixed free-trial activation gap when Sell only emits pre-checkout lifecycle events: payment webhook processing now promotes zero-total `order.created` events to active entitlement updates (while still ignoring non-free pending `order.created`/`pending` events), so free trial checkouts can activate access even when `order.completed` is not delivered. Verified with `website` tests/typecheck, Convex deploy (`convex dev --once`), and operator backfill confirmation for `eyezo@gmail.com` (`payments:adminSetPaymentCustomerSubscription` grant `pro` 7 days) showing active `pro` in `payments:listPaymentCustomers`. (2026-02-20)
 - Fixed Sell webhook handling for real `order.created` payloads that previously hard-failed with `user_not_found` despite nested customer data: parser now supports invoice-style nested fields (`data.customer_information.*`, `data.products[0]`, `data.product_variants[0].product_variant_id`, nested status object), and payment processing now treats pre-checkout `order.created` + `pending` events as intentionally ignored/processed instead of failed. Verified with updated regression coverage in `website/tests/paymentsUtils.test.js`, `website` typecheck, Convex deploy (`convex dev --once`), and replay of failed events `2892933` / `2892943` to processed state (`resolvedVia=pre_checkout_order_created`). (2026-02-20)
 - Fixed Sell checkout identity propagation from website pricing cards: shop checkout URL generation now injects the logged-in viewer email as a validated `email` query param, and tier-card checkout clicks emit frontend observability logs (`[shop] checkout launch ... email_prefill=yes|no`) so missing-identity webhook cases can be traced quickly. Added regression coverage in `website/tests/shopCheckoutUrl.test.js`. Verified with `bun test tests/shopCheckoutUrl.test.js tests/paymentsUtils.test.js` and `bun run typecheck` in `website`. (2026-02-20)
@@ -185,6 +186,8 @@ Goal: signals are mirrored to the customer guild with mapping for updates/delete
   Exit criteria: mirrored messages update/delete consistently.
 - [x] Rate-limit handling and retry strategy (2026-02-17)
   Exit criteria: bot survives transient Discord/API failures without drifting state.
+- [x] Filter missing target-guild role mentions from mirrored signal content. (2026-02-21)
+  Exit criteria: when mirrored content contains `<@&roleId>` and the role does not exist in the target guild, only that mention token is removed while remaining message content is preserved and posted.
 
 ### Phase 5: Attachments (Discord -> storage -> dashboard/mirror)
 

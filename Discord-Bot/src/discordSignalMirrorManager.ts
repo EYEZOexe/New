@@ -23,6 +23,11 @@ type MessageCapableChannel = Channel & {
   guildId?: string | null;
 };
 
+type RoleMentionSanitizationResult = {
+  content: string;
+  removedRoleIds: string[];
+};
+
 class MirrorOperationError extends Error {
   constructor(message: string) {
     super(message);
@@ -106,7 +111,13 @@ export class DiscordSignalMirrorManager {
       };
     }
 
-    const payload = buildMirroredPayload(job.content, job.attachments);
+    const sanitizedContent = await this.sanitizeRoleMentions({
+      content: job.content,
+      guildId,
+      sourceMessageId: job.sourceMessageId,
+      targetChannelId: job.targetChannelId,
+    });
+    const payload = buildMirroredPayload(sanitizedContent.content, job.attachments);
     const sendOrEditPayload: { content?: string; embeds?: APIEmbed[] } = {
       embeds: [payload.embed],
     };
@@ -172,6 +183,64 @@ export class DiscordSignalMirrorManager {
       mirroredGuildId: guildId,
     };
   }
+
+  private async sanitizeRoleMentions(args: {
+    content: string;
+    guildId?: string;
+    sourceMessageId: string;
+    targetChannelId: string;
+  }): Promise<RoleMentionSanitizationResult> {
+    const mentionedRoleIds = extractRoleMentionIds(args.content);
+    if (!args.guildId || mentionedRoleIds.length === 0) {
+      return { content: args.content, removedRoleIds: [] };
+    }
+
+    const guild = await this.client.guilds.fetch(args.guildId).catch((error: unknown) => {
+      const parsed = parseDiscordError(error);
+      console.warn(
+        `[mirror] skipped role mention validation guild=${args.guildId} source_message=${args.sourceMessageId} target_channel=${args.targetChannelId} reason=${parsed.message}`,
+      );
+      return null;
+    });
+
+    if (!guild) {
+      return { content: args.content, removedRoleIds: [] };
+    }
+
+    const removedRoleIds: string[] = [];
+    for (const roleId of mentionedRoleIds) {
+      const lookupResult = await guild.roles
+        .fetch(roleId)
+        .then(() => "exists" as const)
+        .catch((error: unknown) => {
+          const parsed = parseDiscordError(error);
+          if (parsed.code === RESTJSONErrorCodes.UnknownRole) {
+            return "missing" as const;
+          }
+          console.warn(
+            `[mirror] failed role mention lookup guild=${guild.id} role=${roleId} source_message=${args.sourceMessageId} target_channel=${args.targetChannelId} reason=${parsed.message}`,
+          );
+          return "exists" as const;
+        });
+
+      if (lookupResult === "missing") {
+        removedRoleIds.push(roleId);
+      }
+    }
+
+    if (removedRoleIds.length === 0) {
+      return { content: args.content, removedRoleIds: [] };
+    }
+
+    console.info(
+      `[mirror] stripped missing role mentions guild=${guild.id} source_message=${args.sourceMessageId} target_channel=${args.targetChannelId} roles=${removedRoleIds.join(",")}`,
+    );
+
+    return {
+      content: stripMissingRoleMentions(args.content, removedRoleIds),
+      removedRoleIds,
+    };
+  }
 }
 
 function supportsMessageOps(channel: Channel): channel is MessageCapableChannel {
@@ -179,6 +248,34 @@ function supportsMessageOps(channel: Channel): channel is MessageCapableChannel 
   return (
     typeof maybe.send === "function" &&
     typeof maybe.messages?.fetch === "function"
+  );
+}
+
+function extractRoleMentionIds(content: string): string[] {
+  const roleIds = new Set<string>();
+  const roleMentionPattern = /<@&(\d{2,})>/g;
+  for (const match of content.matchAll(roleMentionPattern)) {
+    const roleId = match[1]?.trim() ?? "";
+    if (roleId) {
+      roleIds.add(roleId);
+    }
+  }
+  return [...roleIds];
+}
+
+function stripMissingRoleMentions(content: string, roleIdsToRemove: string[]): string {
+  if (roleIdsToRemove.length === 0) {
+    return content;
+  }
+  const removalSet = new Set(
+    roleIdsToRemove.map((roleId) => roleId.trim()).filter((roleId) => roleId.length > 0),
+  );
+  if (removalSet.size === 0) {
+    return content;
+  }
+
+  return content.replace(/<@&(\d{2,})>/g, (fullMatch, roleId: string) =>
+    removalSet.has(roleId) ? "" : fullMatch,
   );
 }
 
