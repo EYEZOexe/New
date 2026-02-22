@@ -125,4 +125,68 @@ describe("discord seat audit manager", () => {
     expect(result.ok).toBe(false);
     expect(result.message).toContain("member_list_forbidden");
   });
+
+  it("sends one over-limit notice per channel until the guild returns under limit", async () => {
+    let visibleMembers = new Set(["u1", "u2", "u3"]);
+    const sentEmbeds: unknown[] = [];
+
+    const guild = {
+      id: "guild_1",
+      channels: {
+        fetch: async () => ({
+          id: "c1",
+          permissionsFor: (member: { id: string }) => ({
+            has: () => visibleMembers.has(member.id),
+          }),
+          send: async (payload: unknown) => {
+            sentEmbeds.push(payload);
+            return {};
+          },
+        }),
+      },
+      members: {
+        list: async () =>
+          new Collection(
+            [...visibleMembers.values()].map((id) => [id, { id, user: { bot: false } }]),
+          ),
+      },
+    };
+
+    const client = {
+      guilds: {
+        fetch: async () => guild,
+      },
+    } as unknown as Client;
+
+    const manager = new DiscordSeatAuditManager(client);
+
+    const overLimitFirst = await manager.executeJob(
+      buildJob({ seatLimit: 2, targetChannelIds: ["c1"] }),
+    );
+    expect(overLimitFirst.ok).toBe(true);
+    expect(overLimitFirst.message).toBe("seat_limit_exceeded");
+    expect(sentEmbeds.length).toBe(1);
+
+    const overLimitSecond = await manager.executeJob(
+      buildJob({ seatLimit: 2, targetChannelIds: ["c1"] }),
+    );
+    expect(overLimitSecond.ok).toBe(true);
+    expect(overLimitSecond.message).toBe("seat_limit_exceeded");
+    expect(sentEmbeds.length).toBe(1);
+
+    visibleMembers = new Set(["u1"]);
+    const underLimit = await manager.executeJob(
+      buildJob({ seatLimit: 2, targetChannelIds: ["c1"] }),
+    );
+    expect(underLimit.ok).toBe(true);
+    expect(underLimit.message).toBe("seat_limit_ok");
+
+    visibleMembers = new Set(["u1", "u2", "u3"]);
+    const overLimitAfterRecovery = await manager.executeJob(
+      buildJob({ seatLimit: 2, targetChannelIds: ["c1"] }),
+    );
+    expect(overLimitAfterRecovery.ok).toBe(true);
+    expect(overLimitAfterRecovery.message).toBe("seat_limit_exceeded");
+    expect(sentEmbeds.length).toBe(2);
+  });
 });

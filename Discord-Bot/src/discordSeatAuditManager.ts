@@ -1,7 +1,9 @@
 import {
+  APIEmbed,
   Channel,
   Client,
   DiscordAPIError,
+  EmbedBuilder,
   GuildListMembersOptions,
   Guild,
   GuildMember,
@@ -20,10 +22,15 @@ export type SeatAuditExecutionResult = {
 };
 
 type PermissionChannel = Channel & {
+  id: string;
   permissionsFor: (
     memberOrRole: GuildMember,
     checkAdmin?: boolean,
   ) => Readonly<PermissionsBitField> | null;
+};
+
+type MessageCapablePermissionChannel = PermissionChannel & {
+  send: (payload: { content?: string; embeds?: APIEmbed[] }) => Promise<unknown>;
 };
 
 function supportsPermissionChecks(channel: Channel): channel is PermissionChannel {
@@ -76,6 +83,7 @@ function parseDiscordError(error: unknown): {
 export class DiscordSeatAuditManager {
   private readonly client: Client;
   private static readonly MEMBER_PAGE_SIZE = 1_000;
+  private readonly seatLimitNoticeChannelKeys = new Set<string>();
 
   constructor(client: Client) {
     this.client = client;
@@ -133,6 +141,17 @@ export class DiscordSeatAuditManager {
         ok: false,
         message: error instanceof Error ? error.message : String(error),
       };
+    }
+
+    if (seatsUsed > seatLimit) {
+      await this.sendSeatLimitExceededNoticeOnce({
+        guild,
+        channels,
+        seatsUsed,
+        seatLimit,
+      });
+    } else {
+      this.clearSeatLimitNoticeState(guild.id);
     }
 
     return {
@@ -231,4 +250,60 @@ export class DiscordSeatAuditManager {
     }
     return false;
   }
+
+  private clearSeatLimitNoticeState(guildId: string): void {
+    const prefix = `${guildId}:`;
+    for (const key of this.seatLimitNoticeChannelKeys) {
+      if (key.startsWith(prefix)) {
+        this.seatLimitNoticeChannelKeys.delete(key);
+      }
+    }
+  }
+
+  private async sendSeatLimitExceededNoticeOnce(args: {
+    guild: Guild;
+    channels: PermissionChannel[];
+    seatsUsed: number;
+    seatLimit: number;
+  }): Promise<void> {
+    const messageChannels = args.channels.filter(
+      (channel): channel is MessageCapablePermissionChannel => supportsMessageOps(channel),
+    );
+    if (messageChannels.length === 0) return;
+
+    const embed = new EmbedBuilder()
+      .setColor(0xed4245)
+      .setTitle("Mirroring paused: seat limit exceeded")
+      .setDescription(
+        "This target channel is temporarily paused because seat enforcement is over limit.",
+      )
+      .addFields(
+        { name: "Seats used", value: String(args.seatsUsed), inline: true },
+        { name: "Seat limit", value: String(args.seatLimit), inline: true },
+        {
+          name: "Action required",
+          value: "Reduce channel access or increase the configured seat limit, then refresh seats.",
+          inline: false,
+        },
+      )
+      .setTimestamp(new Date());
+    const payload = { embeds: [embed.toJSON()] };
+
+    for (const channel of messageChannels) {
+      const key = `${args.guild.id}:${channel.id}`;
+      if (this.seatLimitNoticeChannelKeys.has(key)) continue;
+      this.seatLimitNoticeChannelKeys.add(key);
+      await channel.send(payload).catch((error: unknown) => {
+        const parsed = parseDiscordError(error);
+        console.warn(
+          `[seat-audit] failed over-limit notice guild=${args.guild.id} channel=${channel.id} reason=${parsed.message}`,
+        );
+      });
+    }
+  }
+}
+
+function supportsMessageOps(channel: PermissionChannel): channel is MessageCapablePermissionChannel {
+  const maybe = channel as unknown as Partial<MessageCapablePermissionChannel>;
+  return typeof maybe.send === "function";
 }
