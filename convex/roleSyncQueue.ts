@@ -1,6 +1,7 @@
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { listEnabledTierRoleMappings } from "./discordRoleConfig";
+import { listManagedRoleTargetsFromServerConfig } from "./discordServerConfig";
 
 export const DEFAULT_ROLE_SYNC_MAX_ATTEMPTS = 8;
 
@@ -46,8 +47,41 @@ async function resolveRoleTargetsForSubscription(
   desiredRoles: RoleSyncTarget[];
   allManagedRoles: RoleSyncTarget[];
   mappedTier: "basic" | "advanced" | "pro" | null;
-  mappingSource: "tier_config" | "legacy_env" | "none";
+  mappingSource: "server_config" | "tier_config" | "legacy_env" | "none";
 }> {
+  const serverRoleTargets = await listManagedRoleTargetsFromServerConfig(ctx);
+  if (serverRoleTargets.length > 0) {
+    const allManagedRoles = uniqueRoleTargets(
+      serverRoleTargets.map((row) => ({
+        guildId: row.guildId,
+        roleId: row.roleId,
+      })),
+    );
+    if (args.status !== "active" || !args.tier) {
+      return {
+        desiredRoles: [],
+        allManagedRoles,
+        mappedTier: null,
+        mappingSource: "server_config",
+      };
+    }
+
+    const desiredRoles = uniqueRoleTargets(
+      serverRoleTargets
+        .filter((row) => row.tier === args.tier)
+        .map((row) => ({
+          guildId: row.guildId,
+          roleId: row.roleId,
+        })),
+    );
+    return {
+      desiredRoles,
+      allManagedRoles,
+      mappedTier: desiredRoles.length > 0 ? args.tier : null,
+      mappingSource: "server_config",
+    };
+  }
+
   const tierMappings = await listEnabledTierRoleMappings(ctx);
   if (tierMappings.length > 0) {
     const allManagedRoles = uniqueRoleTargets(
@@ -211,7 +245,7 @@ export async function enqueueRoleSyncJobsForSubscription(
     now: number;
   },
 ): Promise<{
-  mappingSource: "tier_config" | "legacy_env" | "none";
+  mappingSource: "server_config" | "tier_config" | "legacy_env" | "none";
   mappedTier: "basic" | "advanced" | "pro" | null;
   granted: number;
   revoked: number;

@@ -1,54 +1,39 @@
 import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
 
-export type ClaimedSignalMirrorJob = {
+export type ClaimedSeatAuditJob = {
   jobId: string;
   claimToken: string;
   tenantKey: string;
   connectorId: string;
-  sourceMessageId: string;
-  sourceChannelId: string;
-  sourceGuildId: string;
-  targetChannelId: string;
-  targetGuildId: string | null;
-  eventType: "create" | "update" | "delete";
-  content: string;
-  attachments: Array<{
-    attachmentId?: string;
-    url: string;
-    name?: string;
-    contentType?: string;
-    size?: number;
-  }>;
-  sourceCreatedAt: number;
-  sourceEditedAt: number | null;
-  sourceDeletedAt: number | null;
+  guildId: string;
   attemptCount: number;
   maxAttempts: number;
+  source: string | null;
   runAfter: number;
   createdAt: number;
-  existingMirroredMessageId: string | null;
-  existingMirroredExtraMessageIds: string[];
-  existingMirroredGuildId: string | null;
+  seatLimit: number | null;
+  seatEnforcementEnabled: boolean;
+  targetChannelIds: string[];
 };
 
-const claimSignalMirrorJobsRef = makeFunctionReference<
+const claimSeatAuditJobsRef = makeFunctionReference<
   "mutation",
   { botToken: string; limit?: number; workerId?: string },
-  ClaimedSignalMirrorJob[]
->("mirror:claimPendingSignalMirrorJobs");
+  ClaimedSeatAuditJob[]
+>("discordSeatAudit:claimPendingSeatAuditJobs");
 
-const completeSignalMirrorJobRef = makeFunctionReference<
+const completeSeatAuditJobRef = makeFunctionReference<
   "mutation",
   {
     botToken: string;
     jobId: string;
     claimToken: string;
     success: boolean;
+    seatsUsed?: number;
+    seatLimit?: number;
+    checkedAt?: number;
     error?: string;
-    mirroredMessageId?: string;
-    mirroredExtraMessageIds?: string[];
-    mirroredGuildId?: string;
   },
   {
     ok: boolean;
@@ -56,9 +41,9 @@ const completeSignalMirrorJobRef = makeFunctionReference<
     reason?: "job_not_found" | "job_not_processing" | "claim_token_mismatch";
     status?: "completed" | "pending" | "failed";
   }
->("mirror:completeSignalMirrorJob");
+>("discordSeatAudit:completeSeatAuditJob");
 
-export class ConvexSignalMirrorClient {
+export class ConvexSeatAuditClient {
   private readonly client: ConvexHttpClient;
   private readonly botToken: string;
   private readonly workerId: string;
@@ -76,8 +61,8 @@ export class ConvexSignalMirrorClient {
     this.claimLimit = args.claimLimit;
   }
 
-  async claimJobs(): Promise<ClaimedSignalMirrorJob[]> {
-    return await this.client.mutation(claimSignalMirrorJobsRef, {
+  async claimJobs(): Promise<ClaimedSeatAuditJob[]> {
+    return await this.client.mutation(claimSeatAuditJobsRef, {
       botToken: this.botToken,
       workerId: this.workerId,
       limit: this.claimLimit,
@@ -88,25 +73,25 @@ export class ConvexSignalMirrorClient {
     jobId: string;
     claimToken: string;
     success: boolean;
+    seatsUsed?: number;
+    seatLimit?: number;
+    checkedAt?: number;
     error?: string;
-    mirroredMessageId?: string;
-    mirroredExtraMessageIds?: string[];
-    mirroredGuildId?: string;
   }): Promise<{
     ok: boolean;
     ignored: boolean;
     reason?: "job_not_found" | "job_not_processing" | "claim_token_mismatch";
     status?: "completed" | "pending" | "failed";
   }> {
-    return await this.client.mutation(completeSignalMirrorJobRef, {
+    return await this.client.mutation(completeSeatAuditJobRef, {
       botToken: this.botToken,
       jobId: args.jobId,
       claimToken: args.claimToken,
       success: args.success,
+      seatsUsed: args.seatsUsed,
+      seatLimit: args.seatLimit,
+      checkedAt: args.checkedAt,
       error: args.error,
-      mirroredMessageId: args.mirroredMessageId,
-      mirroredExtraMessageIds: args.mirroredExtraMessageIds,
-      mirroredGuildId: args.mirroredGuildId,
     });
   }
 }

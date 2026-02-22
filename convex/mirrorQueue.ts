@@ -41,6 +41,7 @@ async function enqueueMirrorJobForTarget(
     sourceChannelId: string;
     sourceGuildId: string;
     targetChannelId: string;
+    targetGuildId?: string;
     eventType: SignalMirrorEventType;
     content: string;
     attachments: SignalAttachment[];
@@ -57,6 +58,7 @@ async function enqueueMirrorJobForTarget(
   if (!targetChannelId) {
     return { enqueued: false, reason: "invalid_target_channel_id" };
   }
+  const targetGuildId = args.targetGuildId?.trim();
 
   const statuses: Array<"pending" | "processing"> = ["pending", "processing"];
   for (const status of statuses) {
@@ -82,6 +84,7 @@ async function enqueueMirrorJobForTarget(
         sourceCreatedAt: args.sourceCreatedAt,
         sourceEditedAt: args.sourceEditedAt,
         sourceDeletedAt: args.sourceDeletedAt,
+        targetGuildId,
         ...(status === "pending"
           ? { runAfter: Math.min(existing.runAfter, args.now) }
           : {}),
@@ -103,6 +106,7 @@ async function enqueueMirrorJobForTarget(
     sourceChannelId: args.sourceChannelId,
     sourceGuildId: args.sourceGuildId,
     targetChannelId,
+    targetGuildId,
     eventType: args.eventType,
     content: args.content,
     attachments: args.attachments,
@@ -133,7 +137,10 @@ export async function enqueueMirrorJobsForSignal(
     sourceMessageId: string;
     sourceChannelId: string;
     sourceGuildId: string;
-    targetChannelIds: string[];
+    targets: Array<{
+      targetChannelId: string;
+      targetGuildId?: string;
+    }>;
     eventType: SignalMirrorEventType;
     content: string;
     attachments: SignalAttachment[];
@@ -147,10 +154,19 @@ export async function enqueueMirrorJobsForSignal(
   deduped: number;
   skipped: number;
 }> {
-  const targetChannelIds = uniqueChannelIds(args.targetChannelIds);
+  const targetChannelIds = uniqueChannelIds(
+    args.targets.map((target) => target.targetChannelId),
+  );
   if (targetChannelIds.length === 0) {
     return { enqueued: 0, deduped: 0, skipped: 1 };
   }
+
+  const targetGuildIdByChannel = new Map(
+    args.targets.map((target) => [
+      target.targetChannelId.trim(),
+      target.targetGuildId?.trim() || undefined,
+    ]),
+  );
 
   let enqueued = 0;
   let deduped = 0;
@@ -158,8 +174,20 @@ export async function enqueueMirrorJobsForSignal(
 
   for (const targetChannelId of targetChannelIds) {
     const result = await enqueueMirrorJobForTarget(ctx, {
-      ...args,
+      tenantKey: args.tenantKey,
+      connectorId: args.connectorId,
+      sourceMessageId: args.sourceMessageId,
+      sourceChannelId: args.sourceChannelId,
+      sourceGuildId: args.sourceGuildId,
       targetChannelId,
+      targetGuildId: targetGuildIdByChannel.get(targetChannelId),
+      eventType: args.eventType,
+      content: args.content,
+      attachments: args.attachments,
+      sourceCreatedAt: args.sourceCreatedAt,
+      sourceEditedAt: args.sourceEditedAt,
+      sourceDeletedAt: args.sourceDeletedAt,
+      now: args.now,
     });
     if (!result.enqueued) {
       skipped += 1;

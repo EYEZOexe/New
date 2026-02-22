@@ -1,7 +1,9 @@
 import { ConvexRoleSyncClient } from "./convexRoleSyncClient";
+import { ConvexSeatAuditClient } from "./convexSeatAuditClient";
 import { ConvexSignalMirrorClient } from "./convexSignalMirrorClient";
 import { loadBotConfig } from "./config";
 import { DiscordRoleManager } from "./discordRoleManager";
+import { DiscordSeatAuditManager } from "./discordSeatAuditManager";
 import { DiscordSignalMirrorManager } from "./discordSignalMirrorManager";
 import { logError, logInfo, logWarn } from "./logger";
 import { QueueWakeClient } from "./queueWakeClient";
@@ -29,11 +31,20 @@ async function main() {
     fallbackMinMs: config.queueWakeFallbackMinMs,
     fallbackMaxMs: config.queueWakeFallbackMaxMs,
   });
+  const seatAuditClient = new ConvexSeatAuditClient({
+    convexUrl: config.convexUrl,
+    botToken: config.queueWakeBotToken,
+    workerId: config.workerId,
+    claimLimit: config.seatAuditClaimLimit,
+  });
   const mirrorManager = new DiscordSignalMirrorManager(roleManager.discordClient);
+  const seatAuditManager = new DiscordSeatAuditManager(roleManager.discordClient);
 
   let shuttingDown = false;
   let drainInFlight = false;
   let scheduledDrain: ReturnType<typeof setTimeout> | null = null;
+  let seatAuditTimer: ReturnType<typeof setInterval> | null = null;
+  let seatAuditInFlight = false;
 
   const clearScheduledDrain = () => {
     if (scheduledDrain) {
@@ -193,10 +204,69 @@ async function main() {
     }
   };
 
+  const runSeatAuditTick = async () => {
+    if (shuttingDown || seatAuditInFlight) return;
+    seatAuditInFlight = true;
+    try {
+      const jobs = await seatAuditClient.claimJobs();
+      if (jobs.length > 0) {
+        logInfo(`queue=seat-audit claim_count=${jobs.length}`);
+      }
+      for (const job of jobs) {
+        if (shuttingDown) break;
+        try {
+          const result = await seatAuditManager.executeJob(job);
+          if (!result.ok) {
+            logWarn(
+              `seat_audit_job=${job.jobId} guild=${job.guildId} failed=${result.message}`,
+            );
+            await seatAuditClient.completeJob({
+              jobId: job.jobId,
+              claimToken: job.claimToken,
+              success: false,
+              error: result.message,
+            });
+            continue;
+          }
+
+          logInfo(
+            `seat_audit_job=${job.jobId} guild=${job.guildId} status=completed seats_used=${result.seatsUsed ?? -1} seat_limit=${result.seatLimit ?? -1}`,
+          );
+          await seatAuditClient.completeJob({
+            jobId: job.jobId,
+            claimToken: job.claimToken,
+            success: true,
+            seatsUsed: result.seatsUsed,
+            seatLimit: result.seatLimit,
+            checkedAt: result.checkedAt,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          logError(`seat_audit_job=${job.jobId} guild=${job.guildId} exception=${message}`);
+          await seatAuditClient.completeJob({
+            jobId: job.jobId,
+            claimToken: job.claimToken,
+            success: false,
+            error: message,
+          });
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logError(`seat audit tick failed: ${message}`);
+    } finally {
+      seatAuditInFlight = false;
+    }
+  };
+
   const shutdown = async (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
     clearScheduledDrain();
+    if (seatAuditTimer) {
+      clearInterval(seatAuditTimer);
+      seatAuditTimer = null;
+    }
     logInfo(`received ${signal}; shutting down`);
     await wakeClient.stop();
     await roleManager.destroy();
@@ -214,7 +284,7 @@ async function main() {
 
   await roleManager.login(config.discordBotToken);
   logInfo(
-    `worker started wake_fallback_min_ms=${config.queueWakeFallbackMinMs} wake_fallback_max_ms=${config.queueWakeFallbackMaxMs} role_claim_limit=${config.roleSyncClaimLimit} mirror_claim_limit=${config.mirrorClaimLimit}`,
+    `worker started wake_fallback_min_ms=${config.queueWakeFallbackMinMs} wake_fallback_max_ms=${config.queueWakeFallbackMaxMs} role_claim_limit=${config.roleSyncClaimLimit} mirror_claim_limit=${config.mirrorClaimLimit} seat_audit_claim_limit=${config.seatAuditClaimLimit} seat_audit_poll_ms=${config.seatAuditPollIntervalMs}`,
   );
 
   wakeClient.start({
@@ -233,6 +303,11 @@ async function main() {
       scheduleNextWake();
     },
   });
+
+  seatAuditTimer = setInterval(() => {
+    void runSeatAuditTick();
+  }, config.seatAuditPollIntervalMs);
+  void runSeatAuditTick();
 
   await runDrainLoop("startup");
 }

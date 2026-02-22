@@ -1,0 +1,94 @@
+import { describe, expect, it } from "bun:test";
+import type { Client } from "discord.js";
+
+import type { ClaimedSeatAuditJob } from "../src/convexSeatAuditClient";
+import { DiscordSeatAuditManager } from "../src/discordSeatAuditManager";
+
+function buildJob(overrides?: Partial<ClaimedSeatAuditJob>): ClaimedSeatAuditJob {
+  return {
+    jobId: "job_1",
+    claimToken: "claim_1",
+    tenantKey: "t1",
+    connectorId: "conn_01",
+    guildId: "guild_1",
+    attemptCount: 1,
+    maxAttempts: 8,
+    source: "test",
+    runAfter: 1,
+    createdAt: 1,
+    seatLimit: 10,
+    seatEnforcementEnabled: true,
+    targetChannelIds: ["c1", "c2"],
+    ...overrides,
+  };
+}
+
+describe("discord seat audit manager", () => {
+  it("returns early when enforcement is disabled", async () => {
+    const client = {
+      guilds: {
+        fetch: async () => {
+          throw new Error("should not fetch guild");
+        },
+      },
+    } as unknown as Client;
+
+    const manager = new DiscordSeatAuditManager(client);
+    const result = await manager.executeJob(
+      buildJob({
+        seatEnforcementEnabled: false,
+        seatLimit: 5,
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe("enforcement_disabled");
+    expect(result.seatLimit).toBe(5);
+    expect(result.seatsUsed).toBe(0);
+  });
+
+  it("counts unique non-bot members that can view any mapped channel", async () => {
+    const channelVisibility = new Map<string, Set<string>>([
+      ["c1", new Set(["u1", "u2"])],
+      ["c2", new Set(["u2", "u3"])],
+    ]);
+
+    const guild = {
+      channels: {
+        fetch: async (channelId: string) => ({
+          id: channelId,
+          permissionsFor: (member: { id: string }) => ({
+            has: () => channelVisibility.get(channelId)?.has(member.id) ?? false,
+          }),
+        }),
+      },
+      members: {
+        fetch: async () =>
+          new Map([
+            ["u1", { id: "u1", user: { bot: false } }],
+            ["u2", { id: "u2", user: { bot: false } }],
+            ["u3", { id: "u3", user: { bot: false } }],
+            ["bot1", { id: "bot1", user: { bot: true } }],
+          ]),
+      },
+    };
+
+    const client = {
+      guilds: {
+        fetch: async () => guild,
+      },
+    } as unknown as Client;
+
+    const manager = new DiscordSeatAuditManager(client);
+    const result = await manager.executeJob(
+      buildJob({
+        seatLimit: 2,
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.seatsUsed).toBe(3);
+    expect(result.seatLimit).toBe(2);
+    expect(result.message).toBe("seat_limit_exceeded");
+  });
+});

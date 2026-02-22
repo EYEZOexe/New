@@ -82,6 +82,19 @@ type MirrorJobRow = {
   updatedAt: number;
   createdAt: number;
 };
+type SeatSnapshotRow = {
+  tenantKey: string;
+  connectorId: string;
+  guildId: string;
+  seatsUsed: number;
+  seatLimit: number;
+  isOverLimit: boolean;
+  status: "fresh" | "stale" | "expired";
+  checkedAt: number;
+  nextCheckAfter: number;
+  lastError: string | null;
+  updatedAt: number;
+};
 
 type ConnectorWorkspaceProps = {
   tenantKey: string;
@@ -267,6 +280,15 @@ export function ConnectorWorkspace({
       >("mirror:getSignalMirrorLatencyStats"),
     [],
   );
+  const listSeatSnapshotsByConnector = useMemo(
+    () =>
+      makeFunctionReference<
+        "query",
+        { tenantKey: string; connectorId: string },
+        SeatSnapshotRow[]
+      >("discordSeatAudit:listSeatSnapshotsByConnector"),
+    [],
+  );
 
   const connectorArgs = hasRouteParams ? { tenantKey, connectorId } : "skip";
   const connector = useQuery(getConnector, connectorArgs);
@@ -282,6 +304,10 @@ export function ConnectorWorkspace({
   const mirrorJobs = useQuery(
     listMirrorJobs,
     hasRouteParams ? { tenantKey, connectorId, limit: 50 } : "skip",
+  ) ?? [];
+  const seatSnapshots = useQuery(
+    listSeatSnapshotsByConnector,
+    hasRouteParams ? { tenantKey, connectorId } : "skip",
   ) ?? [];
 
   const [guildIdFilter, setGuildIdFilter] = useState<string>("");
@@ -415,6 +441,14 @@ export function ConnectorWorkspace({
       `[admin/connectors] mirror latency tenant=${tenantKey} connector=${connectorId} window_min=${mirrorLatencyStats.windowMinutes} create_p95_ms=${mirrorLatencyStats.create.p95Ms ?? -1} update_p95_ms=${mirrorLatencyStats.update.p95Ms ?? -1} delete_p95_ms=${mirrorLatencyStats.delete.p95Ms ?? -1}`,
     );
   }, [mirrorLatencyStats, hasRouteParams, tenantKey, connectorId]);
+
+  useEffect(() => {
+    if (!hasRouteParams || seatSnapshots.length === 0) return;
+    const overLimitCount = seatSnapshots.filter((snapshot) => snapshot.isOverLimit).length;
+    console.info(
+      `[admin/connectors] seat snapshot tenant=${tenantKey} connector=${connectorId} servers=${seatSnapshots.length} over_limit=${overLimitCount}`,
+    );
+  }, [seatSnapshots, hasRouteParams, tenantKey, connectorId]);
 
   function renderGuildLabel(guildId: string) {
     return `${guildNameById.get(guildId) ?? "Unknown guild"} (${guildId})`;
@@ -778,6 +812,55 @@ export function ConnectorWorkspace({
             <strong>{mirrorLatencyStats?.delete.count ?? 0}</strong>).
           </p>
         </div>
+      </AdminSectionCard>
+
+      <AdminSectionCard title="Seat enforcement status by guild">
+        {seatSnapshots.length === 0 ? (
+          <p className="text-xs text-slate-400">
+            No seat snapshots yet. Configure seat enforcement in{" "}
+            <Link href="/discord-bot" className="admin-link">
+              Discord Bot
+            </Link>{" "}
+            and request a refresh.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-900 text-xs font-semibold text-slate-300">
+                <tr>
+                  <th className="px-3 py-2">Guild</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Seats</th>
+                  <th className="px-3 py-2">Checked</th>
+                  <th className="px-3 py-2">Error</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800 bg-slate-950/40 text-slate-200">
+                {seatSnapshots.map((snapshot) => (
+                  <tr key={`${snapshot.tenantKey}:${snapshot.connectorId}:${snapshot.guildId}`}>
+                    <td className="px-3 py-2">{renderGuildLabel(snapshot.guildId)}</td>
+                    <td className="px-3 py-2">
+                      {snapshot.isOverLimit ? (
+                        <span className="rounded-full border border-rose-400/30 bg-rose-500/15 px-2 py-0.5 text-xs font-semibold text-rose-300">
+                          over-limit ({snapshot.status})
+                        </span>
+                      ) : (
+                        <span className="rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-300">
+                          ok ({snapshot.status})
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {snapshot.seatsUsed} / {snapshot.seatLimit}
+                    </td>
+                    <td className="px-3 py-2">{formatDateTime(snapshot.checkedAt)}</td>
+                    <td className="px-3 py-2">{snapshot.lastError ?? "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </AdminSectionCard>
 
       <div className="grid gap-8 lg:grid-cols-2">

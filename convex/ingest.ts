@@ -95,21 +95,40 @@ export const ingestMessageBatch = internalMutation({
       .first();
     const forwardingEnabled = connector?.forwardEnabled === true;
 
-    const mirrorTargetsBySourceChannel = new Map<string, string[]>();
+    const mirrorTargetsBySourceChannel = new Map<
+      string,
+      Array<{ targetChannelId: string; targetGuildId?: string }>
+    >();
     if (forwardingEnabled) {
-      const mappings = await ctx.db
-        .query("connectorMappings")
-        .withIndex("by_tenant_connectorId", (q) =>
-          q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
-        )
-        .collect();
+      const [mappings, sources] = await Promise.all([
+        ctx.db
+          .query("connectorMappings")
+          .withIndex("by_tenant_connectorId", (q) =>
+            q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+          )
+          .collect(),
+        ctx.db
+          .query("connectorSources")
+          .withIndex("by_tenant_connectorId", (q) =>
+            q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+          )
+          .collect(),
+      ]);
+      const guildIdByChannelId = new Map(
+        sources
+          .map((source) => [source.channelId.trim(), source.guildId.trim()] as const)
+          .filter(([channelId, guildId]) => channelId && guildId),
+      );
 
       for (const mapping of mappings) {
         const sourceChannelId = mapping.sourceChannelId.trim();
         const targetChannelId = mapping.targetChannelId.trim();
         if (!sourceChannelId || !targetChannelId) continue;
         const current = mirrorTargetsBySourceChannel.get(sourceChannelId) ?? [];
-        current.push(targetChannelId);
+        current.push({
+          targetChannelId,
+          targetGuildId: guildIdByChannelId.get(targetChannelId),
+        });
         mirrorTargetsBySourceChannel.set(sourceChannelId, current);
       }
     }
@@ -228,9 +247,9 @@ export const ingestMessageBatch = internalMutation({
 
       if (!forwardingEnabled) continue;
 
-      const targetChannelIds =
+      const targets =
         mirrorTargetsBySourceChannel.get(fields.sourceChannelId) ?? [];
-      if (targetChannelIds.length === 0) continue;
+      if (targets.length === 0) continue;
 
       const mirrorResult = await enqueueMirrorJobsForSignal(ctx, {
         tenantKey: args.tenantKey,
@@ -238,7 +257,7 @@ export const ingestMessageBatch = internalMutation({
         sourceMessageId: fields.sourceMessageId,
         sourceChannelId: fields.sourceChannelId,
         sourceGuildId: fields.sourceGuildId,
-        targetChannelIds,
+        targets,
         eventType: message.event_type,
         content: mirrorContent,
         attachments: mirrorAttachments,

@@ -14,6 +14,8 @@ Backend is Convex.
 ## Current Status
 
 **Now**
+- Implemented Phase 7 core multi-server seat-enforcement runtime across Convex + Discord-Bot + admin: added server-scoped Discord config storage (`discordServerConfigs`) with seat limit/enforcement + tier role IDs, introduced seat snapshot/audit queue domains (`discordServerSeatSnapshots`, `discordSeatAuditJobs`) with retry-safe claim/complete lifecycle (`discordSeatAudit:*`), wired a dedicated bot seat-audit worker (`DiscordSeatAuditManager` + `ConvexSeatAuditClient`) on interval polling, and added mirror claim gating so over-limit/stale-seat states are blocked pre-send via snapshot checks (`seat_limit_exceeded` / `seat_check_pending`) while preserving mirror send/edit/delete execution path. Added regression coverage in `website/tests/seatEnforcement.test.js` and `Discord-Bot/tests/discordSeatAuditManager.test.ts`, plus admin `/discord-bot` server seat controls/snapshot visibility and connector workspace seat status diagnostics. Verified with `bun run typecheck` for `website`, `admin`, `Discord-Bot`; `bun test` in `Discord-Bot`; `bun test tests` in `admin`; `bun test website/tests/seatEnforcement.test.js`; and builds for `Discord-Bot`, `website`, and `admin` (admin build run with `NEXT_PUBLIC_CONVEX_URL` set in shell). (2026-02-22)
+- Approved multi-server Discord seat-enforcement design + implementation plan for SaaS scaling: scoped server config to `tenantKey+connectorId+guildId`, retained canonical tier enums (`basic/advanced/pro`) with bronze/silver/gold admin labels, and selected hard-stop mirror enforcement with hybrid snapshot-gating to protect mirror send latency targets. Design: `docs/plans/2026-02-22-discord-multi-server-seat-enforcement-design.md`. Plan: `docs/plans/2026-02-22-discord-multi-server-seat-enforcement-plan.md`. (2026-02-22)
 - Hardened Discord mirror content role-mention filtering: Discord-Bot now cross-checks `<@&roleId>` mentions from stored signal content against roles in the target guild and strips only missing-role mentions while preserving the rest of the message text, with runtime logs for skipped/failed/stripped checks and regression coverage in `Discord-Bot/tests/discordSignalMirrorManager.test.ts`. Verified with `bun test tests/discordSignalMirrorManager.test.ts`, `bun run typecheck`, and `bun run build` in `Discord-Bot`. (2026-02-21)
 - Fixed free-trial activation gap when Sell only emits pre-checkout lifecycle events: payment webhook processing now promotes zero-total `order.created` events to active entitlement updates (while still ignoring non-free pending `order.created`/`pending` events), so free trial checkouts can activate access even when `order.completed` is not delivered. Verified with `website` tests/typecheck, Convex deploy (`convex dev --once`), and operator backfill confirmation for `eyezo@gmail.com` (`payments:adminSetPaymentCustomerSubscription` grant `pro` 7 days) showing active `pro` in `payments:listPaymentCustomers`. (2026-02-20)
 - Fixed Sell webhook handling for real `order.created` payloads that previously hard-failed with `user_not_found` despite nested customer data: parser now supports invoice-style nested fields (`data.customer_information.*`, `data.products[0]`, `data.product_variants[0].product_variant_id`, nested status object), and payment processing now treats pre-checkout `order.created` + `pending` events as intentionally ignored/processed instead of failed. Verified with updated regression coverage in `website/tests/paymentsUtils.test.js`, `website` typecheck, Convex deploy (`convex dev --once`), and replay of failed events `2892933` / `2892943` to processed state (`resolvedVia=pre_checkout_order_created`). (2026-02-20)
@@ -99,11 +101,13 @@ Backend is Convex.
 - Phase 1 signal pipeline is now hardened end-to-end: message ingest normalizes update/delete timestamps with fallbacks, stale post-delete updates are ignored server-side, plugin emits message delete events, and dashboard feed surfaces edited/deleted state with realtime update logs. (2026-02-16)
 
 **Next**
+- Add explicit operational reliability docs/alerts for seat-audit freshness drift and over-limit pause durations.
 - Add scheduled payment reconciliation and alerting for webhook drift/failure spikes.
 - Monitor queue-wake rollout metrics (`wake source`, `empty/non-empty claim outcomes`, pickup latency) and tune bounded fallback ranges if websocket quality degrades in production.
 - Add operational dashboards/alerts for shop catalog publish validation failures (`policy_link_required`, `policy_link_disabled`, checkout URL validation).
 
 **Blockers / Risks**
+- Discord seat-audit scale/performance risk for large guilds: visibility-based seat counting requires careful pagination/concurrency caps and snapshot freshness controls; misconfiguration or insufficient bot permissions can cause stale snapshots that pause mirroring.
 - Local Windows/Bun CLI caveat during `convex run` smoke checks: command returns valid payload output but exits with a post-output `uv` assertion (`!(handle->flags & UV_HANDLE_CLOSING)`); deploy operations still succeed, but local CLI verification ergonomics are degraded until runtime/tooling update.
 - External provider dependency for workspace feeds. Market/news ingestion relies on public upstream APIs (CoinGecko/CryptoCompare); provider outages, schema changes, or rate limits can temporarily reduce feed freshness.
 - Sell product CRUD in admin depends on `SELLAPP_API_TOKEN` being configured in Convex runtime env; missing token causes product list/create/update actions to fail (`sell_api_token_missing`).
@@ -250,6 +254,23 @@ Goal: deliver a conversion-focused shop/admin experience and enforce tier-based 
   Exit criteria: nested customer/product/variant/status fields project correctly, `order.created` + `pending` events are marked processed with ignore reason instead of failed, and payment utility tests + website typecheck + Convex deploy pass.
 - [x] Activate zero-total free trial orders from Sell `order.created` lifecycle when completion webhooks are absent, while preserving ignore behavior for non-free pending orders. (2026-02-20)
   Exit criteria: zero-total `order.created` events can resolve user + policy and write active subscriptions, non-free pending orders stay ignored, and verification/deploy commands pass.
+
+### Phase 7: Multi-Server Discord Seat Enforcement
+
+Goal: support many customer Discord servers with per-server configuration and hard seat enforcement that can pause mirroring without adding send-path latency.
+
+- [x] Add server-scoped Discord config domain (`tenantKey+connectorId+guildId`) for seat limits, enforcement toggle, and tier role IDs. (2026-02-22)
+  Exit criteria: admin can configure and persist server-specific seat limits and tier-role mappings independent of legacy global tier role config.
+- [x] Add seat snapshot + seat-audit queue domains and worker lifecycle. (2026-02-22)
+  Exit criteria: seat usage snapshots (`seatsUsed`, `isOverLimit`, freshness/error metadata) are continuously maintained per server via retry-safe queue processing.
+- [x] Gate mirror claim flow with seat snapshot status. (2026-02-22)
+  Exit criteria: when `isOverLimit=true`, mirror jobs for that server remain pending with explicit reason; when compliant, mirroring resumes automatically.
+- [x] Add admin visibility for seat status and enforcement diagnostics on `/discord-bot`. (2026-02-22)
+  Exit criteria: operators can configure seat settings and tier role IDs per server and inspect snapshot freshness/usage/error state from admin.
+- [x] Add connector-workspace seat status diagnostics on `/mappings/[tenant]/[connector]`. (2026-02-22)
+  Exit criteria: operators can see seat status directly from connector workspace and navigate to server seat controls without context switching.
+- [x] Verify low-latency mirror send path remains unchanged under seat enforcement architecture. (2026-02-22)
+  Exit criteria: mirror send/edit/delete execution path avoids live seat scans and verification commands pass for `Discord-Bot`, `admin`, and `website`.
 
 ## Checklists / Hygiene
 

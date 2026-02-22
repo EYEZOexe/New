@@ -9,6 +9,8 @@ export type BotConfig = {
   queueWakeFallbackMaxMs: number;
   roleSyncClaimLimit: number;
   mirrorClaimLimit: number;
+  seatAuditClaimLimit: number;
+  seatAuditPollIntervalMs: number;
 };
 
 function requiredEnv(name: string): string {
@@ -66,6 +68,14 @@ export function loadBotConfig(): BotConfig {
     mirrorClaimLimit: parseIntEnv("MIRROR_CLAIM_LIMIT", 10, {
       min: 1,
       max: 20,
+    }),
+    seatAuditClaimLimit: parseIntEnv("SEAT_AUDIT_CLAIM_LIMIT", 3, {
+      min: 1,
+      max: 20,
+    }),
+    seatAuditPollIntervalMs: parseIntEnv("SEAT_AUDIT_POLL_INTERVAL_MS", 30_000, {
+      min: 5_000,
+      max: 300_000,
     }),
   };
 }

@@ -302,6 +302,64 @@ export default defineSchema({
     .index("by_tier", ["tier"])
     .index("by_enabled", ["enabled"]),
 
+  discordServerConfigs: defineTable({
+    tenantKey: v.string(),
+    connectorId: v.string(),
+    guildId: v.string(),
+    seatLimit: v.number(),
+    seatEnforcementEnabled: v.boolean(),
+    basicRoleId: v.optional(v.string()),
+    advancedRoleId: v.optional(v.string()),
+    proRoleId: v.optional(v.string()),
+    updatedAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_tenant_connector", ["tenantKey", "connectorId"])
+    .index("by_tenant_connector_guild", ["tenantKey", "connectorId", "guildId"]),
+
+  discordServerSeatSnapshots: defineTable({
+    tenantKey: v.string(),
+    connectorId: v.string(),
+    guildId: v.string(),
+    seatsUsed: v.number(),
+    seatLimit: v.number(),
+    isOverLimit: v.boolean(),
+    status: v.union(v.literal("fresh"), v.literal("stale"), v.literal("expired")),
+    checkedAt: v.number(),
+    nextCheckAfter: v.number(),
+    lastError: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_tenant_connector", ["tenantKey", "connectorId"])
+    .index("by_tenant_connector_guild", ["tenantKey", "connectorId", "guildId"])
+    .index("by_status_nextCheckAfter", ["status", "nextCheckAfter"]),
+
+  discordSeatAuditJobs: defineTable({
+    tenantKey: v.string(),
+    connectorId: v.string(),
+    guildId: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("processing"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    source: v.optional(v.string()),
+    attemptCount: v.number(),
+    maxAttempts: v.number(),
+    runAfter: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    claimedAt: v.optional(v.number()),
+    claimToken: v.optional(v.string()),
+    claimWorkerId: v.optional(v.string()),
+    lastAttemptAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+  })
+    .index("by_status_runAfter", ["status", "runAfter"])
+    .index("by_tenant_connector", ["tenantKey", "connectorId"])
+    .index("by_dedupe", ["tenantKey", "connectorId", "guildId", "status"]),
+
   roleSyncJobs: defineTable({
     userId: v.id("users"),
     discordUserId: v.string(),
@@ -345,6 +403,7 @@ export default defineSchema({
     sourceChannelId: v.string(),
     sourceGuildId: v.string(),
     targetChannelId: v.string(),
+    targetGuildId: v.optional(v.string()),
     eventType: v.union(
       v.literal("create"),
       v.literal("update"),

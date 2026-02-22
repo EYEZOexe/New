@@ -1,7 +1,12 @@
 import { v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
+import { enqueueSeatAuditJobForServer } from "./discordSeatAudit";
 import { getMirrorBotTokenFromEnv, nextMirrorRetryAt } from "./mirrorQueue";
+import { evaluateSeatGate } from "./seatEnforcement";
+
+const SEAT_GATE_REQUEUE_MS = 15_000;
 
 function assertBotTokenOrThrow(token: string) {
   const expected = getMirrorBotTokenFromEnv();
@@ -31,6 +36,27 @@ function normalizeStoredError(error: string): string {
   return error
     .replace(/^terminal:/, "")
     .replace(/^retry_after_ms:\d+:/, "");
+}
+
+async function resolveTargetGuildId(ctx: MutationCtx, args: {
+  tenantKey: string;
+  connectorId: string;
+  targetChannelId: string;
+  existingTargetGuildId?: string;
+}): Promise<string | null> {
+  const existing = args.existingTargetGuildId?.trim() ?? "";
+  if (existing) return existing;
+  const source = await ctx.db
+    .query("connectorSources")
+    .withIndex("by_tenant_connector_channelId", (q) =>
+      q
+        .eq("tenantKey", args.tenantKey)
+        .eq("connectorId", args.connectorId)
+        .eq("channelId", args.targetChannelId),
+    )
+    .first();
+  const guildId = source?.guildId?.trim() ?? "";
+  return guildId || null;
 }
 
 export const claimPendingSignalMirrorJobs = mutation({
@@ -63,6 +89,7 @@ export const claimPendingSignalMirrorJobs = mutation({
       sourceChannelId: string;
       sourceGuildId: string;
       targetChannelId: string;
+      targetGuildId: string | null;
       eventType: "create" | "update" | "delete";
       content: string;
       attachments: Array<{
@@ -85,6 +112,70 @@ export const claimPendingSignalMirrorJobs = mutation({
     }> = [];
 
     for (const job of pending) {
+      const targetGuildId = await resolveTargetGuildId(ctx, {
+        tenantKey: job.tenantKey,
+        connectorId: job.connectorId,
+        targetChannelId: job.targetChannelId,
+        existingTargetGuildId: job.targetGuildId,
+      });
+
+      if (targetGuildId) {
+        const [serverConfig, snapshot] = await Promise.all([
+          ctx.db
+            .query("discordServerConfigs")
+            .withIndex("by_tenant_connector_guild", (q) =>
+              q
+                .eq("tenantKey", job.tenantKey)
+                .eq("connectorId", job.connectorId)
+                .eq("guildId", targetGuildId),
+            )
+            .first(),
+          ctx.db
+            .query("discordServerSeatSnapshots")
+            .withIndex("by_tenant_connector_guild", (q) =>
+              q
+                .eq("tenantKey", job.tenantKey)
+                .eq("connectorId", job.connectorId)
+                .eq("guildId", targetGuildId),
+            )
+            .first(),
+        ]);
+
+        const seatDecision = evaluateSeatGate({
+          now,
+          config: serverConfig
+            ? {
+                seatEnforcementEnabled: serverConfig.seatEnforcementEnabled,
+                seatLimit: serverConfig.seatLimit,
+              }
+            : null,
+          snapshot: snapshot
+            ? {
+                seatsUsed: snapshot.seatsUsed,
+                seatLimit: snapshot.seatLimit,
+                isOverLimit: snapshot.isOverLimit,
+                checkedAt: snapshot.checkedAt,
+              }
+            : null,
+        });
+
+        if (seatDecision.action === "block") {
+          await enqueueSeatAuditJobForServer(ctx, {
+            tenantKey: job.tenantKey,
+            connectorId: job.connectorId,
+            guildId: targetGuildId,
+            source: `mirror_claim_${seatDecision.reason}`,
+            now,
+          });
+          await ctx.db.patch(job._id, {
+            runAfter: Math.max(job.runAfter, now + SEAT_GATE_REQUEUE_MS),
+            updatedAt: now,
+            lastError: seatDecision.reason,
+          });
+          continue;
+        }
+      }
+
       const claimToken = crypto.randomUUID();
       const nextAttemptCount = (job.attemptCount ?? 0) + 1;
 
@@ -119,6 +210,7 @@ export const claimPendingSignalMirrorJobs = mutation({
         sourceChannelId: job.sourceChannelId,
         sourceGuildId: job.sourceGuildId,
         targetChannelId: job.targetChannelId,
+        targetGuildId,
         eventType: job.eventType,
         content: job.content,
         attachments: job.attachments ?? [],
