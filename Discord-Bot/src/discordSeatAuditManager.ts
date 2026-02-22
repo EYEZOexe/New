@@ -111,6 +111,9 @@ export class DiscordSeatAuditManager {
 
     const channels = await this.fetchPermissionChannels(guild, job.targetChannelIds);
     if (channels.length === 0) {
+      console.warn(
+        `[seat-audit] guild=${job.guildId} has no resolvable target channels from mapped_targets=${job.targetChannelIds.length}`,
+      );
       return {
         ok: true,
         message: "no_target_channels",
@@ -170,6 +173,7 @@ export class DiscordSeatAuditManager {
       const channel = await guild.channels.fetch(normalized).catch((error: unknown) => {
         const parsed = parseDiscordError(error);
         if (parsed.code === RESTJSONErrorCodes.UnknownChannel) {
+          console.warn(`[seat-audit] guild=${guild.id} channel_not_found channel=${normalized}`);
           return null;
         }
         throw error;

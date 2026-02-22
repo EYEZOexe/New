@@ -46,6 +46,12 @@ async function resolveTargetGuildId(ctx: MutationCtx, args: {
 }): Promise<string | null> {
   const existing = args.existingTargetGuildId?.trim() ?? "";
   if (existing) return existing;
+  const botChannel = await ctx.db
+    .query("discordBotChannels")
+    .withIndex("by_channelId", (q) => q.eq("channelId", args.targetChannelId))
+    .first();
+  const botGuildId = botChannel?.guildId?.trim() ?? "";
+  if (botGuildId) return botGuildId;
   const source = await ctx.db
     .query("connectorSources")
     .withIndex("by_tenant_connector_channelId", (q) =>

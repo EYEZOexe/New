@@ -83,7 +83,7 @@ export const getRuntimeConfig = internalQuery({
         guild_id: s.guildId,
         channel_id: s.channelId,
         is_source: s.isSource ?? true,
-        is_target: s.isTarget ?? true,
+        is_target: s.isTarget ?? false,
         thread_mode: s.threadMode ?? undefined,
         is_enabled: s.isEnabled,
       })),

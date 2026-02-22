@@ -102,15 +102,37 @@ async function listMappedTargetChannelsForGuild(
       )
       .collect(),
   ]);
-  const guildByChannelId = new Map(
+  const sourceGuildByChannelId = new Map(
     sources.map((source) => [source.channelId.trim(), source.guildId.trim()]),
+  );
+
+  const uniqueTargetChannelIds = new Set<string>();
+  for (const mapping of mappings) {
+    const targetChannelId = mapping.targetChannelId.trim();
+    if (!targetChannelId) continue;
+    uniqueTargetChannelIds.add(targetChannelId);
+  }
+
+  const botChannelRows = await Promise.all(
+    Array.from(uniqueTargetChannelIds.values()).map((channelId) =>
+      ctx.db
+        .query("discordBotChannels")
+        .withIndex("by_channelId", (q) => q.eq("channelId", channelId))
+        .first(),
+    ),
+  );
+  const botGuildByChannelId = new Map(
+    botChannelRows
+      .filter((channel): channel is NonNullable<typeof channel> => channel !== null)
+      .map((channel) => [channel.channelId.trim(), channel.guildId.trim()]),
   );
 
   const unique = new Set<string>();
   for (const mapping of mappings) {
     const targetChannelId = mapping.targetChannelId.trim();
     if (!targetChannelId) continue;
-    const guildId = guildByChannelId.get(targetChannelId);
+    const guildId =
+      botGuildByChannelId.get(targetChannelId) ?? sourceGuildByChannelId.get(targetChannelId);
     if (guildId !== args.guildId) continue;
     unique.add(targetChannelId);
   }
@@ -263,6 +285,11 @@ export const claimPendingSeatAuditJobs = mutation({
           guildId: job.guildId,
         }),
       ]);
+      if (serverConfig?.seatEnforcementEnabled === true && targetChannelIds.length === 0) {
+        console.warn(
+          `[seat-audit] claimed job has no target channels tenant=${job.tenantKey} connector=${job.connectorId} guild=${job.guildId}`,
+        );
+      }
 
       claimed.push({
         jobId: job._id,

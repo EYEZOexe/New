@@ -105,7 +105,7 @@ export const listMappingsForGuild = query({
     const guildId = args.guildId.trim();
     if (!guildId) return [];
 
-    const [mappings, sources, discoveredGuilds] = await Promise.all([
+    const [mappings, sources, discoveredGuilds, botGuilds] = await Promise.all([
       ctx.db
         .query("connectorMappings")
         .withIndex("by_tenant_connectorId", (q) =>
@@ -124,64 +124,110 @@ export const listMappingsForGuild = query({
           q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
         )
         .collect(),
+      ctx.db.query("discordBotGuilds").collect(),
     ]);
 
     const discoveredGuildNameById = new Map(
       discoveredGuilds.map((row) => [row.guildId.trim(), row.name]),
     );
-    const guildByChannelId = new Map(
+    const botGuildNameById = new Map(
+      botGuilds.map((row) => [row.guildId.trim(), row.name]),
+    );
+    const sourceGuildByChannelId = new Map(
       sources.map((source) => [source.channelId.trim(), source.guildId.trim()]),
     );
-    const filtered = mappings
-      .filter((mapping) => guildByChannelId.get(mapping.targetChannelId.trim()) === guildId)
-      .map((mapping) => ({
-        sourceChannelId: mapping.sourceChannelId.trim(),
-        targetChannelId: mapping.targetChannelId.trim(),
-        sourceGuildId: guildByChannelId.get(mapping.sourceChannelId.trim()) ?? null,
-        targetGuildId: guildByChannelId.get(mapping.targetChannelId.trim()) ?? null,
-        priority: mapping.priority ?? null,
-      }));
 
     const uniqueChannelIds = new Set<string>();
-    for (const mapping of filtered) {
-      uniqueChannelIds.add(mapping.sourceChannelId);
-      uniqueChannelIds.add(mapping.targetChannelId);
+    for (const mapping of mappings) {
+      const sourceChannelId = mapping.sourceChannelId.trim();
+      const targetChannelId = mapping.targetChannelId.trim();
+      if (sourceChannelId) uniqueChannelIds.add(sourceChannelId);
+      if (targetChannelId) uniqueChannelIds.add(targetChannelId);
     }
-    const channelRows = await Promise.all(
-      Array.from(uniqueChannelIds.values()).map((channelId) =>
-        ctx.db
-          .query("discordChannels")
-          .withIndex("by_tenant_connector_channelId", (q) =>
-            q
-              .eq("tenantKey", args.tenantKey)
-              .eq("connectorId", args.connectorId)
-              .eq("channelId", channelId),
-          )
-          .first(),
+    const [pluginChannelRows, botChannelRows] = await Promise.all([
+      Promise.all(
+        Array.from(uniqueChannelIds.values()).map((channelId) =>
+          ctx.db
+            .query("discordChannels")
+            .withIndex("by_tenant_connector_channelId", (q) =>
+              q
+                .eq("tenantKey", args.tenantKey)
+                .eq("connectorId", args.connectorId)
+                .eq("channelId", channelId),
+            )
+            .first(),
+        ),
       ),
-    );
-    const channelNameById = new Map(
-      channelRows
+      Promise.all(
+        Array.from(uniqueChannelIds.values()).map((channelId) =>
+          ctx.db
+            .query("discordBotChannels")
+            .withIndex("by_channelId", (q) => q.eq("channelId", channelId))
+            .first(),
+        ),
+      ),
+    ]);
+    const pluginChannelNameById = new Map(
+      pluginChannelRows
         .filter((channel): channel is NonNullable<typeof channel> => channel !== null)
         .map((channel) => [channel.channelId, channel.name]),
     );
-    const rows = filtered.map((mapping) => ({
+    const botChannelNameById = new Map(
+      botChannelRows
+        .filter((channel): channel is NonNullable<typeof channel> => channel !== null)
+        .map((channel) => [channel.channelId, channel.name]),
+    );
+    const botGuildByChannelId = new Map(
+      botChannelRows
+        .filter((channel): channel is NonNullable<typeof channel> => channel !== null)
+        .map((channel) => [channel.channelId, channel.guildId.trim()]),
+    );
+
+    const resolveTargetGuildId = (channelId: string): string | null =>
+      botGuildByChannelId.get(channelId) ?? sourceGuildByChannelId.get(channelId) ?? null;
+    const resolveSourceGuildId = (channelId: string): string | null =>
+      sourceGuildByChannelId.get(channelId) ?? null;
+
+    const filtered = mappings
+      .map((mapping) => ({
+        sourceChannelId: mapping.sourceChannelId.trim(),
+        targetChannelId: mapping.targetChannelId.trim(),
+        priority: mapping.priority ?? null,
+      }))
+      .filter(
+        (mapping) =>
+          mapping.sourceChannelId.length > 0 &&
+          mapping.targetChannelId.length > 0 &&
+          resolveTargetGuildId(mapping.targetChannelId) === guildId,
+      );
+
+    const rows = filtered.map((mapping) => {
+      const sourceGuildId = resolveSourceGuildId(mapping.sourceChannelId);
+      const targetGuildId = resolveTargetGuildId(mapping.targetChannelId);
+      return {
       sourceChannelId: mapping.sourceChannelId,
       targetChannelId: mapping.targetChannelId,
-      sourceGuildId: mapping.sourceGuildId,
-      targetGuildId: mapping.targetGuildId,
+      sourceGuildId,
+      targetGuildId,
       sourceGuildName:
-        mapping.sourceGuildId === null
+        sourceGuildId === null
           ? null
-          : (discoveredGuildNameById.get(mapping.sourceGuildId) ?? null),
+          : (discoveredGuildNameById.get(sourceGuildId) ?? botGuildNameById.get(sourceGuildId) ?? null),
       targetGuildName:
-        mapping.targetGuildId === null
+        targetGuildId === null
           ? null
-          : (discoveredGuildNameById.get(mapping.targetGuildId) ?? null),
-      sourceChannelName: channelNameById.get(mapping.sourceChannelId) ?? null,
-      targetChannelName: channelNameById.get(mapping.targetChannelId) ?? null,
+          : (botGuildNameById.get(targetGuildId) ?? discoveredGuildNameById.get(targetGuildId) ?? null),
+      sourceChannelName:
+        pluginChannelNameById.get(mapping.sourceChannelId) ??
+        botChannelNameById.get(mapping.sourceChannelId) ??
+        null,
+      targetChannelName:
+        botChannelNameById.get(mapping.targetChannelId) ??
+        pluginChannelNameById.get(mapping.targetChannelId) ??
+        null,
       priority: mapping.priority,
-    }));
+      };
+    });
 
     rows.sort((a, b) => {
       const byPriority = (b.priority ?? 0) - (a.priority ?? 0);
