@@ -6,6 +6,7 @@ import { internalMutation, mutation, query } from "./_generated/server";
 const DEFAULT_SEAT_AUDIT_MAX_ATTEMPTS = 8;
 const DEFAULT_SEAT_AUDIT_RECHECK_MS = 60_000;
 const OVER_LIMIT_RECHECK_MS = 30_000;
+const PROCESSING_RECLAIM_AFTER_MS = 5 * 60_000;
 const FRESH_MS = 90_000;
 const STALE_MS = 5 * 60_000;
 
@@ -235,6 +236,31 @@ export const claimPendingSeatAuditJobs = mutation({
     const now = Date.now();
     const limit = Math.max(1, Math.min(20, args.limit ?? 5));
     const workerId = args.workerId?.trim() || undefined;
+
+    const processingJobs = await ctx.db
+      .query("discordSeatAuditJobs")
+      .withIndex("by_status_runAfter", (q) => q.eq("status", "processing").lte("runAfter", now))
+      .take(200);
+    let reclaimed = 0;
+    for (const job of processingJobs) {
+      const claimedAt = job.claimedAt ?? 0;
+      if (claimedAt <= 0) continue;
+      if (now - claimedAt < PROCESSING_RECLAIM_AFTER_MS) continue;
+      await ctx.db.patch(job._id, {
+        status: "pending",
+        runAfter: now,
+        updatedAt: now,
+        claimToken: undefined,
+        claimWorkerId: undefined,
+        claimedAt: undefined,
+        lastError: "processing_reclaimed_after_timeout",
+      });
+      reclaimed += 1;
+    }
+    if (reclaimed > 0) {
+      console.warn(`[seat-audit] reclaimed_stale_processing_jobs=${reclaimed}`);
+    }
+
     const pending = await ctx.db
       .query("discordSeatAuditJobs")
       .withIndex("by_status_runAfter", (q) =>

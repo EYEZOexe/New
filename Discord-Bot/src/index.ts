@@ -211,6 +211,28 @@ async function main() {
     }
   };
 
+  const completeSeatAuditJobSafely = async (args: {
+    jobId: string;
+    claimToken: string;
+    success: boolean;
+    seatsUsed?: number;
+    seatLimit?: number;
+    checkedAt?: number;
+    error?: string;
+  }) => {
+    try {
+      const completion = await seatAuditClient.completeJob(args);
+      logInfo(
+        `seat_audit_job=${args.jobId} completion_status=${completion.status ?? "none"} ignored=${completion.ignored} reason=${completion.reason ?? "none"}`,
+      );
+      return completion;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logError(`seat_audit_job=${args.jobId} complete_exception=${message}`);
+      return null;
+    }
+  };
+
   const runSeatAuditTick = async () => {
     if (shuttingDown || seatAuditInFlight) return;
     seatAuditInFlight = true;
@@ -227,7 +249,7 @@ async function main() {
             logWarn(
               `seat_audit_job=${job.jobId} guild=${job.guildId} failed=${result.message}`,
             );
-            await seatAuditClient.completeJob({
+            await completeSeatAuditJobSafely({
               jobId: job.jobId,
               claimToken: job.claimToken,
               success: false,
@@ -239,7 +261,7 @@ async function main() {
           logInfo(
             `seat_audit_job=${job.jobId} guild=${job.guildId} status=completed seats_used=${result.seatsUsed ?? -1} seat_limit=${result.seatLimit ?? -1}`,
           );
-          await seatAuditClient.completeJob({
+          await completeSeatAuditJobSafely({
             jobId: job.jobId,
             claimToken: job.claimToken,
             success: true,
@@ -250,7 +272,7 @@ async function main() {
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           logError(`seat_audit_job=${job.jobId} guild=${job.guildId} exception=${message}`);
-          await seatAuditClient.completeJob({
+          await completeSeatAuditJobSafely({
             jobId: job.jobId,
             claimToken: job.claimToken,
             success: false,

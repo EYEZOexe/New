@@ -180,6 +180,19 @@ export const claimPendingSignalMirrorJobs = mutation({
           });
           continue;
         }
+
+        if (seatDecision.reason === "under_limit_stale") {
+          await enqueueSeatAuditJobForServer(ctx, {
+            tenantKey: job.tenantKey,
+            connectorId: job.connectorId,
+            guildId: targetGuildId,
+            source: "mirror_claim_stale_snapshot",
+            now,
+          });
+          console.info(
+            `[mirror] allowing stale seat snapshot tenant=${job.tenantKey} connector=${job.connectorId} guild=${targetGuildId} source_message=${job.sourceMessageId}`,
+          );
+        }
       }
 
       const claimToken = crypto.randomUUID();

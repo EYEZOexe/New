@@ -2,6 +2,7 @@ import {
   Channel,
   Client,
   DiscordAPIError,
+  GuildListMembersOptions,
   Guild,
   GuildMember,
   PermissionsBitField,
@@ -74,6 +75,7 @@ function parseDiscordError(error: unknown): {
 
 export class DiscordSeatAuditManager {
   private readonly client: Client;
+  private static readonly MEMBER_PAGE_SIZE = 1_000;
 
   constructor(client: Client) {
     this.client = client;
@@ -123,24 +125,14 @@ export class DiscordSeatAuditManager {
       };
     }
 
-    const members = await guild.members.fetch().catch((error: unknown) => {
-      const parsed = parseDiscordError(error);
-      throw new Error(`member_fetch_failed:${parsed.message}`);
-    });
-
-    let seatsUsed = 0;
-    for (const member of members.values()) {
-      if (member.user.bot) continue;
-      let canViewAny = false;
-      for (const channel of channels) {
-        const permissions = channel.permissionsFor(member);
-        if (!permissions) continue;
-        if (permissions.has(PermissionsBitField.Flags.ViewChannel, true)) {
-          canViewAny = true;
-          break;
-        }
-      }
-      if (canViewAny) seatsUsed += 1;
+    let seatsUsed: number;
+    try {
+      seatsUsed = await this.countSeatsForChannels(guild, channels);
+    } catch (error) {
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+      };
     }
 
     return {
@@ -183,5 +175,60 @@ export class DiscordSeatAuditManager {
       channels.push(channel);
     }
     return channels;
+  }
+
+  private async countSeatsForChannels(
+    guild: Guild,
+    channels: PermissionChannel[],
+  ): Promise<number> {
+    let seatsUsed = 0;
+    let after: string | undefined;
+    let pageCount = 0;
+
+    for (;;) {
+      const options: GuildListMembersOptions = {
+        limit: DiscordSeatAuditManager.MEMBER_PAGE_SIZE,
+        cache: false,
+      };
+      if (after) options.after = after;
+      const members = await guild.members.list(options).catch((error: unknown) => {
+        const parsed = parseDiscordError(error);
+        if (parsed.status === 403 || parsed.code === RESTJSONErrorCodes.MissingAccess) {
+          throw new Error(
+            "member_list_forbidden:enable_guild_members_privileged_intent_in_discord_developer_portal",
+          );
+        }
+        throw new Error(`member_list_failed:${parsed.message}`);
+      });
+
+      pageCount += 1;
+      if (members.size === 0) break;
+
+      for (const member of members.values()) {
+        if (member.user.bot) continue;
+        if (this.canMemberViewAnyChannel(member, channels)) seatsUsed += 1;
+      }
+
+      if (members.size < DiscordSeatAuditManager.MEMBER_PAGE_SIZE) break;
+      const lastMemberId = members.lastKey();
+      if (!lastMemberId) break;
+      after = lastMemberId;
+    }
+
+    console.info(
+      `[seat-audit] guild=${guild.id} member_pages=${pageCount} seats_used=${seatsUsed} mode=rest_list`,
+    );
+    return seatsUsed;
+  }
+
+  private canMemberViewAnyChannel(member: GuildMember, channels: PermissionChannel[]): boolean {
+    for (const channel of channels) {
+      const permissions = channel.permissionsFor(member);
+      if (!permissions) continue;
+      if (permissions.has(PermissionsBitField.Flags.ViewChannel, true)) {
+        return true;
+      }
+    }
+    return false;
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { Client } from "discord.js";
+import { Collection, type Client } from "discord.js";
 
 import type { ClaimedSeatAuditJob } from "../src/convexSeatAuditClient";
 import { DiscordSeatAuditManager } from "../src/discordSeatAuditManager";
@@ -63,8 +63,8 @@ describe("discord seat audit manager", () => {
         }),
       },
       members: {
-        fetch: async () =>
-          new Map([
+        list: async () =>
+          new Collection([
             ["u1", { id: "u1", user: { bot: false } }],
             ["u2", { id: "u2", user: { bot: false } }],
             ["u3", { id: "u3", user: { bot: false } }],
@@ -90,5 +90,39 @@ describe("discord seat audit manager", () => {
     expect(result.seatsUsed).toBe(3);
     expect(result.seatLimit).toBe(2);
     expect(result.message).toBe("seat_limit_exceeded");
+  });
+
+  it("returns a clear member-list error when listing members is forbidden", async () => {
+    const guild = {
+      channels: {
+        fetch: async () => ({
+          id: "c1",
+          permissionsFor: () => ({
+            has: () => true,
+          }),
+        }),
+      },
+      members: {
+        list: async () => {
+          const error = Object.assign(new Error("Missing Access"), {
+            status: 403,
+            code: 50001,
+          });
+          throw error;
+        },
+      },
+    };
+
+    const client = {
+      guilds: {
+        fetch: async () => guild,
+      },
+    } as unknown as Client;
+
+    const manager = new DiscordSeatAuditManager(client);
+    const result = await manager.executeJob(buildJob({ targetChannelIds: ["c1"] }));
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("member_list_forbidden");
   });
 });

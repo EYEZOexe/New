@@ -40,7 +40,7 @@ describe("seat enforcement gate", () => {
     });
   });
 
-  it("marks stale snapshots as pending checks", () => {
+  it("allows stale snapshots when last-known state is under limit", () => {
     const result = evaluateSeatGate({
       now: 300_000,
       config: {
@@ -57,8 +57,30 @@ describe("seat enforcement gate", () => {
     });
 
     expect(result).toEqual({
+      action: "allow",
+      reason: "under_limit_stale",
+    });
+  });
+
+  it("still blocks stale snapshots when last-known state is over limit", () => {
+    const result = evaluateSeatGate({
+      now: 300_000,
+      config: {
+        seatEnforcementEnabled: true,
+        seatLimit: 10,
+      },
+      snapshot: {
+        seatsUsed: 12,
+        seatLimit: 10,
+        isOverLimit: true,
+        checkedAt: 1000,
+      },
+      freshnessMs: 60_000,
+    });
+
+    expect(result).toEqual({
       action: "block",
-      reason: "seat_check_pending",
+      reason: "seat_limit_exceeded",
     });
   });
 });

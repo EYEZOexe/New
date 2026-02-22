@@ -11,7 +11,7 @@ export type SeatSnapshotState = {
 };
 
 export type SeatGateDecision =
-  | { action: "allow"; reason: "enforcement_disabled" | "under_limit" }
+  | { action: "allow"; reason: "enforcement_disabled" | "under_limit" | "under_limit_stale" }
   | { action: "block"; reason: "seat_check_pending" | "seat_limit_exceeded" };
 
 const DEFAULT_FRESHNESS_MS = 90_000;
@@ -56,9 +56,15 @@ export function evaluateSeatGate(args: {
 
   const isFresh = args.now - snapshot.checkedAt <= freshnessMs;
   if (!isFresh) {
+    if (snapshot.isOverLimit || snapshot.seatsUsed > config.seatLimit) {
+      return {
+        action: "block",
+        reason: "seat_limit_exceeded",
+      };
+    }
     return {
-      action: "block",
-      reason: "seat_check_pending",
+      action: "allow",
+      reason: "under_limit_stale",
     };
   }
 
