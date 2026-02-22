@@ -66,6 +66,17 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_tenant_connector_guildId", ["tenantKey", "connectorId", "guildId"]),
 
+  discordBotGuilds: defineTable({
+    guildId: v.string(),
+    name: v.string(),
+    icon: v.optional(v.string()),
+    active: v.boolean(),
+    lastSeenAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_guildId", ["guildId"])
+    .index("by_active", ["active"]),
+
   discordChannels: defineTable({
     tenantKey: v.string(),
     connectorId: v.string(),

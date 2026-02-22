@@ -1,3 +1,4 @@
+import { ConvexBotPresenceClient } from "./convexBotPresenceClient";
 import { ConvexRoleSyncClient } from "./convexRoleSyncClient";
 import { ConvexSeatAuditClient } from "./convexSeatAuditClient";
 import { ConvexSignalMirrorClient } from "./convexSignalMirrorClient";
@@ -37,6 +38,10 @@ async function main() {
     workerId: config.workerId,
     claimLimit: config.seatAuditClaimLimit,
   });
+  const botPresenceClient = new ConvexBotPresenceClient({
+    convexUrl: config.convexUrl,
+    botToken: config.queueWakeBotToken,
+  });
   const mirrorManager = new DiscordSignalMirrorManager(roleManager.discordClient);
   const seatAuditManager = new DiscordSeatAuditManager(roleManager.discordClient);
 
@@ -44,7 +49,9 @@ async function main() {
   let drainInFlight = false;
   let scheduledDrain: ReturnType<typeof setTimeout> | null = null;
   let seatAuditTimer: ReturnType<typeof setInterval> | null = null;
+  let guildSyncTimer: ReturnType<typeof setInterval> | null = null;
   let seatAuditInFlight = false;
+  let guildSyncInFlight = false;
 
   const clearScheduledDrain = () => {
     if (scheduledDrain) {
@@ -259,6 +266,27 @@ async function main() {
     }
   };
 
+  const runGuildSyncTick = async () => {
+    if (shuttingDown || guildSyncInFlight) return;
+    guildSyncInFlight = true;
+    try {
+      const guilds = roleManager.discordClient.guilds.cache.map((guild) => ({
+        guildId: guild.id,
+        name: guild.name,
+        icon: guild.icon ?? undefined,
+      }));
+      const result = await botPresenceClient.syncGuilds(guilds);
+      logInfo(
+        `guild_sync total=${result.total} upserted=${result.upserted} deactivated=${result.deactivated}`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logError(`guild sync tick failed: ${message}`);
+    } finally {
+      guildSyncInFlight = false;
+    }
+  };
+
   const shutdown = async (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
@@ -266,6 +294,10 @@ async function main() {
     if (seatAuditTimer) {
       clearInterval(seatAuditTimer);
       seatAuditTimer = null;
+    }
+    if (guildSyncTimer) {
+      clearInterval(guildSyncTimer);
+      guildSyncTimer = null;
     }
     logInfo(`received ${signal}; shutting down`);
     await wakeClient.stop();
@@ -280,11 +312,20 @@ async function main() {
     logInfo(
       `discord ready user=${roleManager.discordClient.user?.tag ?? "unknown"} worker=${config.workerId}`,
     );
+    void runGuildSyncTick();
+  });
+  roleManager.discordClient.on("guildCreate", (guild) => {
+    logInfo(`guild join detected guild=${guild.id} name=${guild.name}`);
+    void runGuildSyncTick();
+  });
+  roleManager.discordClient.on("guildDelete", (guild) => {
+    logInfo(`guild leave detected guild=${guild.id} name=${guild.name}`);
+    void runGuildSyncTick();
   });
 
   await roleManager.login(config.discordBotToken);
   logInfo(
-    `worker started wake_fallback_min_ms=${config.queueWakeFallbackMinMs} wake_fallback_max_ms=${config.queueWakeFallbackMaxMs} role_claim_limit=${config.roleSyncClaimLimit} mirror_claim_limit=${config.mirrorClaimLimit} seat_audit_claim_limit=${config.seatAuditClaimLimit} seat_audit_poll_ms=${config.seatAuditPollIntervalMs}`,
+    `worker started wake_fallback_min_ms=${config.queueWakeFallbackMinMs} wake_fallback_max_ms=${config.queueWakeFallbackMaxMs} role_claim_limit=${config.roleSyncClaimLimit} mirror_claim_limit=${config.mirrorClaimLimit} seat_audit_claim_limit=${config.seatAuditClaimLimit} seat_audit_poll_ms=${config.seatAuditPollIntervalMs} guild_sync_poll_ms=${config.botGuildSyncIntervalMs}`,
   );
 
   wakeClient.start({
@@ -308,6 +349,9 @@ async function main() {
     void runSeatAuditTick();
   }, config.seatAuditPollIntervalMs);
   void runSeatAuditTick();
+  guildSyncTimer = setInterval(() => {
+    void runGuildSyncTick();
+  }, config.botGuildSyncIntervalMs);
 
   await runDrainLoop("startup");
 }

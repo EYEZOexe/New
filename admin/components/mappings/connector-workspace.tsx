@@ -310,7 +310,8 @@ export function ConnectorWorkspace({
     hasRouteParams ? { tenantKey, connectorId } : "skip",
   ) ?? [];
 
-  const [guildIdFilter, setGuildIdFilter] = useState<string>("");
+  const [sourceGuildFilterId, setSourceGuildFilterId] = useState<string>("");
+  const [targetGuildFilterId, setTargetGuildFilterId] = useState<string>("");
   const [newSourceGuildId, setNewSourceGuildId] = useState("");
   const [newSourceChannelId, setNewSourceChannelId] = useState("");
   const [newSourceIsSource, setNewSourceIsSource] = useState(true);
@@ -373,6 +374,10 @@ export function ConnectorWorkspace({
     () => new Map(allChannels.map((channel) => [channel.channelId, channel.name])),
     [allChannels],
   );
+  const guildIdByChannelId = useMemo(
+    () => new Map(sources.map((source) => [source.channelId, source.guildId])),
+    [sources],
+  );
 
   const availableChannels = useMemo(() => {
     const byChannelId = new Map<
@@ -398,19 +403,18 @@ export function ConnectorWorkspace({
     return rows;
   }, [sources, guildNameById, channelNameById]);
 
-  const mappingChannelOptions = useMemo(() => {
-    if (!guildIdFilter) return availableChannels;
-    return availableChannels.filter((channel) => channel.guildId === guildIdFilter);
-  }, [availableChannels, guildIdFilter]);
-
-  const mappingSourceOptions = useMemo(
-    () => mappingChannelOptions.filter((channel) => channel.isSource),
-    [mappingChannelOptions],
-  );
-  const mappingTargetOptions = useMemo(
-    () => mappingChannelOptions.filter((channel) => channel.isTarget),
-    [mappingChannelOptions],
-  );
+  const mappingSourceOptions = useMemo(() => {
+    const scoped = sourceGuildFilterId
+      ? availableChannels.filter((channel) => channel.guildId === sourceGuildFilterId)
+      : availableChannels;
+    return scoped.filter((channel) => channel.isSource);
+  }, [availableChannels, sourceGuildFilterId]);
+  const mappingTargetOptions = useMemo(() => {
+    const scoped = targetGuildFilterId
+      ? availableChannels.filter((channel) => channel.guildId === targetGuildFilterId)
+      : availableChannels;
+    return scoped.filter((channel) => channel.isTarget);
+  }, [availableChannels, targetGuildFilterId]);
 
   useEffect(() => {
     if (editingMappingSourceChannelId && newMappingSource === editingMappingSourceChannelId) return;
@@ -426,6 +430,21 @@ export function ConnectorWorkspace({
     newMappingSource,
     newMappingTarget,
     editingMappingSourceChannelId,
+  ]);
+
+  useEffect(() => {
+    if (!hasRouteParams) return;
+    console.info(
+      `[admin/connectors] mapping route split tenant=${tenantKey} connector=${connectorId} source_filter=${sourceGuildFilterId || "all"} target_filter=${targetGuildFilterId || "all"} source_options=${mappingSourceOptions.length} target_options=${mappingTargetOptions.length}`,
+    );
+  }, [
+    hasRouteParams,
+    tenantKey,
+    connectorId,
+    sourceGuildFilterId,
+    targetGuildFilterId,
+    mappingSourceOptions.length,
+    mappingTargetOptions.length,
   ]);
 
   useEffect(() => {
@@ -456,6 +475,12 @@ export function ConnectorWorkspace({
 
   function renderChannelLabel(channelId: string) {
     return `${channelNameById.get(channelId) ?? "Unknown channel"} (${channelId})`;
+  }
+
+  function renderChannelRouteLabel(channelId: string) {
+    const guildId = guildIdByChannelId.get(channelId);
+    if (!guildId) return renderChannelLabel(channelId);
+    return `${renderGuildLabel(guildId)} / ${renderChannelLabel(channelId)}`;
   }
 
   function renderLatency(value: number | null) {
@@ -863,13 +888,13 @@ export function ConnectorWorkspace({
         )}
       </AdminSectionCard>
 
-      <div className="grid gap-8 lg:grid-cols-2">
+      <div className="space-y-8">
         <div>
-          <AdminSectionCard title="Available Channels">
+          <AdminSectionCard title="Channel Registry (Plugin Source + Bot Target)">
             <div className="admin-surface-soft">
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="admin-label">
-                  Guild
+                  Guild (plugin-discovered)
                   <select
                     className="admin-input"
                     value={newSourceGuildId}
@@ -884,7 +909,7 @@ export function ConnectorWorkspace({
                   </select>
                 </label>
                 <label className="admin-label">
-                  Channel
+                  Channel (from selected plugin guild)
                   <select
                     className="admin-input"
                     value={newSourceChannelId}
@@ -960,6 +985,8 @@ export function ConnectorWorkspace({
                 Guilds sync automatically from the plugin. Select a guild, click{" "}
                 <strong>Fetch channels</strong>, pick a channel, and save it as available.
                 Mark whether the channel is usable as a source, target, or both.
+                Source=true means plugin ingest can read this channel.
+                Target=true means bot mirror mappings can route into this channel.
                 {lastDiscoveryRequestVersion
                   ? ` Last fetch request: v${lastDiscoveryRequestVersion}.`
                   : ""}
@@ -973,16 +1000,16 @@ export function ConnectorWorkspace({
           </AdminSectionCard>
 
           <AdminTableShell
-            title="Configured available channels"
+            title="Configured channel registry"
             isEmpty={sources.length === 0}
             emptyMessage="No available channels yet."
-            tableClassName="max-h-[26rem] overflow-auto"
+            tableClassName="overflow-x-auto"
           >
-            <table className="w-full text-left text-sm">
+            <table className="w-full table-auto text-left text-sm">
               <thead className="sticky top-0 z-10 bg-slate-900 text-xs font-semibold text-slate-300">
                 <tr>
-                  <th className="px-3 py-2">Guild</th>
-                  <th className="px-3 py-2">Available Channel</th>
+                  <th className="px-3 py-2">Plugin guild</th>
+                  <th className="px-3 py-2">Channel</th>
                   <th className="px-3 py-2">Thread</th>
                   <th className="px-3 py-2">Enabled</th>
                   <th className="px-3 py-2">Source</th>
@@ -993,8 +1020,8 @@ export function ConnectorWorkspace({
               <tbody className="divide-y divide-slate-800 bg-slate-950/40 text-slate-200">
                 {sources.map((s) => (
                   <tr key={s._id}>
-                    <td className="px-3 py-2">{renderGuildLabel(s.guildId)}</td>
-                    <td className="px-3 py-2">{renderChannelLabel(s.channelId)}</td>
+                    <td className="px-3 py-2 align-top">{renderGuildLabel(s.guildId)}</td>
+                    <td className="px-3 py-2 align-top break-all">{renderChannelLabel(s.channelId)}</td>
                     <td className="px-3 py-2">{s.threadMode ?? "-"}</td>
                     <td className="px-3 py-2">{s.isEnabled ? "yes" : "no"}</td>
                     <td className="px-3 py-2">{(s.isSource ?? true) ? "yes" : "no"}</td>
@@ -1041,27 +1068,44 @@ export function ConnectorWorkspace({
         </div>
 
         <div>
-          <AdminSectionCard title="Mirror Mappings">
+          <AdminSectionCard title="Source (Plugin) -> Target (Bot) Mappings">
             <div className="admin-surface-soft">
-              <label className="admin-label">
-                Filter available channels by guild (optional)
-                <select
-                  className="admin-input mt-1"
-                  value={guildIdFilter}
-                  onChange={(e) => setGuildIdFilter(e.target.value)}
-                >
-                  <option value="">All guilds</option>
-                  {guilds.map((g) => (
-                    <option key={g._id} value={g.guildId}>
-                      {g.name} ({g.guildId})
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="admin-label">
+                  Source guild filter (plugin)
+                  <select
+                    className="admin-input mt-1"
+                    value={sourceGuildFilterId}
+                    onChange={(e) => setSourceGuildFilterId(e.target.value)}
+                  >
+                    <option value="">All source guilds</option>
+                    {guilds.map((g) => (
+                      <option key={`src-guild-${g._id}`} value={g.guildId}>
+                        {g.name} ({g.guildId})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="admin-label">
+                  Target guild filter (bot)
+                  <select
+                    className="admin-input mt-1"
+                    value={targetGuildFilterId}
+                    onChange={(e) => setTargetGuildFilterId(e.target.value)}
+                  >
+                    <option value="">All target guilds</option>
+                    {guilds.map((g) => (
+                      <option key={`dst-guild-${g._id}`} value={g.guildId}>
+                        {g.name} ({g.guildId})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
 
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <label className="admin-label">
-                  Source (available channel)
+                  Source channel (plugin ingest)
                   <select
                     className="admin-input"
                     value={newMappingSource}
@@ -1070,13 +1114,13 @@ export function ConnectorWorkspace({
                     <option value="">Select source</option>
                     {mappingSourceOptions.map((channel) => (
                       <option key={`src-${channel.channelId}`} value={channel.channelId}>
-                        {renderChannelLabel(channel.channelId)}
+                        {renderGuildLabel(channel.guildId)} / {renderChannelLabel(channel.channelId)}
                       </option>
                     ))}
                   </select>
                 </label>
                 <label className="admin-label">
-                  Target (available channel)
+                  Target channel (bot mirror)
                   <select
                     className="admin-input"
                     value={newMappingTarget}
@@ -1085,7 +1129,7 @@ export function ConnectorWorkspace({
                     <option value="">Select target</option>
                     {mappingTargetOptions.map((channel) => (
                       <option key={`dst-${channel.channelId}`} value={channel.channelId}>
-                        {renderChannelLabel(channel.channelId)}
+                        {renderGuildLabel(channel.guildId)} / {renderChannelLabel(channel.channelId)}
                       </option>
                     ))}
                   </select>
@@ -1097,11 +1141,11 @@ export function ConnectorWorkspace({
                 </p>
               ) : mappingSourceOptions.length === 0 || mappingTargetOptions.length === 0 ? (
                 <p className="mt-3 text-xs text-slate-400">
-                  Mark at least one available channel as source and one as target to create mappings.
+                  Mark at least one channel as source and one as target to create routes.
                 </p>
               ) : null}
               <p className="mt-3 text-xs text-slate-400">
-                These mappings define which target channels the bot mirrors to when connector mirroring is enabled.
+                These routes define how plugin source channels map to bot target channels.
                 Dashboard visibility is hidden by default until explicitly enabled with a minimum tier.
                 {editingMappingSourceChannelId
                   ? " Editing keeps this row in place and updates it directly."
@@ -1156,16 +1200,16 @@ export function ConnectorWorkspace({
           </AdminSectionCard>
 
           <AdminTableShell
-            title="Configured mirror mappings"
+            title="Configured source->target routes"
             isEmpty={mappings.length === 0}
             emptyMessage="No mappings yet."
-            tableClassName="max-h-[26rem] overflow-auto"
+            tableClassName="overflow-x-auto"
           >
-            <table className="w-full text-left text-sm">
+            <table className="w-full table-auto text-left text-sm">
               <thead className="sticky top-0 z-10 bg-slate-900 text-xs font-semibold text-slate-300">
                 <tr>
-                  <th className="px-3 py-2">Source (available)</th>
-                  <th className="px-3 py-2">Target (available)</th>
+                  <th className="px-3 py-2">Source (plugin)</th>
+                  <th className="px-3 py-2">Target (bot)</th>
                   <th className="px-3 py-2">Dashboard</th>
                   <th className="px-3 py-2">Min tier</th>
                   <th className="px-3 py-2">Priority</th>
@@ -1175,8 +1219,8 @@ export function ConnectorWorkspace({
               <tbody className="divide-y divide-slate-800 bg-slate-950/40 text-slate-200">
                 {mappings.map((m) => (
                   <tr key={m._id}>
-                    <td className="px-3 py-2">{renderChannelLabel(m.sourceChannelId)}</td>
-                    <td className="px-3 py-2">{renderChannelLabel(m.targetChannelId)}</td>
+                    <td className="px-3 py-2 align-top break-all">{renderChannelRouteLabel(m.sourceChannelId)}</td>
+                    <td className="px-3 py-2 align-top break-all">{renderChannelRouteLabel(m.targetChannelId)}</td>
                     <td className="px-3 py-2">
                       {m.dashboardEnabled === true ? (
                         <span className="rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-300">
@@ -1235,7 +1279,7 @@ export function ConnectorWorkspace({
             title="Recent Mirror Jobs"
             isEmpty={mirrorJobs.length === 0}
             emptyMessage="No mirror jobs yet."
-            tableClassName="max-h-[32rem] overflow-auto"
+            tableClassName="overflow-x-auto"
           >
             <table className="w-full text-left text-sm">
               <thead className="sticky top-0 z-10 bg-slate-900 text-xs font-semibold text-slate-300">

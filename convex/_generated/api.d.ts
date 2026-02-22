@@ -14,6 +14,7 @@ import type * as connectorsAuth from "../connectorsAuth.js";
 import type * as connectorsInternal from "../connectorsInternal.js";
 import type * as crons from "../crons.js";
 import type * as discord from "../discord.js";
+import type * as discordBotPresence from "../discordBotPresence.js";
 import type * as discordRoleConfig from "../discordRoleConfig.js";
 import type * as discordSeatAudit from "../discordSeatAudit.js";
 import type * as discordServerConfig from "../discordServerConfig.js";
@@ -58,6 +59,7 @@ declare const fullApi: ApiFromModules<{
   connectorsInternal: typeof connectorsInternal;
   crons: typeof crons;
   discord: typeof discord;
+  discordBotPresence: typeof discordBotPresence;
   discordRoleConfig: typeof discordRoleConfig;
   discordSeatAudit: typeof discordSeatAudit;
   discordServerConfig: typeof discordServerConfig;

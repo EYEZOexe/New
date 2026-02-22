@@ -95,6 +95,105 @@ export const listMappings = query({
   },
 });
 
+export const listMappingsForGuild = query({
+  args: {
+    tenantKey: v.string(),
+    connectorId: v.string(),
+    guildId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const guildId = args.guildId.trim();
+    if (!guildId) return [];
+
+    const [mappings, sources, discoveredGuilds] = await Promise.all([
+      ctx.db
+        .query("connectorMappings")
+        .withIndex("by_tenant_connectorId", (q) =>
+          q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+        )
+        .collect(),
+      ctx.db
+        .query("connectorSources")
+        .withIndex("by_tenant_connectorId", (q) =>
+          q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+        )
+        .collect(),
+      ctx.db
+        .query("discordGuilds")
+        .withIndex("by_tenant_connector_guildId", (q) =>
+          q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+        )
+        .collect(),
+    ]);
+
+    const discoveredGuildNameById = new Map(
+      discoveredGuilds.map((row) => [row.guildId.trim(), row.name]),
+    );
+    const guildByChannelId = new Map(
+      sources.map((source) => [source.channelId.trim(), source.guildId.trim()]),
+    );
+    const filtered = mappings
+      .filter((mapping) => guildByChannelId.get(mapping.targetChannelId.trim()) === guildId)
+      .map((mapping) => ({
+        sourceChannelId: mapping.sourceChannelId.trim(),
+        targetChannelId: mapping.targetChannelId.trim(),
+        sourceGuildId: guildByChannelId.get(mapping.sourceChannelId.trim()) ?? null,
+        targetGuildId: guildByChannelId.get(mapping.targetChannelId.trim()) ?? null,
+        priority: mapping.priority ?? null,
+      }));
+
+    const uniqueChannelIds = new Set<string>();
+    for (const mapping of filtered) {
+      uniqueChannelIds.add(mapping.sourceChannelId);
+      uniqueChannelIds.add(mapping.targetChannelId);
+    }
+    const channelRows = await Promise.all(
+      Array.from(uniqueChannelIds.values()).map((channelId) =>
+        ctx.db
+          .query("discordChannels")
+          .withIndex("by_tenant_connector_channelId", (q) =>
+            q
+              .eq("tenantKey", args.tenantKey)
+              .eq("connectorId", args.connectorId)
+              .eq("channelId", channelId),
+          )
+          .first(),
+      ),
+    );
+    const channelNameById = new Map(
+      channelRows
+        .filter((channel): channel is NonNullable<typeof channel> => channel !== null)
+        .map((channel) => [channel.channelId, channel.name]),
+    );
+    const rows = filtered.map((mapping) => ({
+      sourceChannelId: mapping.sourceChannelId,
+      targetChannelId: mapping.targetChannelId,
+      sourceGuildId: mapping.sourceGuildId,
+      targetGuildId: mapping.targetGuildId,
+      sourceGuildName:
+        mapping.sourceGuildId === null
+          ? null
+          : (discoveredGuildNameById.get(mapping.sourceGuildId) ?? null),
+      targetGuildName:
+        mapping.targetGuildId === null
+          ? null
+          : (discoveredGuildNameById.get(mapping.targetGuildId) ?? null),
+      sourceChannelName: channelNameById.get(mapping.sourceChannelId) ?? null,
+      targetChannelName: channelNameById.get(mapping.targetChannelId) ?? null,
+      priority: mapping.priority,
+    }));
+
+    rows.sort((a, b) => {
+      const byPriority = (b.priority ?? 0) - (a.priority ?? 0);
+      if (byPriority !== 0) return byPriority;
+      return `${a.sourceChannelId}:${a.targetChannelId}`.localeCompare(
+        `${b.sourceChannelId}:${b.targetChannelId}`,
+      );
+    });
+    return rows;
+  },
+});
+
 export const rotateConnectorToken = mutation({
   args: {
     tenantKey: v.string(),

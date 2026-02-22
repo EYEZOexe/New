@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { makeFunctionReference } from "convex/server";
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
@@ -31,10 +32,31 @@ type ConnectorRow = {
   status: "active" | "paused";
 };
 
-type GuildRow = {
+type BotGuildRow = {
+  guildId: string;
+  name: string;
+  active: boolean;
+  icon: string | null;
+  lastSeenAt: number;
+  updatedAt: number;
+};
+
+type SourceGuildRow = {
   _id: string;
   guildId: string;
   name: string;
+};
+
+type GuildMappingRow = {
+  sourceChannelId: string;
+  targetChannelId: string;
+  sourceGuildId: string | null;
+  targetGuildId: string | null;
+  sourceGuildName: string | null;
+  targetGuildName: string | null;
+  sourceChannelName: string | null;
+  targetChannelName: string | null;
+  priority: number | null;
 };
 
 type ServerConfigRow = {
@@ -137,13 +159,31 @@ export function RoleConfigPanel({ breadcrumbs }: RoleConfigPanelProps) {
     () => makeFunctionReference<"query", {}, ConnectorRow[]>("connectors:listConnectors"),
     [],
   );
-  const listGuildsRef = useMemo(
+  const listBotGuildsRef = useMemo(
+    () =>
+      makeFunctionReference<
+        "query",
+        { includeInactive?: boolean },
+        BotGuildRow[]
+      >("discordBotPresence:listBotGuilds"),
+    [],
+  );
+  const listSourceGuildsRef = useMemo(
     () =>
       makeFunctionReference<
         "query",
         { tenantKey: string; connectorId: string },
-        GuildRow[]
+        SourceGuildRow[]
       >("discovery:listGuilds"),
+    [],
+  );
+  const listMappingsForGuildRef = useMemo(
+    () =>
+      makeFunctionReference<
+        "query",
+        { tenantKey: string; connectorId: string; guildId: string },
+        GuildMappingRow[]
+      >("connectors:listMappingsForGuild"),
     [],
   );
   const listServerConfigsByConnectorRef = useMemo(
@@ -236,8 +276,19 @@ export function RoleConfigPanel({ breadcrumbs }: RoleConfigPanelProps) {
   const connectorArgs = hasConnectorSelection
     ? { tenantKey: selectedTenantKey, connectorId: selectedConnectorId }
     : "skip";
-  const guilds = useQuery(listGuildsRef, connectorArgs) ?? [];
+  const guilds = useQuery(listBotGuildsRef, {}) ?? [];
+  const sourceGuilds = useQuery(listSourceGuildsRef, connectorArgs) ?? [];
   const serverConfigs = useQuery(listServerConfigsByConnectorRef, connectorArgs) ?? [];
+  const mappedChannels = useQuery(
+    listMappingsForGuildRef,
+    hasConnectorSelection && selectedGuildId.trim()
+      ? {
+          tenantKey: selectedTenantKey,
+          connectorId: selectedConnectorId,
+          guildId: selectedGuildId,
+        }
+      : "skip",
+  ) ?? [];
   const seatSnapshot = useQuery(
     getServerSeatSnapshotRef,
     hasConnectorSelection && selectedGuildId.trim()
@@ -248,12 +299,30 @@ export function RoleConfigPanel({ breadcrumbs }: RoleConfigPanelProps) {
         }
       : "skip",
   );
+  const selectedGuild = guilds.find((guild) => guild.guildId === selectedGuildId) ?? null;
+  const mappingsWorkspaceHref =
+    hasConnectorSelection && selectedTenantKey && selectedConnectorId
+      ? `/mappings/${encodeURIComponent(selectedTenantKey)}/${encodeURIComponent(selectedConnectorId)}`
+      : "/mappings";
 
   useEffect(() => {
     if (!mappings) return;
     setDrafts(toDraftState(mappings));
     console.info(`[admin/discord-bot] mappings loaded count=${mappings.length}`);
   }, [mappings]);
+
+  useEffect(() => {
+    if (!hasConnectorSelection) return;
+    console.info(
+      `[admin/discord-bot] source_target_domain_state tenant=${selectedTenantKey} connector=${selectedConnectorId} source_guilds=${sourceGuilds.length} target_guilds=${guilds.length}`,
+    );
+  }, [
+    hasConnectorSelection,
+    selectedTenantKey,
+    selectedConnectorId,
+    sourceGuilds.length,
+    guilds.length,
+  ]);
 
   useEffect(() => {
     if (!connectors || connectors.length === 0) return;
@@ -506,7 +575,7 @@ export function RoleConfigPanel({ breadcrumbs }: RoleConfigPanelProps) {
           </label>
 
           <label className="admin-label">
-            Discord Guild
+            Target Discord Guild (Bot)
             <select
               value={selectedGuildId}
               onChange={(event) => setSelectedGuildId(event.target.value)}
@@ -514,12 +583,57 @@ export function RoleConfigPanel({ breadcrumbs }: RoleConfigPanelProps) {
             >
               <option value="">Select guild</option>
               {guilds.map((guild) => (
-                <option key={guild._id} value={guild.guildId}>
-                  {guild.name} ({guild.guildId})
+                <option key={guild.guildId} value={guild.guildId}>
+                  {guild.name} ({guild.guildId}){guild.active ? "" : " [inactive]"}
                 </option>
               ))}
             </select>
           </label>
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <div className="rounded-md border border-slate-800 bg-slate-950/40 p-3">
+            <p className="text-xs font-semibold text-slate-200">
+              Source domain (Vencord plugin discovery)
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              Source guilds/channels are discovered from the plugin and belong to the selected
+              connector.
+            </p>
+            <p className="mt-2 text-xs text-slate-300">
+              Source guilds discovered: <strong>{sourceGuilds.length}</strong>
+            </p>
+            {sourceGuilds.length === 0 ? (
+              <p className="mt-1 text-xs text-slate-500">
+                No source guilds discovered yet. Use the plugin to sync guild metadata.
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-slate-400">
+                {sourceGuilds
+                  .slice(0, 3)
+                  .map((guild) => `${guild.name} (${guild.guildId})`)
+                  .join(", ")}
+                {sourceGuilds.length > 3 ? ` +${sourceGuilds.length - 3} more` : ""}
+              </p>
+            )}
+          </div>
+          <div className="rounded-md border border-cyan-900/50 bg-cyan-950/20 p-3">
+            <p className="text-xs font-semibold text-cyan-200">
+              Target domain (Discord bot presence)
+            </p>
+            <p className="mt-1 text-xs text-cyan-100/80">
+              Target guilds/channels are where the bot delivers mirrored messages and where seat
+              + tier-role enforcement applies.
+            </p>
+            <p className="mt-2 text-xs text-cyan-100/80">
+              Bot guilds detected: <strong>{guilds.length}</strong>
+            </p>
+            <p className="mt-1 text-xs text-cyan-100/70">
+              Selected target guild:{" "}
+              <strong>
+                {selectedGuild ? `${selectedGuild.name} (${selectedGuild.guildId})` : "none"}
+              </strong>
+            </p>
+          </div>
         </div>
 
         <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -572,6 +686,69 @@ export function RoleConfigPanel({ breadcrumbs }: RoleConfigPanelProps) {
               placeholder="role id"
             />
           </label>
+        </div>
+
+        <div className="mt-4 rounded-md border border-slate-800 bg-slate-950/40 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-slate-200">
+              Route preview: Source (Plugin) {"->"} Target (Bot Guild)
+            </p>
+            <Link href={mappingsWorkspaceHref} className="admin-link text-xs">
+              Open channel mappings workspace
+            </Link>
+          </div>
+          {selectedGuildId ? (
+            <div className="mt-2 space-y-2">
+              <p className="text-xs text-slate-400">
+                Selected target guild:{" "}
+                <strong className="text-slate-200">
+                  {selectedGuild?.name ?? "Unknown guild"} ({selectedGuildId})
+                </strong>
+              </p>
+              {mappedChannels.length === 0 ? (
+                <p className="text-xs text-slate-400">
+                  No source{"->"}target mappings found for this target guild in the selected connector.
+                  Configure sources and mappings in the workspace link above.
+                </p>
+              ) : (
+                <div className="max-h-56 overflow-auto rounded-md border border-slate-800">
+                  <table className="w-full text-left text-xs">
+                    <thead className="sticky top-0 bg-slate-900 text-slate-300">
+                      <tr>
+                        <th className="px-2 py-2">Source guild (plugin)</th>
+                        <th className="px-2 py-2">Source channel (plugin)</th>
+                        <th className="px-2 py-2">Target channel (bot)</th>
+                        <th className="px-2 py-2">Priority</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 bg-slate-950/40 text-slate-200">
+                      {mappedChannels.map((mapping) => (
+                        <tr
+                          key={`${mapping.sourceChannelId}:${mapping.targetChannelId}`}
+                        >
+                          <td className="px-2 py-2">
+                            {mapping.sourceGuildName ?? "Unknown guild"} (
+                            {mapping.sourceGuildId ?? "n/a"})
+                          </td>
+                          <td className="px-2 py-2">
+                            {mapping.sourceChannelName ?? "Unknown"} ({mapping.sourceChannelId})
+                          </td>
+                          <td className="px-2 py-2">
+                            {mapping.targetChannelName ?? "Unknown"} ({mapping.targetChannelId})
+                          </td>
+                          <td className="px-2 py-2">{mapping.priority ?? "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="mt-2 text-xs text-slate-400">
+              Select a guild to inspect which signal channels are mapped.
+            </p>
+          )}
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-3">

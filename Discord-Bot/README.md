@@ -18,12 +18,14 @@ ROLE_SYNC_CLAIM_LIMIT=5
 MIRROR_CLAIM_LIMIT=10
 SEAT_AUDIT_CLAIM_LIMIT=3
 SEAT_AUDIT_POLL_INTERVAL_MS=30000
+BOT_GUILD_SYNC_INTERVAL_MS=60000
 ```
 
 Notes:
 - `ROLE_SYNC_BOT_TOKEN` must match the same value configured in Convex backend env.
 - `MIRROR_BOT_TOKEN` is optional. If omitted in both Convex and bot env, the worker falls back to `ROLE_SYNC_BOT_TOKEN` for mirror queue auth.
 - `SEAT_AUDIT_POLL_INTERVAL_MS` controls how often the seat-audit worker checks for scheduled seat refresh jobs.
+- `BOT_GUILD_SYNC_INTERVAL_MS` controls how often the bot syncs the guilds it is currently in to Convex for admin guild selection.
 - Bot account needs `Manage Roles` permission in the customer guild.
 - Bot account needs message send/edit/delete permissions in target mirror channels.
 - Bot role must be above all customer tier roles in Discord role hierarchy.

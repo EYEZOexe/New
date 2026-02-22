@@ -11,6 +11,7 @@ export type BotConfig = {
   mirrorClaimLimit: number;
   seatAuditClaimLimit: number;
   seatAuditPollIntervalMs: number;
+  botGuildSyncIntervalMs: number;
 };
 
 function requiredEnv(name: string): string {
@@ -76,6 +77,10 @@ export function loadBotConfig(): BotConfig {
     seatAuditPollIntervalMs: parseIntEnv("SEAT_AUDIT_POLL_INTERVAL_MS", 30_000, {
       min: 5_000,
       max: 300_000,
+    }),
+    botGuildSyncIntervalMs: parseIntEnv("BOT_GUILD_SYNC_INTERVAL_MS", 60_000, {
+      min: 10_000,
+      max: 900_000,
     }),
   };
 }
