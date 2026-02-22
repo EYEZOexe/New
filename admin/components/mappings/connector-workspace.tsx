@@ -40,8 +40,27 @@ type MappingRow = {
 
 type SubscriptionTier = "basic" | "advanced" | "pro";
 
-type GuildRow = { _id: string; guildId: string; name: string };
-type ChannelRow = { _id: string; channelId: string; guildId: string; name: string };
+type SourceGuildRow = { _id: string; guildId: string; name: string };
+type SourceChannelRow = { _id: string; channelId: string; guildId: string; name: string };
+type BotGuildRow = {
+  guildId: string;
+  name: string;
+  icon: string | null;
+  active: boolean;
+  lastSeenAt: number;
+  updatedAt: number;
+};
+type BotChannelRow = {
+  guildId: string;
+  channelId: string;
+  name: string;
+  type: number | null;
+  parentId: string | null;
+  position: number | null;
+  active: boolean;
+  lastSeenAt: number;
+  updatedAt: number;
+};
 type MirrorRuntimeStatusRow = {
   hasMirrorBotToken: boolean;
   usesDedicatedMirrorToken: boolean;
@@ -136,22 +155,40 @@ export function ConnectorWorkspace({
       >("connectors:listMappings"),
     [],
   );
-  const listGuilds = useMemo(
+  const listSourceGuilds = useMemo(
     () =>
       makeFunctionReference<
         "query",
         { tenantKey: string; connectorId: string },
-        GuildRow[]
+        SourceGuildRow[]
       >("discovery:listGuilds"),
     [],
   );
-  const listChannels = useMemo(
+  const listSourceChannels = useMemo(
     () =>
       makeFunctionReference<
         "query",
         { tenantKey: string; connectorId: string; guildId?: string },
-        ChannelRow[]
+        SourceChannelRow[]
       >("discovery:listChannels"),
+    [],
+  );
+  const listBotGuilds = useMemo(
+    () =>
+      makeFunctionReference<
+        "query",
+        { includeInactive?: boolean },
+        BotGuildRow[]
+      >("discordBotPresence:listBotGuilds"),
+    [],
+  );
+  const listBotGuildChannels = useMemo(
+    () =>
+      makeFunctionReference<
+        "query",
+        { guildId?: string; includeInactive?: boolean },
+        BotChannelRow[]
+      >("discordBotPresence:listBotGuildChannels"),
     [],
   );
 
@@ -294,7 +331,12 @@ export function ConnectorWorkspace({
   const connector = useQuery(getConnector, connectorArgs);
   const sources = useQuery(listSources, connectorArgs) ?? [];
   const mappings = useQuery(listMappings, connectorArgs) ?? [];
-  const guilds = useQuery(listGuilds, connectorArgs) ?? [];
+  const sourceGuilds = useQuery(listSourceGuilds, connectorArgs) ?? [];
+  const botGuilds = useQuery(listBotGuilds, {}) ?? [];
+  const botChannels = useQuery(
+    listBotGuildChannels,
+    hasRouteParams ? { includeInactive: false } : "skip",
+  ) ?? [];
   const mirrorRuntime = useQuery(getMirrorRuntimeStatus, {});
   const mirrorQueueStats = useQuery(getMirrorQueueStats, connectorArgs);
   const mirrorLatencyStats = useQuery(
@@ -315,21 +357,26 @@ export function ConnectorWorkspace({
   const [newSourceGuildId, setNewSourceGuildId] = useState("");
   const [newSourceChannelId, setNewSourceChannelId] = useState("");
   const [newSourceIsSource, setNewSourceIsSource] = useState(true);
-  const [newSourceIsTarget, setNewSourceIsTarget] = useState(true);
+  const [newSourceIsTarget, setNewSourceIsTarget] = useState(false);
   const [newSourceThreadMode, setNewSourceThreadMode] = useState("");
   const [newSourceEnabled, setNewSourceEnabled] = useState(true);
   const [editingSourceChannelId, setEditingSourceChannelId] = useState<string | null>(null);
   const [sourceFormMessage, setSourceFormMessage] = useState<string | null>(null);
   const [sourceFormError, setSourceFormError] = useState<string | null>(null);
+  const [newTargetGuildId, setNewTargetGuildId] = useState("");
+  const [newTargetChannelId, setNewTargetChannelId] = useState("");
+  const [targetFormMessage, setTargetFormMessage] = useState<string | null>(null);
+  const [targetFormError, setTargetFormError] = useState<string | null>(null);
+  const [targetFormSaving, setTargetFormSaving] = useState(false);
 
   const sourceChannelsArgs = !hasRouteParams
     ? "skip"
     : newSourceGuildId
       ? { tenantKey, connectorId, guildId: newSourceGuildId }
       : { tenantKey, connectorId };
-  const sourceChannels = useQuery(listChannels, sourceChannelsArgs) ?? [];
+  const sourceChannels = useQuery(listSourceChannels, sourceChannelsArgs) ?? [];
 
-  const allChannels = useQuery(listChannels, connectorArgs) ?? [];
+  const allChannels = useQuery(listSourceChannels, connectorArgs) ?? [];
 
   const doRotate = useMutation(rotateConnectorToken);
   const doSetStatus = useMutation(setStatus);
@@ -366,17 +413,68 @@ export function ConnectorWorkspace({
     }
   }, [newSourceGuildId, newSourceChannelId, sourceChannels, editingSourceChannelId]);
 
-  const guildNameById = useMemo(
-    () => new Map(guilds.map((guild) => [guild.guildId, guild.name])),
-    [guilds],
-  );
-  const channelNameById = useMemo(
-    () => new Map(allChannels.map((channel) => [channel.channelId, channel.name])),
-    [allChannels],
-  );
-  const guildIdByChannelId = useMemo(
-    () => new Map(sources.map((source) => [source.channelId, source.guildId])),
-    [sources],
+  useEffect(() => {
+    if (botGuilds.length === 0) {
+      setNewTargetGuildId("");
+      return;
+    }
+    const exists = botGuilds.some((guild) => guild.guildId === newTargetGuildId);
+    if (!exists) {
+      setNewTargetGuildId(botGuilds[0].guildId);
+    }
+  }, [botGuilds, newTargetGuildId]);
+
+  useEffect(() => {
+    if (!newTargetGuildId || !newTargetChannelId) return;
+    const exists = botChannels.some(
+      (channel) =>
+        channel.guildId === newTargetGuildId &&
+        channel.channelId === newTargetChannelId,
+    );
+    if (!exists) {
+      setNewTargetChannelId("");
+    }
+  }, [newTargetGuildId, newTargetChannelId, botChannels]);
+
+  const guildNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const guild of sourceGuilds) {
+      map.set(guild.guildId, guild.name);
+    }
+    for (const guild of botGuilds) {
+      if (!map.has(guild.guildId)) {
+        map.set(guild.guildId, guild.name);
+      }
+    }
+    return map;
+  }, [sourceGuilds, botGuilds]);
+  const channelNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const channel of allChannels) {
+      map.set(channel.channelId, channel.name);
+    }
+    for (const channel of botChannels) {
+      if (!map.has(channel.channelId)) {
+        map.set(channel.channelId, channel.name);
+      }
+    }
+    return map;
+  }, [allChannels, botChannels]);
+  const guildIdByChannelId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const source of sources) {
+      map.set(source.channelId, source.guildId);
+    }
+    for (const channel of botChannels) {
+      if (!map.has(channel.channelId)) {
+        map.set(channel.channelId, channel.guildId);
+      }
+    }
+    return map;
+  }, [sources, botChannels]);
+  const botChannelById = useMemo(
+    () => new Map(botChannels.map((channel) => [channel.channelId, channel])),
+    [botChannels],
   );
 
   const availableChannels = useMemo(() => {
@@ -410,11 +508,17 @@ export function ConnectorWorkspace({
     return scoped.filter((channel) => channel.isSource);
   }, [availableChannels, sourceGuildFilterId]);
   const mappingTargetOptions = useMemo(() => {
-    const scoped = targetGuildFilterId
-      ? availableChannels.filter((channel) => channel.guildId === targetGuildFilterId)
-      : availableChannels;
-    return scoped.filter((channel) => channel.isTarget);
-  }, [availableChannels, targetGuildFilterId]);
+    return targetGuildFilterId
+      ? botChannels.filter((channel) => channel.guildId === targetGuildFilterId)
+      : botChannels;
+  }, [botChannels, targetGuildFilterId]);
+  const wizardTargetChannels = useMemo(
+    () =>
+      newTargetGuildId
+        ? botChannels.filter((channel) => channel.guildId === newTargetGuildId)
+        : [],
+    [botChannels, newTargetGuildId],
+  );
 
   useEffect(() => {
     if (editingMappingSourceChannelId && newMappingSource === editingMappingSourceChannelId) return;
@@ -498,7 +602,7 @@ export function ConnectorWorkspace({
     setNewSourceGuildId("");
     setNewSourceChannelId("");
     setNewSourceIsSource(true);
-    setNewSourceIsTarget(true);
+    setNewSourceIsTarget(false);
     setNewSourceThreadMode("");
     setNewSourceEnabled(true);
   }
@@ -508,7 +612,7 @@ export function ConnectorWorkspace({
     setNewSourceGuildId(source.guildId);
     setNewSourceChannelId(source.channelId);
     setNewSourceIsSource(source.isSource ?? true);
-    setNewSourceIsTarget(source.isTarget ?? true);
+    setNewSourceIsTarget(source.isTarget ?? false);
     setNewSourceThreadMode(source.threadMode ?? "");
     setNewSourceEnabled(source.isEnabled);
     setSourceFormMessage(null);
@@ -657,6 +761,37 @@ export function ConnectorWorkspace({
     }
   }
 
+  async function onAddTargetChannel() {
+    if (!hasRouteParams || !newTargetGuildId || !newTargetChannelId) return;
+    setTargetFormMessage(null);
+    setTargetFormError(null);
+    setTargetFormSaving(true);
+    try {
+      await doUpsertSource({
+        tenantKey,
+        connectorId,
+        guildId: newTargetGuildId,
+        channelId: newTargetChannelId,
+        isSource: false,
+        isTarget: true,
+        isEnabled: true,
+      });
+      setTargetFormMessage(
+        `Registered bot target channel ${renderChannelRouteLabel(newTargetChannelId)}.`,
+      );
+      console.info(
+        `[admin/connectors] target channel registered tenant=${tenantKey} connector=${connectorId} guild=${newTargetGuildId} channel=${newTargetChannelId}`,
+      );
+      setNewTargetChannelId("");
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Failed to register target channel";
+      setTargetFormError(text);
+      console.error(`[admin/connectors] target channel register failed: ${text}`);
+    } finally {
+      setTargetFormSaving(false);
+    }
+  }
+
   async function onSubmitMapping() {
     if (!hasRouteParams || !newMappingSource || !newMappingTarget) return;
     setMappingFormMessage(null);
@@ -666,6 +801,21 @@ export function ConnectorWorkspace({
         ? undefined
         : Number(newMappingPriority.trim());
     try {
+      const targetChannel = botChannelById.get(newMappingTarget);
+      const fallbackTargetGuildId = guildIdByChannelId.get(newMappingTarget);
+      const targetGuildId = targetChannel?.guildId ?? fallbackTargetGuildId;
+      if (targetGuildId) {
+        await doUpsertSource({
+          tenantKey,
+          connectorId,
+          guildId: targetGuildId,
+          channelId: newMappingTarget,
+          isSource: false,
+          isTarget: true,
+          isEnabled: true,
+        });
+      }
+
       await doUpsertMapping({
         tenantKey,
         connectorId,
@@ -687,11 +837,11 @@ export function ConnectorWorkspace({
       }
       setMappingFormMessage(
         editingMappingSourceChannelId
-          ? `Updated mapping ${renderChannelLabel(newMappingSource)} -> ${renderChannelLabel(newMappingTarget)}.`
-          : `Added mapping ${renderChannelLabel(newMappingSource)} -> ${renderChannelLabel(newMappingTarget)}.`,
+          ? `Updated mapping ${renderChannelRouteLabel(newMappingSource)} -> ${renderChannelRouteLabel(newMappingTarget)}.`
+          : `Added mapping ${renderChannelRouteLabel(newMappingSource)} -> ${renderChannelRouteLabel(newMappingTarget)}.`,
       );
       console.info(
-        `[admin/connectors] mapping upsert tenant=${tenantKey} connector=${connectorId} source=${newMappingSource} target=${newMappingTarget} dashboard_enabled=${newMappingDashboardEnabled} minimum_tier=${newMappingDashboardEnabled ? newMappingMinimumTier : "none"} priority=${Number.isFinite(prio) ? prio : -1}`,
+        `[admin/connectors] mapping upsert tenant=${tenantKey} connector=${connectorId} source=${newMappingSource} target=${newMappingTarget} target_guild=${targetGuildId ?? "unknown"} dashboard_enabled=${newMappingDashboardEnabled} minimum_tier=${newMappingDashboardEnabled ? newMappingMinimumTier : "none"} priority=${Number.isFinite(prio) ? prio : -1}`,
       );
       resetMappingForm();
     } catch (error) {
@@ -890,117 +1040,179 @@ export function ConnectorWorkspace({
 
       <div className="space-y-8">
         <div>
-          <AdminSectionCard title="Channel Registry (Plugin Source + Bot Target)">
+          <AdminSectionCard title="Quick Setup Wizard">
             <div className="admin-surface-soft">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="admin-label">
-                  Guild (plugin-discovered)
-                  <select
-                    className="admin-input"
-                    value={newSourceGuildId}
-                    onChange={(e) => setNewSourceGuildId(e.target.value)}
+              <p className="text-xs text-slate-300">
+                Step 1: register plugin source channels. Step 2: register bot target channels.
+                Step 3: create source -&gt; target routes below.
+              </p>
+
+              <div className="mt-3 rounded-md border border-slate-800 bg-slate-950/40 p-3">
+                <p className="text-xs font-semibold text-cyan-200">
+                  Step 1: Source channels (Vencord plugin)
+                </p>
+                <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                  <label className="admin-label">
+                    Guild (plugin-discovered)
+                    <select
+                      className="admin-input"
+                      value={newSourceGuildId}
+                      onChange={(e) => setNewSourceGuildId(e.target.value)}
+                    >
+                      <option value="">Select guild</option>
+                      {sourceGuilds.map((g) => (
+                        <option key={g._id} value={g.guildId}>
+                          {g.name} ({g.guildId})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="admin-label">
+                    Channel (from selected plugin guild)
+                    <select
+                      className="admin-input"
+                      value={newSourceChannelId}
+                      onChange={(e) => setNewSourceChannelId(e.target.value)}
+                      disabled={Boolean(editingSourceChannelId)}
+                    >
+                      <option value="">Select channel</option>
+                      {sourceChannels.map((channel) => (
+                        <option key={channel._id} value={channel.channelId}>
+                          {channel.name} ({channel.channelId})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-end gap-3">
+                  <label className="admin-label">
+                    Thread mode
+                    <select
+                      className="admin-input w-40"
+                      value={newSourceThreadMode}
+                      onChange={(e) => setNewSourceThreadMode(e.target.value)}
+                    >
+                      <option value="">default</option>
+                      <option value="include">include</option>
+                      <option value="exclude">exclude</option>
+                      <option value="only">only</option>
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-medium text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={newSourceEnabled}
+                      onChange={(e) => setNewSourceEnabled(e.target.checked)}
+                    />
+                    Enabled
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-medium text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={newSourceIsSource}
+                      onChange={(e) => setNewSourceIsSource(e.target.checked)}
+                    />
+                    Source
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-medium text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={newSourceIsTarget}
+                      onChange={(e) => setNewSourceIsTarget(e.target.checked)}
+                    />
+                    Also target (advanced)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={onRequestChannels}
+                    disabled={!newSourceGuildId || isRequestingChannels}
+                    className="admin-btn-secondary"
                   >
-                    <option value="">Select guild</option>
-                    {guilds.map((g) => (
-                      <option key={g._id} value={g.guildId}>
-                        {g.name} ({g.guildId})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="admin-label">
-                  Channel (from selected plugin guild)
-                  <select
-                    className="admin-input"
-                    value={newSourceChannelId}
-                    onChange={(e) => setNewSourceChannelId(e.target.value)}
-                    disabled={Boolean(editingSourceChannelId)}
-                  >
-                    <option value="">Select channel</option>
-                    {sourceChannels.map((channel) => (
-                      <option key={channel._id} value={channel.channelId}>
-                        {channel.name} ({channel.channelId})
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    {isRequestingChannels ? "Requesting..." : "Fetch channels"}
+                  </button>
+                  <button type="button" onClick={onSubmitSource} className="admin-btn-primary">
+                    {editingSourceChannelId ? "Save source" : "Add source"}
+                  </button>
+                  {editingSourceChannelId ? (
+                    <button type="button" onClick={cancelEditSource} className="admin-btn-secondary">
+                      Cancel
+                    </button>
+                  ) : null}
+                </div>
+                <p className="mt-3 text-xs text-slate-400">
+                  Guilds sync automatically from the plugin. Select a guild, click{" "}
+                  <strong>Fetch channels</strong>, pick a channel, and save it as available.
+                  Default behavior is source-only.
+                  {lastDiscoveryRequestVersion
+                    ? ` Last fetch request: v${lastDiscoveryRequestVersion}.`
+                    : ""}
+                  {editingSourceChannelId
+                    ? " While editing, channel ID is locked to preserve mapping references."
+                    : ""}
+                </p>
+                {sourceFormMessage ? <p className="mt-3 text-sm text-emerald-400">{sourceFormMessage}</p> : null}
+                {sourceFormError ? <p className="mt-3 text-sm text-rose-400">{sourceFormError}</p> : null}
               </div>
 
-              <div className="mt-3 flex flex-wrap items-end gap-3">
-                <label className="admin-label">
-                  Thread mode
-                  <select
-                    className="admin-input w-40"
-                    value={newSourceThreadMode}
-                    onChange={(e) => setNewSourceThreadMode(e.target.value)}
+              <div className="mt-4 rounded-md border border-cyan-900/50 bg-cyan-950/20 p-3">
+                <p className="text-xs font-semibold text-cyan-200">
+                  Step 2: Target channels (Discord bot guilds)
+                </p>
+                <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                  <label className="admin-label">
+                    Target guild (bot)
+                    <select
+                      className="admin-input"
+                      value={newTargetGuildId}
+                      onChange={(e) => setNewTargetGuildId(e.target.value)}
+                    >
+                      <option value="">Select target guild</option>
+                      {botGuilds.map((guild) => (
+                        <option key={`bot-guild-${guild.guildId}`} value={guild.guildId}>
+                          {guild.name} ({guild.guildId})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="admin-label">
+                    Target channel (bot mirror)
+                    <select
+                      className="admin-input"
+                      value={newTargetChannelId}
+                      onChange={(e) => setNewTargetChannelId(e.target.value)}
+                      disabled={!newTargetGuildId}
+                    >
+                      <option value="">Select target channel</option>
+                      {wizardTargetChannels.map((channel) => (
+                        <option key={`wizard-target-${channel.channelId}`} value={channel.channelId}>
+                          {channel.name} ({channel.channelId})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void onAddTargetChannel()}
+                    disabled={targetFormSaving || !newTargetGuildId || !newTargetChannelId}
+                    className="admin-btn-primary"
                   >
-                    <option value="">default</option>
-                    <option value="include">include</option>
-                    <option value="exclude">exclude</option>
-                    <option value="only">only</option>
-                  </select>
-                </label>
-                <label className="flex items-center gap-2 text-xs font-medium text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={newSourceEnabled}
-                    onChange={(e) => setNewSourceEnabled(e.target.checked)}
-                  />
-                  Enabled
-                </label>
-                <label className="flex items-center gap-2 text-xs font-medium text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={newSourceIsSource}
-                    onChange={(e) => setNewSourceIsSource(e.target.checked)}
-                  />
-                  Source
-                </label>
-                <label className="flex items-center gap-2 text-xs font-medium text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={newSourceIsTarget}
-                    onChange={(e) => setNewSourceIsTarget(e.target.checked)}
-                  />
-                  Target
-                </label>
-                <button
-                  type="button"
-                  onClick={onRequestChannels}
-                  disabled={!newSourceGuildId || isRequestingChannels}
-                  className="admin-btn-secondary"
-                >
-                  {isRequestingChannels ? "Requesting..." : "Fetch channels"}
-                </button>
-                <button type="button" onClick={onSubmitSource} className="admin-btn-primary">
-                  {editingSourceChannelId ? "Save source" : "Add source"}
-                </button>
-                {editingSourceChannelId ? (
-                  <button type="button" onClick={cancelEditSource} className="admin-btn-secondary">
-                    Cancel
+                    {targetFormSaving ? "Saving..." : "Add target channel"}
                   </button>
-                ) : null}
+                  <p className="text-xs text-cyan-100/80">
+                    Bot guild/channel catalogs sync automatically from Discord-Bot runtime.
+                  </p>
+                </div>
+                {targetFormMessage ? <p className="mt-3 text-sm text-emerald-400">{targetFormMessage}</p> : null}
+                {targetFormError ? <p className="mt-3 text-sm text-rose-400">{targetFormError}</p> : null}
               </div>
-              <p className="mt-3 text-xs text-slate-400">
-                Guilds sync automatically from the plugin. Select a guild, click{" "}
-                <strong>Fetch channels</strong>, pick a channel, and save it as available.
-                Mark whether the channel is usable as a source, target, or both.
-                Source=true means plugin ingest can read this channel.
-                Target=true means bot mirror mappings can route into this channel.
-                {lastDiscoveryRequestVersion
-                  ? ` Last fetch request: v${lastDiscoveryRequestVersion}.`
-                  : ""}
-                {editingSourceChannelId
-                  ? " While editing, channel ID is locked to preserve mapping references."
-                  : ""}
-              </p>
-              {sourceFormMessage ? <p className="mt-3 text-sm text-emerald-400">{sourceFormMessage}</p> : null}
-              {sourceFormError ? <p className="mt-3 text-sm text-rose-400">{sourceFormError}</p> : null}
             </div>
           </AdminSectionCard>
 
           <AdminTableShell
-            title="Configured channel registry"
+            title="Configured channel registry (sources + targets)"
             isEmpty={sources.length === 0}
             emptyMessage="No available channels yet."
             tableClassName="overflow-x-auto"
@@ -1008,7 +1220,7 @@ export function ConnectorWorkspace({
             <table className="w-full table-auto text-left text-sm">
               <thead className="sticky top-0 z-10 bg-slate-900 text-xs font-semibold text-slate-300">
                 <tr>
-                  <th className="px-3 py-2">Plugin guild</th>
+                  <th className="px-3 py-2">Guild</th>
                   <th className="px-3 py-2">Channel</th>
                   <th className="px-3 py-2">Thread</th>
                   <th className="px-3 py-2">Enabled</th>
@@ -1079,7 +1291,7 @@ export function ConnectorWorkspace({
                     onChange={(e) => setSourceGuildFilterId(e.target.value)}
                   >
                     <option value="">All source guilds</option>
-                    {guilds.map((g) => (
+                    {sourceGuilds.map((g) => (
                       <option key={`src-guild-${g._id}`} value={g.guildId}>
                         {g.name} ({g.guildId})
                       </option>
@@ -1094,8 +1306,8 @@ export function ConnectorWorkspace({
                     onChange={(e) => setTargetGuildFilterId(e.target.value)}
                   >
                     <option value="">All target guilds</option>
-                    {guilds.map((g) => (
-                      <option key={`dst-guild-${g._id}`} value={g.guildId}>
+                    {botGuilds.map((g) => (
+                      <option key={`dst-guild-${g.guildId}`} value={g.guildId}>
                         {g.name} ({g.guildId})
                       </option>
                     ))}
@@ -1137,11 +1349,11 @@ export function ConnectorWorkspace({
               </div>
               {availableChannels.length === 0 ? (
                 <p className="mt-3 text-xs text-slate-400">
-                  Add enabled available channels on the left before creating mappings.
+                  Add at least one enabled source channel in Step 1 before creating routes.
                 </p>
               ) : mappingSourceOptions.length === 0 || mappingTargetOptions.length === 0 ? (
                 <p className="mt-3 text-xs text-slate-400">
-                  Mark at least one channel as source and one as target to create routes.
+                  Ensure you have source options (Step 1) and bot target options (Step 2).
                 </p>
               ) : null}
               <p className="mt-3 text-xs text-slate-400">
@@ -1256,7 +1468,7 @@ export function ConnectorWorkspace({
                                 cancelEditMapping();
                               }
                               setMappingFormMessage(
-                                `Removed mapping ${renderChannelLabel(m.sourceChannelId)} -> ${renderChannelLabel(m.targetChannelId)}.`,
+                                `Removed mapping ${renderChannelRouteLabel(m.sourceChannelId)} -> ${renderChannelRouteLabel(m.targetChannelId)}.`,
                               );
                             } catch (error) {
                               const text = error instanceof Error ? error.message : "Failed to remove mapping";

@@ -88,6 +88,17 @@ export const syncBotGuilds = mutation({
         active: false,
         updatedAt: now,
       });
+      const channelRows = await ctx.db
+        .query("discordBotChannels")
+        .withIndex("by_guildId", (q) => q.eq("guildId", existing.guildId))
+        .collect();
+      for (const channelRow of channelRows) {
+        if (!channelRow.active) continue;
+        await ctx.db.patch(channelRow._id, {
+          active: false,
+          updatedAt: now,
+        });
+      }
       deactivated += 1;
     }
 
@@ -100,6 +111,97 @@ export const syncBotGuilds = mutation({
       upserted,
       deactivated,
       total: incomingByGuildId.size,
+    };
+  },
+});
+
+export const syncBotGuildChannels = mutation({
+  args: {
+    botToken: v.string(),
+    guildId: v.string(),
+    channels: v.array(
+      v.object({
+        channelId: v.string(),
+        name: v.string(),
+        type: v.optional(v.number()),
+        parentId: v.optional(v.string()),
+        position: v.optional(v.number()),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    assertBotTokenOrThrow(args.botToken);
+    const guildId = normalizeRequired(args.guildId, "guild_id");
+    const now = Date.now();
+    const incomingByChannelId = new Map(
+      args.channels.map((channel) => [
+        normalizeRequired(channel.channelId, "channel_id"),
+        {
+          name: normalizeRequired(channel.name, "channel_name"),
+          type: typeof channel.type === "number" ? channel.type : undefined,
+          parentId: normalizeOptional(channel.parentId),
+          position: typeof channel.position === "number" ? channel.position : undefined,
+        },
+      ]),
+    );
+
+    const existingRows = await ctx.db
+      .query("discordBotChannels")
+      .withIndex("by_guildId", (q) => q.eq("guildId", guildId))
+      .collect();
+    const existingByChannelId = new Map(
+      existingRows.map((row) => [row.channelId, row]),
+    );
+
+    let upserted = 0;
+    let deactivated = 0;
+    for (const [channelId, channel] of incomingByChannelId.entries()) {
+      const existing = existingByChannelId.get(channelId);
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          name: channel.name,
+          type: channel.type,
+          parentId: channel.parentId,
+          position: channel.position,
+          active: true,
+          lastSeenAt: now,
+          updatedAt: now,
+        });
+      } else {
+        await ctx.db.insert("discordBotChannels", {
+          guildId,
+          channelId,
+          name: channel.name,
+          type: channel.type,
+          parentId: channel.parentId,
+          position: channel.position,
+          active: true,
+          lastSeenAt: now,
+          updatedAt: now,
+        });
+      }
+      upserted += 1;
+    }
+
+    for (const existing of existingRows) {
+      if (incomingByChannelId.has(existing.channelId)) continue;
+      if (!existing.active) continue;
+      await ctx.db.patch(existing._id, {
+        active: false,
+        updatedAt: now,
+      });
+      deactivated += 1;
+    }
+
+    console.info(
+      `[discord-bot-presence] sync channels guild=${guildId} upserted=${upserted} deactivated=${deactivated}`,
+    );
+    return {
+      ok: true as const,
+      guildId,
+      upserted,
+      deactivated,
+      total: incomingByChannelId.size,
     };
   },
 });
@@ -122,6 +224,51 @@ export const listBotGuilds = query({
       guildId: row.guildId,
       name: row.name,
       icon: row.icon ?? null,
+      active: row.active,
+      lastSeenAt: row.lastSeenAt,
+      updatedAt: row.updatedAt,
+    }));
+  },
+});
+
+export const listBotGuildChannels = query({
+  args: {
+    guildId: v.optional(v.string()),
+    includeInactive: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const includeInactive = args.includeInactive === true;
+    const guildId = args.guildId?.trim() ?? "";
+    const rows = includeInactive
+      ? guildId
+        ? await ctx.db
+            .query("discordBotChannels")
+            .withIndex("by_guildId", (q) => q.eq("guildId", guildId))
+            .collect()
+        : await ctx.db.query("discordBotChannels").collect()
+      : await ctx.db
+          .query("discordBotChannels")
+          .withIndex("by_active", (q) => q.eq("active", true))
+          .collect();
+
+    const filtered = guildId
+      ? rows.filter((row) => row.guildId === guildId)
+      : rows;
+    filtered.sort((a, b) => {
+      const byGuild = a.guildId.localeCompare(b.guildId);
+      if (byGuild !== 0) return byGuild;
+      const posA = typeof a.position === "number" ? a.position : Number.MAX_SAFE_INTEGER;
+      const posB = typeof b.position === "number" ? b.position : Number.MAX_SAFE_INTEGER;
+      if (posA !== posB) return posA - posB;
+      return a.name.localeCompare(b.name);
+    });
+    return filtered.map((row) => ({
+      guildId: row.guildId,
+      channelId: row.channelId,
+      name: row.name,
+      type: typeof row.type === "number" ? row.type : null,
+      parentId: row.parentId ?? null,
+      position: typeof row.position === "number" ? row.position : null,
       active: row.active,
       lastSeenAt: row.lastSeenAt,
       updatedAt: row.updatedAt,

@@ -270,14 +270,65 @@ async function main() {
     if (shuttingDown || guildSyncInFlight) return;
     guildSyncInFlight = true;
     try {
-      const guilds = roleManager.discordClient.guilds.cache.map((guild) => ({
+      const guildList = roleManager.discordClient.guilds.cache.map((guild) => guild);
+      const guilds = guildList.map((guild) => ({
         guildId: guild.id,
         name: guild.name,
         icon: guild.icon ?? undefined,
       }));
-      const result = await botPresenceClient.syncGuilds(guilds);
+      const guildSyncResult = await botPresenceClient.syncGuilds(guilds);
+      let channelUpserted = 0;
+      let channelDeactivated = 0;
+      let channelFailures = 0;
+
+      for (const guild of guildList) {
+        try {
+          const fetchedChannels = await guild.channels.fetch();
+          const syncableChannels: Array<{
+            channelId: string;
+            name: string;
+            type?: number;
+            parentId?: string;
+            position?: number;
+          }> = [];
+          for (const maybeChannel of fetchedChannels.values()) {
+            if (!maybeChannel) continue;
+            if (!maybeChannel.isTextBased()) continue;
+            const channelId = maybeChannel.id?.trim();
+            if (!channelId) continue;
+            const maybePosition = (maybeChannel as { position?: unknown }).position;
+            const name =
+              typeof maybeChannel.name === "string" && maybeChannel.name.trim()
+                ? maybeChannel.name.trim()
+                : channelId;
+            syncableChannels.push({
+              channelId,
+              name,
+              type:
+                typeof maybeChannel.type === "number" ? maybeChannel.type : undefined,
+              parentId:
+                typeof maybeChannel.parentId === "string"
+                  ? maybeChannel.parentId
+                  : undefined,
+              position: typeof maybePosition === "number" ? maybePosition : undefined,
+            });
+          }
+
+          const channelSyncResult = await botPresenceClient.syncGuildChannels({
+            guildId: guild.id,
+            channels: syncableChannels,
+          });
+          channelUpserted += channelSyncResult.upserted;
+          channelDeactivated += channelSyncResult.deactivated;
+        } catch (error) {
+          channelFailures += 1;
+          const message = error instanceof Error ? error.message : String(error);
+          logWarn(`guild channel sync failed guild=${guild.id} error=${message}`);
+        }
+      }
+
       logInfo(
-        `guild_sync total=${result.total} upserted=${result.upserted} deactivated=${result.deactivated}`,
+        `guild_sync total=${guildSyncResult.total} upserted=${guildSyncResult.upserted} deactivated=${guildSyncResult.deactivated} channels_upserted=${channelUpserted} channels_deactivated=${channelDeactivated} channel_failures=${channelFailures}`,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
