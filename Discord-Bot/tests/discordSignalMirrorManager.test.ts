@@ -28,6 +28,7 @@ function buildJob(content: string): ClaimedSignalMirrorJob {
     existingMirroredMessageId: null,
     existingMirroredExtraMessageIds: [],
     existingMirroredGuildId: null,
+    rolePingId: null,
   };
 }
 
@@ -38,11 +39,69 @@ function unknownRoleError(): Error & { code: number } {
 }
 
 describe("discord signal mirror manager", () => {
-  it("removes missing role mentions while preserving valid mentions and message text", async () => {
-    const sentPayloads: Array<{ content?: string; embeds?: APIEmbed[] }> = [];
+  it("adds configured role ping outside the embed when creating a mirrored message", async () => {
+    const sentPayloads: Array<{
+      content?: string;
+      embeds?: APIEmbed[];
+      allowedMentions?: { parse: string[]; roles: string[] };
+    }> = [];
     const channel = {
       guildId: "target_guild_1",
-      send: async (payload: { content?: string; embeds?: APIEmbed[] }) => {
+      send: async (payload: {
+        content?: string;
+        embeds?: APIEmbed[];
+        allowedMentions?: { parse: string[]; roles: string[] };
+      }) => {
+        sentPayloads.push(payload);
+        return { id: `mirrored_${sentPayloads.length}` } as unknown as Message;
+      },
+      messages: {
+        fetch: async () => {
+          throw new Error("unexpected_message_fetch");
+        },
+      },
+    };
+    const guild = {
+      id: "target_guild_1",
+      roles: {
+        fetch: async () => ({ id: "111111111111111111" }),
+      },
+    };
+
+    const client = {
+      channels: {
+        fetch: async () => channel,
+      },
+      guilds: {
+        fetch: async () => guild,
+      },
+    } as unknown as Client;
+
+    const manager = new DiscordSignalMirrorManager(client);
+    const result = await manager.executeJob({
+      ...buildJob("Signal body"),
+      rolePingId: "111111111111111111",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(sentPayloads).toHaveLength(1);
+    expect(sentPayloads[0].content).toBe("<@&111111111111111111>");
+    expect(sentPayloads[0].embeds?.[0]?.description).toBe("Signal body");
+  });
+
+  it("removes missing role mentions while preserving valid mentions and message text", async () => {
+    const sentPayloads: Array<{
+      content?: string;
+      embeds?: APIEmbed[];
+      allowedMentions?: { parse: string[]; roles: string[] };
+    }> = [];
+    const channel = {
+      guildId: "target_guild_1",
+      send: async (payload: {
+        content?: string;
+        embeds?: APIEmbed[];
+        allowedMentions?: { parse: string[]; roles: string[] };
+      }) => {
         sentPayloads.push(payload);
         return { id: `mirrored_${sentPayloads.length}` } as unknown as Message;
       },

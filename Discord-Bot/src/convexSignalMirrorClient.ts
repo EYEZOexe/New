@@ -30,6 +30,7 @@ export type ClaimedSignalMirrorJob = {
   existingMirroredMessageId: string | null;
   existingMirroredExtraMessageIds: string[];
   existingMirroredGuildId: string | null;
+  rolePingId: string | null;
 };
 
 const claimSignalMirrorJobsRef = makeFunctionReference<

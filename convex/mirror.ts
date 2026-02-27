@@ -38,6 +38,23 @@ function normalizeStoredError(error: string): string {
     .replace(/^retry_after_ms:\d+:/, "");
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeRolePingId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (!/^\d{5,25}$/.test(normalized)) return null;
+  return normalized;
+}
+
+function extractRolePingIdFromTransformJson(transformJson: unknown): string | null {
+  if (!isRecord(transformJson)) return null;
+  return normalizeRolePingId(transformJson.rolePingId);
+}
+
 async function resolveTargetGuildId(ctx: MutationCtx, args: {
   tenantKey: string;
   connectorId: string;
@@ -115,6 +132,7 @@ export const claimPendingSignalMirrorJobs = mutation({
       existingMirroredMessageId: string | null;
       existingMirroredExtraMessageIds: string[];
       existingMirroredGuildId: string | null;
+      rolePingId: string | null;
     }> = [];
 
     for (const job of pending) {
@@ -219,6 +237,19 @@ export const claimPendingSignalMirrorJobs = mutation({
             .eq("targetChannelId", job.targetChannelId),
         )
         .first();
+      const mapping = await ctx.db
+        .query("connectorMappings")
+        .withIndex("by_tenant_connector_sourceChannelId", (q) =>
+          q
+            .eq("tenantKey", job.tenantKey)
+            .eq("connectorId", job.connectorId)
+            .eq("sourceChannelId", job.sourceChannelId),
+        )
+        .first();
+      const rolePingId =
+        mapping?.targetChannelId.trim() === job.targetChannelId
+          ? extractRolePingIdFromTransformJson(mapping.transformJson)
+          : null;
 
       claimed.push({
         jobId: job._id,
@@ -243,6 +274,7 @@ export const claimPendingSignalMirrorJobs = mutation({
         existingMirroredMessageId: existingMirror?.mirroredMessageId ?? null,
         existingMirroredExtraMessageIds: existingMirror?.mirroredExtraMessageIds ?? [],
         existingMirroredGuildId: existingMirror?.mirroredGuildId ?? null,
+        rolePingId,
       });
     }
 

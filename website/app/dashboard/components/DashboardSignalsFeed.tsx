@@ -4,13 +4,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
 import type { SignalRow, SignalState, ViewerConnectorOption } from "../types";
-import { classifyAttachment, formatBytes, MAX_ATTACHMENT_BYTES } from "../utils";
 
 type DashboardSignalsFeedProps = {
   signals: SignalRow[] | undefined;
@@ -33,7 +29,7 @@ function EmptyState(props: { signalState: SignalState }) {
   if (props.signalState === "loading") {
     return (
       <Alert>
-        <AlertDescription>Loading signals...</AlertDescription>
+        <AlertDescription>Loading notifications...</AlertDescription>
       </Alert>
     );
   }
@@ -60,18 +56,35 @@ function EmptyState(props: { signalState: SignalState }) {
   if (props.signalState === "empty") {
     return (
       <Alert>
-        <AlertDescription>No recent signals in channels visible to your tier.</AlertDescription>
+        <AlertDescription>No recent notifications in channels visible to your tier.</AlertDescription>
       </Alert>
     );
   }
   return null;
 }
 
+function summarizeContent(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "(No text content)";
+  if (trimmed.length <= 220) return trimmed;
+  return `${trimmed.slice(0, 217)}...`;
+}
+
+function describeEvent(signal: SignalRow): { label: string; tone: "default" | "outline" } {
+  if (typeof signal.deletedAt === "number") {
+    return { label: "Signal deleted", tone: "outline" };
+  }
+  if (typeof signal.editedAt === "number") {
+    return { label: "Signal updated", tone: "outline" };
+  }
+  return { label: "New signal", tone: "default" };
+}
+
 export function DashboardSignalsFeed(props: DashboardSignalsFeedProps) {
   return (
     <Card className="site-panel site-card-hover">
       <CardHeader className="px-0 pb-3">
-        <CardTitle className="text-base">Signals</CardTitle>
+        <CardTitle className="text-base">Recent Notifications</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 px-0">
         <div className="site-soft grid gap-3 md:grid-cols-2">
@@ -117,93 +130,43 @@ export function DashboardSignalsFeed(props: DashboardSignalsFeedProps) {
         {props.signalState !== "has_signals" ? <EmptyState signalState={props.signalState} /> : null}
 
         {props.signalState === "has_signals"
-          ? props.signals?.map((signal) => (
-              <Card key={signal._id} className="site-soft site-card-hover overflow-hidden">
-                <CardContent className="space-y-4 px-0">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">{new Date(signal.createdAt).toLocaleString()}</p>
-                      <p className="text-[11px] text-muted-foreground">Signal ID: {signal._id}</p>
+          ? props.signals?.map((signal) => {
+              const sourceLabel = signal.sourceChannelName?.trim()
+                ? `#${signal.sourceChannelName}`
+                : "Unknown channel";
+              const event = describeEvent(signal);
+              const attachmentCount = signal.attachments?.length ?? 0;
+              return (
+                <Card key={signal._id} className="site-soft site-card-hover overflow-hidden">
+                  <CardContent className="space-y-3 px-0">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold">{event.label}</p>
+                        <p className="text-xs text-muted-foreground">{sourceLabel}</p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={event.tone}>
+                          {new Date(signal.deletedAt ?? signal.editedAt ?? signal.createdAt).toLocaleString()}
+                        </Badge>
+                        {attachmentCount > 0 ? (
+                          <Badge variant="outline">{attachmentCount} attachments</Badge>
+                        ) : null}
+                      </div>
                     </div>
-                    <Badge variant="outline" className="max-w-full break-all">
-                      {signal.sourceGuildId} / {signal.sourceChannelId}
-                    </Badge>
-                  </div>
-                  <p className="site-signal-text">{signal.content || "(No text content)"}</p>
-
-                  <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                    {signal.editedAt ? (
-                      <Badge variant="outline">
-                        Edited {new Date(signal.editedAt).toLocaleString()}
-                      </Badge>
-                    ) : null}
-                    {signal.deletedAt ? (
-                      <Badge variant="outline" className="border-red-400/50 text-red-200">
-                        Deleted {new Date(signal.deletedAt).toLocaleString()}
-                      </Badge>
-                    ) : null}
-                  </div>
-
-                  {signal.attachments?.length ? (
-                    <ul className="space-y-2">
-                      {signal.attachments.map((attachment, index) => {
-                        const meta = classifyAttachment(attachment);
-                        const displayName = attachment.name?.trim() || `Attachment ${index + 1}`;
-                        const key = `${signal._id}-a-${attachment.attachmentId ?? index}`;
-                        const sizeText =
-                          typeof attachment.size === "number"
-                            ? formatBytes(attachment.size)
-                            : "unknown size";
-                        const typeText = meta.normalizedType || "unknown type";
-                        const hideLink = meta.isBlockedType || !meta.isAllowedType;
-
-                        return (
-                          <li key={key} className="rounded-xl border border-border/70 bg-background/60 p-3 text-xs">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-semibold">{displayName}</span>
-                              <Badge variant="outline">{typeText}</Badge>
-                              <Badge variant="outline">{sizeText}</Badge>
-                            </div>
-
-                            {meta.isOversized ? (
-                              <p className="mt-2 text-amber-200">
-                                Attachment exceeds {formatBytes(MAX_ATTACHMENT_BYTES)} preview limit.
-                              </p>
-                            ) : null}
-                            {meta.isBlockedType || !meta.isAllowedType ? (
-                              <p className="mt-2 text-red-200">
-                                Attachment type is blocked from inline rendering.
-                              </p>
-                            ) : null}
-
-                            {!hideLink ? (
-                              <a
-                                className="mt-2 inline-block underline underline-offset-4"
-                                href={attachment.url}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                Open attachment
-                              </a>
-                            ) : null}
-                            {meta.canPreviewImage ? (
-                              <img
-                                src={attachment.url}
-                                alt={displayName}
-                                loading="lazy"
-                                referrerPolicy="no-referrer"
-                                className="mt-2 max-h-72 rounded-lg border border-border/70 object-contain"
-                              />
-                            ) : null}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  ) : null}
-                </CardContent>
-              </Card>
-            ))
+                    <p className="site-signal-text">{summarizeContent(signal.content)}</p>
+                  </CardContent>
+                </Card>
+              );
+            })
           : null}
+
+        <div className="rounded-xl border border-border/70 bg-background/45 p-3 text-xs text-muted-foreground">
+          Need full signal context? Open{" "}
+          <Link href="/workspace/signals" className="underline underline-offset-4">
+            Signals &amp; Alerts
+          </Link>
+          .
+        </div>
       </CardContent>
     </Card>
   );

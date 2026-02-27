@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 type AnalystFeedItem = {
   id: string;
-  analyst: string;
+  analystKey: string;
+  analystName: string;
   handle: string;
   timeAgo: string;
   content: string;
@@ -16,23 +17,26 @@ type AnalystFeedItem = {
 };
 
 type AnalystFeedProps = {
-  analysts: string[];
+  analysts: Array<{
+    key: string;
+    label: string;
+  }>;
   items: AnalystFeedItem[];
 };
 
 export function AnalystFeed(props: AnalystFeedProps) {
-  const [selectedAnalyst, setSelectedAnalyst] = useState<string>("all");
+  const [selectedAnalystKey, setSelectedAnalystKey] = useState<string>("all");
 
   const filteredItems = useMemo(() => {
-    if (selectedAnalyst === "all") return props.items;
-    return props.items.filter((item) => item.analyst === selectedAnalyst);
-  }, [props.items, selectedAnalyst]);
+    if (selectedAnalystKey === "all") return props.items;
+    return props.items.filter((item) => item.analystKey === selectedAnalystKey);
+  }, [props.items, selectedAnalystKey]);
 
   useEffect(() => {
     console.info(
-      `[workspace/signals] filter=${selectedAnalyst} total=${props.items.length} visible=${filteredItems.length}`,
+      `[workspace/signals] filter=${selectedAnalystKey} total=${props.items.length} visible=${filteredItems.length}`,
     );
-  }, [filteredItems.length, props.items.length, selectedAnalyst]);
+  }, [filteredItems.length, props.items.length, selectedAnalystKey]);
 
   return (
     <Card className="site-panel site-card-hover">
@@ -41,21 +45,21 @@ export function AnalystFeed(props: AnalystFeedProps) {
         <div className="flex flex-wrap gap-2">
           <Button
             size="sm"
-            variant={selectedAnalyst === "all" ? "default" : "outline"}
+            variant={selectedAnalystKey === "all" ? "default" : "outline"}
             className="rounded-full"
-            onClick={() => setSelectedAnalyst("all")}
+            onClick={() => setSelectedAnalystKey("all")}
           >
             All Analysts
           </Button>
           {props.analysts.map((analyst) => (
             <Button
-              key={analyst}
+              key={analyst.key}
               size="sm"
-              variant={selectedAnalyst === analyst ? "default" : "outline"}
+              variant={selectedAnalystKey === analyst.key ? "default" : "outline"}
               className="rounded-full"
-              onClick={() => setSelectedAnalyst(analyst)}
+              onClick={() => setSelectedAnalystKey(analyst.key)}
             >
-              {analyst}
+              {analyst.label}
             </Button>
           ))}
         </div>
@@ -71,7 +75,7 @@ export function AnalystFeed(props: AnalystFeedProps) {
           <article key={item.id} className="site-card-hover rounded-2xl border border-border/70 bg-background/45 p-4">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div>
-                <p className="font-semibold">{item.analyst}</p>
+                <p className="font-semibold">{item.analystName}</p>
                 <p className="text-sm text-muted-foreground">{item.handle}</p>
               </div>
               <Badge variant="outline">{item.timeAgo}</Badge>
@@ -80,7 +84,7 @@ export function AnalystFeed(props: AnalystFeedProps) {
             {item.imageUrl ? (
               <img
                 src={item.imageUrl}
-                alt={`${item.analyst} chart`}
+                alt={`${item.analystName} chart`}
                 className="mt-3 max-h-56 rounded-lg border border-border/70 object-cover"
                 loading="lazy"
               />

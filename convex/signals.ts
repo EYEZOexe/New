@@ -129,6 +129,48 @@ export const listRecent = query({
       .filter((row) => visibleChannelSet.has(row.sourceChannelId))
       .slice(0, limit);
 
+    const sourceChannelIds = Array.from(
+      new Set(
+        rows
+          .map((row) => row.sourceChannelId.trim())
+          .filter((channelId) => channelId.length > 0),
+      ),
+    );
+    const [pluginChannels, botChannels] = await Promise.all([
+      Promise.all(
+        sourceChannelIds.map((channelId) =>
+          ctx.db
+            .query("discordChannels")
+            .withIndex("by_tenant_connector_channelId", (q) =>
+              q
+                .eq("tenantKey", tenantKey)
+                .eq("connectorId", connectorId)
+                .eq("channelId", channelId),
+            )
+            .first(),
+        ),
+      ),
+      Promise.all(
+        sourceChannelIds.map((channelId) =>
+          ctx.db
+            .query("discordBotChannels")
+            .withIndex("by_channelId", (q) => q.eq("channelId", channelId))
+            .first(),
+        ),
+      ),
+    ]);
+    const channelNameById = new Map<string, string>();
+    for (const channel of pluginChannels) {
+      if (!channel?.channelId || !channel.name) continue;
+      channelNameById.set(channel.channelId, channel.name);
+    }
+    for (const channel of botChannels) {
+      if (!channel?.channelId || !channel.name) continue;
+      if (!channelNameById.has(channel.channelId)) {
+        channelNameById.set(channel.channelId, channel.name);
+      }
+    }
+
     const sanitized = rows.map((row) => {
       const rawAttachments = Array.isArray(row.attachments) ? row.attachments : [];
       const attachments = rawAttachments
@@ -155,8 +197,10 @@ export const listRecent = query({
         )
         .filter((value): value is NonNullable<typeof value> => value !== null);
 
+      const sourceChannelName = channelNameById.get(row.sourceChannelId);
       return {
         ...row,
+        ...(sourceChannelName ? { sourceChannelName } : {}),
         attachments,
       };
     });
@@ -166,7 +210,7 @@ export const listRecent = query({
       0,
     );
     console.info(
-      `[signals] listRecent tenant=${tenantKey} connector=${connectorId} tier=${viewerTier ?? "none"} visible_channels=${visibleChannelSet.size} scanned=${candidateRows.length} returned=${sanitized.length} attachment_refs=${attachmentCount}`,
+      `[signals] listRecent tenant=${tenantKey} connector=${connectorId} tier=${viewerTier ?? "none"} visible_channels=${visibleChannelSet.size} scanned=${candidateRows.length} returned=${sanitized.length} attachment_refs=${attachmentCount} channel_names=${channelNameById.size}`,
     );
 
     return sanitized;

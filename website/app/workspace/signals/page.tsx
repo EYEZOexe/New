@@ -35,6 +35,7 @@ const listRecentSignalsRef = makeFunctionReference<
     _id: string;
     createdAt: number;
     sourceChannelId: string;
+    sourceChannelName?: string;
     content: string;
     attachments?: Array<{
       url: string;
@@ -58,6 +59,11 @@ function findImageAttachment(signal: { attachments?: Array<{ url: string; conten
   return attachment?.url;
 }
 
+function resolveChannelName(signal: { sourceChannelName?: string }): string {
+  const name = signal.sourceChannelName?.trim() ?? "";
+  return name || "Unknown channel";
+}
+
 export default function SignalsPage() {
   const viewer = useQuery(viewerRef, {});
   const hasSignalAccess = viewer?.hasSignalAccess === true;
@@ -77,15 +83,18 @@ export default function SignalsPage() {
     () =>
       (signals ?? []).map((signal) => ({
         id: signal._id,
-        analyst: signal.sourceChannelId,
-        handle: `@${signal.sourceChannelId}`,
+        analystKey: signal.sourceChannelId,
+        analystName: resolveChannelName(signal),
+        handle: `#${resolveChannelName(signal)}`,
         timeAgo: formatAge(signal.createdAt),
         content: signal.content || "(No text content)",
         imageUrl: findImageAttachment(signal),
       })),
     [signals],
   );
-  const analysts = Array.from(new Set(feedItems.map((item) => item.analyst)));
+  const analysts = Array.from(
+    new Map(feedItems.map((item) => [item.analystKey, item.analystName])).entries(),
+  ).map(([key, label]) => ({ key, label }));
 
   return (
     <>

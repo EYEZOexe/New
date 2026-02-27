@@ -17,6 +17,7 @@ export type SignalRow = {
   deletedAt?: number;
   sourceGuildId: string;
   sourceChannelId: string;
+  sourceChannelName?: string;
   content: string;
   attachments?: SignalAttachment[];
 };

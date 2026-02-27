@@ -36,6 +36,7 @@ type MappingRow = {
   dashboardEnabled?: boolean;
   minimumTier?: "basic" | "advanced" | "pro";
   priority?: number;
+  transformJson?: unknown;
 };
 
 type SubscriptionTier = "basic" | "advanced" | "pro";
@@ -120,6 +121,37 @@ type ConnectorWorkspaceProps = {
   connectorId: string;
   breadcrumbs?: readonly string[];
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeRolePingId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (!/^\d{5,25}$/.test(normalized)) return null;
+  return normalized;
+}
+
+function extractRolePingId(transformJson: unknown): string {
+  if (!isRecord(transformJson)) return "";
+  return normalizeRolePingId(transformJson.rolePingId) ?? "";
+}
+
+function mergeRolePingIdIntoTransformJson(args: {
+  transformJson: unknown;
+  rolePingIdInput: string;
+}): Record<string, unknown> | undefined {
+  const base = isRecord(args.transformJson) ? { ...args.transformJson } : {};
+  const normalizedRolePingId = normalizeRolePingId(args.rolePingIdInput);
+  if (normalizedRolePingId) {
+    base.rolePingId = normalizedRolePingId;
+  } else {
+    delete base.rolePingId;
+  }
+  return Object.keys(base).length > 0 ? base : undefined;
+}
 
 export function ConnectorWorkspace({
   tenantKey,
@@ -258,6 +290,7 @@ export function ConnectorWorkspace({
           dashboardEnabled?: boolean;
           minimumTier?: SubscriptionTier;
           priority?: number;
+          transformJson?: unknown;
         },
         { ok: true }
       >("connectors:upsertMapping"),
@@ -396,6 +429,7 @@ export function ConnectorWorkspace({
   const [newMappingDashboardEnabled, setNewMappingDashboardEnabled] = useState(false);
   const [newMappingMinimumTier, setNewMappingMinimumTier] =
     useState<SubscriptionTier>("basic");
+  const [newMappingRolePingId, setNewMappingRolePingId] = useState("");
   const [editingMappingSourceChannelId, setEditingMappingSourceChannelId] = useState<string | null>(
     null,
   );
@@ -628,6 +662,7 @@ export function ConnectorWorkspace({
     setNewMappingPriority("");
     setNewMappingDashboardEnabled(false);
     setNewMappingMinimumTier("basic");
+    setNewMappingRolePingId("");
   }
 
   function startEditMapping(mapping: MappingRow) {
@@ -647,6 +682,7 @@ export function ConnectorWorkspace({
     );
     setNewMappingDashboardEnabled(mapping.dashboardEnabled === true);
     setNewMappingMinimumTier(mapping.minimumTier ?? "basic");
+    setNewMappingRolePingId(extractRolePingId(mapping.transformJson));
     setMappingFormMessage(null);
     setMappingFormError(null);
   }
@@ -801,6 +837,11 @@ export function ConnectorWorkspace({
       newMappingPriority.trim() === ""
         ? undefined
         : Number(newMappingPriority.trim());
+    const normalizedRolePingId = normalizeRolePingId(newMappingRolePingId);
+    if (newMappingRolePingId.trim() && !normalizedRolePingId) {
+      setMappingFormError("Role ping must be a valid Discord role ID.");
+      return;
+    }
     try {
       const targetChannel = botChannelById.get(newMappingTarget);
       if (!targetChannel) {
@@ -824,6 +865,18 @@ export function ConnectorWorkspace({
         isEnabled: true,
       });
 
+      const existingMapping =
+        mappings.find((mapping) => mapping.sourceChannelId === newMappingSource) ??
+        (editingMappingSourceChannelId
+          ? mappings.find(
+              (mapping) => mapping.sourceChannelId === editingMappingSourceChannelId,
+            )
+          : undefined);
+      const transformJson = mergeRolePingIdIntoTransformJson({
+        transformJson: existingMapping?.transformJson,
+        rolePingIdInput: newMappingRolePingId,
+      });
+
       await doUpsertMapping({
         tenantKey,
         connectorId,
@@ -832,6 +885,7 @@ export function ConnectorWorkspace({
         dashboardEnabled: newMappingDashboardEnabled,
         minimumTier: newMappingDashboardEnabled ? newMappingMinimumTier : undefined,
         priority: Number.isFinite(prio) ? prio : undefined,
+        transformJson,
       });
       if (
         editingMappingSourceChannelId &&
@@ -849,7 +903,7 @@ export function ConnectorWorkspace({
           : `Added mapping ${renderChannelRouteLabel(newMappingSource)} -> ${renderChannelRouteLabel(newMappingTarget)}.`,
       );
       console.info(
-        `[admin/connectors] mapping upsert tenant=${tenantKey} connector=${connectorId} source=${newMappingSource} target=${newMappingTarget} target_guild=${targetGuildId ?? "unknown"} dashboard_enabled=${newMappingDashboardEnabled} minimum_tier=${newMappingDashboardEnabled ? newMappingMinimumTier : "none"} priority=${Number.isFinite(prio) ? prio : -1}`,
+        `[admin/connectors] mapping upsert tenant=${tenantKey} connector=${connectorId} source=${newMappingSource} target=${newMappingTarget} target_guild=${targetGuildId ?? "unknown"} dashboard_enabled=${newMappingDashboardEnabled} minimum_tier=${newMappingDashboardEnabled ? newMappingMinimumTier : "none"} priority=${Number.isFinite(prio) ? prio : -1} role_ping=${normalizedRolePingId ?? "none"}`,
       );
       resetMappingForm();
     } catch (error) {
@@ -1409,7 +1463,20 @@ export function ConnectorWorkspace({
                       placeholder="(optional)"
                     />
                   </label>
+                  <label className="admin-label">
+                    Role ping ID
+                    <input
+                      value={newMappingRolePingId}
+                      onChange={(e) => setNewMappingRolePingId(e.target.value)}
+                      className="admin-input w-52"
+                      placeholder="123456789012345678"
+                    />
+                  </label>
                 </div>
+                <p className="mt-2 text-xs text-slate-400">
+                  Optional: when set, mirrored posts in this target channel will include
+                  a role mention outside the embed (`&lt;@&amp;roleId&gt;`).
+                </p>
               </details>
               <div>
                 <p className="mt-3 text-xs text-slate-400">
@@ -1432,6 +1499,7 @@ export function ConnectorWorkspace({
                 <tr>
                   <th className="px-3 py-2">Source (plugin)</th>
                   <th className="px-3 py-2">Target (bot)</th>
+                  <th className="px-3 py-2">Role ping</th>
                   <th className="px-3 py-2">Dashboard</th>
                   <th className="px-3 py-2">Min tier</th>
                   <th className="px-3 py-2">Priority</th>
@@ -1439,60 +1507,70 @@ export function ConnectorWorkspace({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800 bg-slate-950/40 text-slate-200">
-                {mappings.map((m) => (
-                  <tr key={m._id}>
-                    <td className="px-3 py-2 align-top break-all">{renderChannelRouteLabel(m.sourceChannelId)}</td>
-                    <td className="px-3 py-2 align-top break-all">{renderChannelRouteLabel(m.targetChannelId)}</td>
-                    <td className="px-3 py-2">
-                      {m.dashboardEnabled === true ? (
-                        <span className="rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-300">
-                          visible
-                        </span>
-                      ) : (
-                        <span className="rounded-full border border-slate-500/30 bg-slate-600/20 px-2 py-0.5 text-xs font-medium text-slate-200">
-                          hidden
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">{m.minimumTier ?? "-"}</td>
-                    <td className="px-3 py-2">{m.priority ?? "-"}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => startEditMapping(m)}
-                          className="text-sm font-medium text-cyan-300 underline"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            try {
-                              await doRemoveMapping({
-                                tenantKey,
-                                connectorId,
-                                sourceChannelId: m.sourceChannelId,
-                              });
-                              if (editingMappingSourceChannelId === m.sourceChannelId) {
-                                cancelEditMapping();
+                {mappings.map((m) => {
+                  const rolePingId = extractRolePingId(m.transformJson);
+                  return (
+                    <tr key={m._id}>
+                      <td className="px-3 py-2 align-top break-all">{renderChannelRouteLabel(m.sourceChannelId)}</td>
+                      <td className="px-3 py-2 align-top break-all">{renderChannelRouteLabel(m.targetChannelId)}</td>
+                      <td className="px-3 py-2">
+                        {rolePingId ? (
+                          <span className="text-xs text-slate-200">{`<@&${rolePingId}>`}</span>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {m.dashboardEnabled === true ? (
+                          <span className="rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-300">
+                            visible
+                          </span>
+                        ) : (
+                          <span className="rounded-full border border-slate-500/30 bg-slate-600/20 px-2 py-0.5 text-xs font-medium text-slate-200">
+                            hidden
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">{m.minimumTier ?? "-"}</td>
+                      <td className="px-3 py-2">{m.priority ?? "-"}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => startEditMapping(m)}
+                            className="text-sm font-medium text-cyan-300 underline"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                await doRemoveMapping({
+                                  tenantKey,
+                                  connectorId,
+                                  sourceChannelId: m.sourceChannelId,
+                                });
+                                if (editingMappingSourceChannelId === m.sourceChannelId) {
+                                  cancelEditMapping();
+                                }
+                                setMappingFormMessage(
+                                  `Removed mapping ${renderChannelRouteLabel(m.sourceChannelId)} -> ${renderChannelRouteLabel(m.targetChannelId)}.`,
+                                );
+                              } catch (error) {
+                                const text = error instanceof Error ? error.message : "Failed to remove mapping";
+                                setMappingFormError(text);
                               }
-                              setMappingFormMessage(
-                                `Removed mapping ${renderChannelRouteLabel(m.sourceChannelId)} -> ${renderChannelRouteLabel(m.targetChannelId)}.`,
-                              );
-                            } catch (error) {
-                              const text = error instanceof Error ? error.message : "Failed to remove mapping";
-                              setMappingFormError(text);
-                            }
-                          }}
-                          className="text-sm font-medium text-rose-300 underline"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                            }}
+                            className="text-sm font-medium text-rose-300 underline"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </AdminTableShell>

@@ -3,7 +3,7 @@ import {
   DiscordAPIError,
   RESTJSONErrorCodes,
 } from "discord.js";
-import type { APIEmbed, Channel, Message } from "discord.js";
+import type { APIAllowedMentions, APIEmbed, Channel, Message } from "discord.js";
 
 import type { ClaimedSignalMirrorJob } from "./convexSignalMirrorClient";
 
@@ -16,11 +16,17 @@ export type SignalMirrorExecutionResult = {
 };
 
 type MessageCapableChannel = Channel & {
-  send: (payload: { content?: string; embeds?: APIEmbed[] }) => Promise<Message>;
+  send: (payload: MirrorMessagePayload) => Promise<Message>;
   messages: {
     fetch: (messageId: string) => Promise<Message>;
   };
   guildId?: string | null;
+};
+
+type MirrorMessagePayload = {
+  content?: string;
+  embeds?: APIEmbed[];
+  allowedMentions?: APIAllowedMentions;
 };
 
 type RoleMentionSanitizationResult = {
@@ -118,9 +124,27 @@ export class DiscordSignalMirrorManager {
       targetChannelId: job.targetChannelId,
     });
     const payload = buildMirroredPayload(sanitizedContent.content, job.attachments);
-    const sendOrEditPayload: { content?: string; embeds?: APIEmbed[] } = {
+    const rolePingId = await this.resolveRolePingId({
+      configuredRolePingId: job.rolePingId,
+      guildId,
+      sourceMessageId: job.sourceMessageId,
+      targetChannelId: job.targetChannelId,
+    });
+    const editPayload: MirrorMessagePayload = {
       embeds: [payload.embed],
     };
+    const sendPayload: MirrorMessagePayload = rolePingId
+      ? {
+          content: `<@&${rolePingId}>`,
+          embeds: [payload.embed],
+          allowedMentions: {
+            parse: [],
+            roles: [rolePingId],
+          },
+        }
+      : {
+          embeds: [payload.embed],
+        };
 
     let upsertedMessage: Message | null = null;
     if (existingMessageId) {
@@ -135,7 +159,7 @@ export class DiscordSignalMirrorManager {
         });
 
       if (existingMessage) {
-        upsertedMessage = await existingMessage.edit(sendOrEditPayload).catch((error: unknown) => {
+        upsertedMessage = await existingMessage.edit(editPayload).catch((error: unknown) => {
           const parsed = parseDiscordError(error);
           throw new MirrorOperationError(classifyDiscordError(parsed, "message_edit_failed"));
         });
@@ -143,7 +167,7 @@ export class DiscordSignalMirrorManager {
     }
 
     if (!upsertedMessage) {
-      upsertedMessage = await channel.send(sendOrEditPayload).catch((error: unknown) => {
+      upsertedMessage = await channel.send(sendPayload).catch((error: unknown) => {
         const parsed = parseDiscordError(error);
         throw new MirrorOperationError(classifyDiscordError(parsed, "message_send_failed"));
       });
@@ -241,6 +265,52 @@ export class DiscordSignalMirrorManager {
       removedRoleIds,
     };
   }
+
+  private async resolveRolePingId(args: {
+    configuredRolePingId: string | null;
+    guildId?: string;
+    sourceMessageId: string;
+    targetChannelId: string;
+  }): Promise<string | null> {
+    const rolePingId = normalizeRoleId(args.configuredRolePingId);
+    if (!rolePingId || !args.guildId) {
+      return null;
+    }
+
+    const guild = await this.client.guilds.fetch(args.guildId).catch((error: unknown) => {
+      const parsed = parseDiscordError(error);
+      console.warn(
+        `[mirror] skipped role ping validation guild=${args.guildId} role=${rolePingId} source_message=${args.sourceMessageId} target_channel=${args.targetChannelId} reason=${parsed.message}`,
+      );
+      return null;
+    });
+    if (!guild) {
+      return null;
+    }
+
+    const lookupResult = await guild.roles
+      .fetch(rolePingId)
+      .then(() => "exists" as const)
+      .catch((error: unknown) => {
+        const parsed = parseDiscordError(error);
+        if (parsed.code === RESTJSONErrorCodes.UnknownRole) {
+          return "missing" as const;
+        }
+        console.warn(
+          `[mirror] failed role ping lookup guild=${guild.id} role=${rolePingId} source_message=${args.sourceMessageId} target_channel=${args.targetChannelId} reason=${parsed.message}`,
+        );
+        return "exists" as const;
+      });
+
+    if (lookupResult === "missing") {
+      console.info(
+        `[mirror] skipped missing role ping guild=${guild.id} role=${rolePingId} source_message=${args.sourceMessageId} target_channel=${args.targetChannelId}`,
+      );
+      return null;
+    }
+
+    return rolePingId;
+  }
 }
 
 function supportsMessageOps(channel: Channel): channel is MessageCapableChannel {
@@ -261,6 +331,13 @@ function extractRoleMentionIds(content: string): string[] {
     }
   }
   return [...roleIds];
+}
+
+function normalizeRoleId(value: string | null): string | null {
+  const normalized = value?.trim() ?? "";
+  if (!normalized) return null;
+  if (!/^\d{5,25}$/.test(normalized)) return null;
+  return normalized;
 }
 
 function stripMissingRoleMentions(content: string, roleIdsToRemove: string[]): string {

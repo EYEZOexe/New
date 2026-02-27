@@ -10,14 +10,14 @@ export function DashboardHeader(props: DashboardHeaderProps) {
   return (
     <SectionHeader
       badge="Dashboard"
-      title="Signal feed command center."
-      subtitle="Realtime subscription state, tier-gated channel visibility, and Discord link controls in one place."
+      title="Notification command center."
+      subtitle="Realtime subscription state, signal notifications, and Discord link controls in one place."
       navLinks={[
         { href: "/", label: "Home" },
         { href: "/shop", label: "Shop" },
       ]}
       highlights={[
-        { label: "Feed mode", value: "Tier-filtered realtime" },
+        { label: "Feed mode", value: "Tier-filtered notifications" },
         { label: "Identity", value: "Discord link aware" },
         { label: "State", value: "Subscription synced" },
       ]}
