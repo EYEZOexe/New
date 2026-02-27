@@ -27,6 +27,12 @@ type AnalystFeedProps = {
 export function AnalystFeed(props: AnalystFeedProps) {
   const [selectedAnalystKey, setSelectedAnalystKey] = useState<string>("all");
 
+  useEffect(() => {
+    if (selectedAnalystKey === "all") return;
+    if (props.analysts.some((analyst) => analyst.key === selectedAnalystKey)) return;
+    setSelectedAnalystKey("all");
+  }, [props.analysts, selectedAnalystKey]);
+
   const filteredItems = useMemo(() => {
     if (selectedAnalystKey === "all") return props.items;
     return props.items.filter((item) => item.analystKey === selectedAnalystKey);

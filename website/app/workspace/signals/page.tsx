@@ -3,8 +3,9 @@
 import { makeFunctionReference } from "convex/server";
 import { useQuery } from "convex/react";
 import { Bell, Zap } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 
+import { tierRank } from "@/app/dashboard/utils";
 import { WorkspaceSectionHeader } from "@/components/workspace/workspace-section-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -44,6 +45,28 @@ const listRecentSignalsRef = makeFunctionReference<
   }>
 >("signals:listRecent");
 
+const listMappingsRef = makeFunctionReference<
+  "query",
+  { tenantKey: string; connectorId: string },
+  Array<{
+    _id: string;
+    sourceChannelId: string;
+    dashboardEnabled?: boolean;
+    minimumTier?: "basic" | "advanced" | "pro";
+  }>
+>("connectors:listMappings");
+
+const listChannelsRef = makeFunctionReference<
+  "query",
+  { tenantKey: string; connectorId: string; guildId?: string },
+  Array<{
+    _id: string;
+    channelId: string;
+    guildId: string;
+    name: string;
+  }>
+>("discovery:listChannels");
+
 function formatAge(timestamp: number): string {
   const minutes = Math.max(1, Math.round((Date.now() - timestamp) / 60000));
   if (minutes < 60) return `${minutes}m ago`;
@@ -78,6 +101,14 @@ export default function SignalsPage() {
     listRecentSignalsRef,
     hasSignalAccess && tenantKey && connectorId ? { tenantKey, connectorId, limit: 50 } : "skip",
   );
+  const mappings = useQuery(
+    listMappingsRef,
+    hasSignalAccess && tenantKey && connectorId ? { tenantKey, connectorId } : "skip",
+  );
+  const channels = useQuery(
+    listChannelsRef,
+    hasSignalAccess && tenantKey && connectorId ? { tenantKey, connectorId } : "skip",
+  );
 
   const feedItems = useMemo(
     () =>
@@ -92,9 +123,51 @@ export default function SignalsPage() {
       })),
     [signals],
   );
-  const analysts = Array.from(
-    new Map(feedItems.map((item) => [item.analystKey, item.analystName])).entries(),
-  ).map(([key, label]) => ({ key, label }));
+  const visibleSourceChannelIds = useMemo(() => {
+    if (!mappings) return [];
+    const ids = mappings
+      .filter(
+        (mapping) =>
+          mapping.dashboardEnabled === true &&
+          mapping.minimumTier &&
+          tierRank(viewer?.tier ?? null) >= tierRank(mapping.minimumTier),
+      )
+      .map((mapping) => mapping.sourceChannelId.trim())
+      .filter((value) => value.length > 0);
+    return Array.from(new Set(ids.values()));
+  }, [mappings, viewer?.tier]);
+  const channelNameById = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const signal of signals ?? []) {
+      const id = signal.sourceChannelId.trim();
+      const name = signal.sourceChannelName?.trim() ?? "";
+      if (id && name) byId.set(id, name);
+    }
+    for (const channel of channels ?? []) {
+      const id = channel.channelId.trim();
+      const name = channel.name.trim();
+      if (id && name && !byId.has(id)) byId.set(id, name);
+    }
+    return byId;
+  }, [channels, signals]);
+  const analysts = useMemo(() => {
+    const sourceIds =
+      visibleSourceChannelIds.length > 0
+        ? visibleSourceChannelIds
+        : Array.from(new Set(feedItems.map((item) => item.analystKey)));
+    return sourceIds
+      .map((sourceChannelId) => ({
+        key: sourceChannelId,
+        label: channelNameById.get(sourceChannelId) ?? sourceChannelId,
+      }))
+      .sort((left, right) => left.label.localeCompare(right.label));
+  }, [channelNameById, feedItems, visibleSourceChannelIds]);
+
+  useEffect(() => {
+    console.info(
+      `[workspace/signals] analyst options visible_channels=${visibleSourceChannelIds.length} rendered_filters=${analysts.length} recent_signal_channels=${new Set(feedItems.map((item) => item.analystKey)).size}`,
+    );
+  }, [analysts.length, feedItems, visibleSourceChannelIds.length]);
 
   return (
     <>
@@ -182,7 +255,7 @@ export default function SignalsPage() {
             No dashboard-visible connector channels are configured for your tier.
           </CardContent>
         </Card>
-      ) : signals === undefined ? (
+      ) : signals === undefined || mappings === undefined || channels === undefined ? (
         <Card className="site-panel">
           <CardContent className="px-0 py-6 text-sm text-muted-foreground">
             Loading analyst feed...
