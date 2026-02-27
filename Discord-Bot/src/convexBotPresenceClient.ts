@@ -41,6 +41,29 @@ const syncBotGuildChannelsRef = makeFunctionReference<
   }
 >("discordBotPresence:syncBotGuildChannels");
 
+const syncBotGuildRolesRef = makeFunctionReference<
+  "mutation",
+  {
+    botToken: string;
+    guildId: string;
+    roles: Array<{
+      roleId: string;
+      name: string;
+      position?: number;
+      managed?: boolean;
+      mentionable?: boolean;
+      hoist?: boolean;
+    }>;
+  },
+  {
+    ok: true;
+    guildId: string;
+    upserted: number;
+    deactivated: number;
+    total: number;
+  }
+>("discordBotPresence:syncBotGuildRoles");
+
 export class ConvexBotPresenceClient {
   private readonly client: ConvexHttpClient;
   private readonly botToken: string;
@@ -77,6 +100,24 @@ export class ConvexBotPresenceClient {
       botToken: this.botToken,
       guildId: args.guildId,
       channels: args.channels,
+    });
+  }
+
+  async syncGuildRoles(args: {
+    guildId: string;
+    roles: Array<{
+      roleId: string;
+      name: string;
+      position?: number;
+      managed?: boolean;
+      mentionable?: boolean;
+      hoist?: boolean;
+    }>;
+  }) {
+    return await this.client.mutation(syncBotGuildRolesRef, {
+      botToken: this.botToken,
+      guildId: args.guildId,
+      roles: args.roles,
     });
   }
 }

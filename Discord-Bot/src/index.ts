@@ -3,6 +3,7 @@ import { ConvexRoleSyncClient } from "./convexRoleSyncClient";
 import { ConvexSeatAuditClient } from "./convexSeatAuditClient";
 import { ConvexSignalMirrorClient } from "./convexSignalMirrorClient";
 import { loadBotConfig } from "./config";
+import { DiscordMirrorOwnershipCache } from "./discordMirrorOwnershipCache";
 import { DiscordRoleManager } from "./discordRoleManager";
 import { DiscordSeatAuditManager } from "./discordSeatAuditManager";
 import { DiscordSignalMirrorManager } from "./discordSignalMirrorManager";
@@ -42,7 +43,10 @@ async function main() {
     convexUrl: config.convexUrl,
     botToken: config.queueWakeBotToken,
   });
-  const mirrorManager = new DiscordSignalMirrorManager(roleManager.discordClient);
+  const mirrorOwnershipCache = new DiscordMirrorOwnershipCache();
+  const mirrorManager = new DiscordSignalMirrorManager(roleManager.discordClient, {
+    ownershipLookup: mirrorOwnershipCache,
+  });
   const seatAuditManager = new DiscordSeatAuditManager(roleManager.discordClient);
 
   let shuttingDown = false;
@@ -302,6 +306,10 @@ async function main() {
       let channelUpserted = 0;
       let channelDeactivated = 0;
       let channelFailures = 0;
+      let roleUpserted = 0;
+      let roleDeactivated = 0;
+      let roleFailures = 0;
+      const roleSnapshots: Array<{ guildId: string; roleIds: string[] }> = [];
 
       for (const guild of guildList) {
         try {
@@ -347,10 +355,67 @@ async function main() {
           const message = error instanceof Error ? error.message : String(error);
           logWarn(`guild channel sync failed guild=${guild.id} error=${message}`);
         }
+
+        try {
+          const fetchedRoles = await guild.roles.fetch();
+          const syncableRoles: Array<{
+            roleId: string;
+            name: string;
+            position?: number;
+            managed?: boolean;
+            mentionable?: boolean;
+            hoist?: boolean;
+          }> = [];
+          const roleIds: string[] = [];
+          for (const maybeRole of fetchedRoles.values()) {
+            if (!maybeRole) continue;
+            const roleId = maybeRole.id?.trim();
+            if (!roleId) continue;
+            roleIds.push(roleId);
+            const roleName =
+              typeof maybeRole.name === "string" && maybeRole.name.trim()
+                ? maybeRole.name.trim()
+                : roleId;
+            syncableRoles.push({
+              roleId,
+              name: roleName,
+              position:
+                typeof maybeRole.position === "number" ? maybeRole.position : undefined,
+              managed:
+                typeof maybeRole.managed === "boolean" ? maybeRole.managed : undefined,
+              mentionable:
+                typeof maybeRole.mentionable === "boolean"
+                  ? maybeRole.mentionable
+                  : undefined,
+              hoist: typeof maybeRole.hoist === "boolean" ? maybeRole.hoist : undefined,
+            });
+          }
+
+          const roleSyncResult = await botPresenceClient.syncGuildRoles({
+            guildId: guild.id,
+            roles: syncableRoles,
+          });
+          roleUpserted += roleSyncResult.upserted;
+          roleDeactivated += roleSyncResult.deactivated;
+          roleSnapshots.push({
+            guildId: guild.id,
+            roleIds,
+          });
+        } catch (error) {
+          roleFailures += 1;
+          const message = error instanceof Error ? error.message : String(error);
+          logWarn(`guild role sync failed guild=${guild.id} error=${message}`);
+        }
       }
 
+      mirrorOwnershipCache.applySnapshots({
+        allGuildIds: guildList.map((guild) => guild.id),
+        roleSnapshots,
+      });
+      const ownershipStats = mirrorOwnershipCache.getStats();
+
       logInfo(
-        `guild_sync total=${guildSyncResult.total} upserted=${guildSyncResult.upserted} deactivated=${guildSyncResult.deactivated} channels_upserted=${channelUpserted} channels_deactivated=${channelDeactivated} channel_failures=${channelFailures}`,
+        `guild_sync total=${guildSyncResult.total} upserted=${guildSyncResult.upserted} deactivated=${guildSyncResult.deactivated} channels_upserted=${channelUpserted} channels_deactivated=${channelDeactivated} channel_failures=${channelFailures} roles_upserted=${roleUpserted} roles_deactivated=${roleDeactivated} role_failures=${roleFailures} known_guilds=${ownershipStats.knownGuildCount} known_roles=${ownershipStats.knownRoleCount}`,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -393,6 +458,18 @@ async function main() {
   });
   roleManager.discordClient.on("guildDelete", (guild) => {
     logInfo(`guild leave detected guild=${guild.id} name=${guild.name}`);
+    void runGuildSyncTick();
+  });
+  roleManager.discordClient.on("roleCreate", (role) => {
+    logInfo(`role create detected guild=${role.guild.id} role=${role.id}`);
+    void runGuildSyncTick();
+  });
+  roleManager.discordClient.on("roleDelete", (role) => {
+    logInfo(`role delete detected guild=${role.guild.id} role=${role.id}`);
+    void runGuildSyncTick();
+  });
+  roleManager.discordClient.on("roleUpdate", (_oldRole, newRole) => {
+    logInfo(`role update detected guild=${newRole.guild.id} role=${newRole.id}`);
     void runGuildSyncTick();
   });
 

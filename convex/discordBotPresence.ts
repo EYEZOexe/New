@@ -99,6 +99,17 @@ export const syncBotGuilds = mutation({
           updatedAt: now,
         });
       }
+      const roleRows = await ctx.db
+        .query("discordBotRoles")
+        .withIndex("by_guildId", (q) => q.eq("guildId", existing.guildId))
+        .collect();
+      for (const roleRow of roleRows) {
+        if (!roleRow.active) continue;
+        await ctx.db.patch(roleRow._id, {
+          active: false,
+          updatedAt: now,
+        });
+      }
       deactivated += 1;
     }
 
@@ -206,6 +217,99 @@ export const syncBotGuildChannels = mutation({
   },
 });
 
+export const syncBotGuildRoles = mutation({
+  args: {
+    botToken: v.string(),
+    guildId: v.string(),
+    roles: v.array(
+      v.object({
+        roleId: v.string(),
+        name: v.string(),
+        position: v.optional(v.number()),
+        managed: v.optional(v.boolean()),
+        mentionable: v.optional(v.boolean()),
+        hoist: v.optional(v.boolean()),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    assertBotTokenOrThrow(args.botToken);
+    const guildId = normalizeRequired(args.guildId, "guild_id");
+    const now = Date.now();
+    const incomingByRoleId = new Map(
+      args.roles.map((role) => [
+        normalizeRequired(role.roleId, "role_id"),
+        {
+          name: normalizeRequired(role.name, "role_name"),
+          position: typeof role.position === "number" ? role.position : undefined,
+          managed: typeof role.managed === "boolean" ? role.managed : undefined,
+          mentionable: typeof role.mentionable === "boolean" ? role.mentionable : undefined,
+          hoist: typeof role.hoist === "boolean" ? role.hoist : undefined,
+        },
+      ]),
+    );
+
+    const existingRows = await ctx.db
+      .query("discordBotRoles")
+      .withIndex("by_guildId", (q) => q.eq("guildId", guildId))
+      .collect();
+    const existingByRoleId = new Map(existingRows.map((row) => [row.roleId, row]));
+
+    let upserted = 0;
+    let deactivated = 0;
+    for (const [roleId, role] of incomingByRoleId.entries()) {
+      const existing = existingByRoleId.get(roleId);
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          name: role.name,
+          position: role.position,
+          managed: role.managed,
+          mentionable: role.mentionable,
+          hoist: role.hoist,
+          active: true,
+          lastSeenAt: now,
+          updatedAt: now,
+        });
+      } else {
+        await ctx.db.insert("discordBotRoles", {
+          guildId,
+          roleId,
+          name: role.name,
+          position: role.position,
+          managed: role.managed,
+          mentionable: role.mentionable,
+          hoist: role.hoist,
+          active: true,
+          lastSeenAt: now,
+          updatedAt: now,
+        });
+      }
+      upserted += 1;
+    }
+
+    for (const existing of existingRows) {
+      if (incomingByRoleId.has(existing.roleId)) continue;
+      if (!existing.active) continue;
+      await ctx.db.patch(existing._id, {
+        active: false,
+        updatedAt: now,
+      });
+      deactivated += 1;
+    }
+
+    console.info(
+      `[discord-bot-presence] sync roles guild=${guildId} upserted=${upserted} deactivated=${deactivated}`,
+    );
+    return {
+      ok: true as const,
+      guildId,
+      upserted,
+      deactivated,
+      total: incomingByRoleId.size,
+    };
+  },
+});
+
 export const listBotGuilds = query({
   args: {
     includeInactive: v.optional(v.boolean()),
@@ -269,6 +373,50 @@ export const listBotGuildChannels = query({
       type: typeof row.type === "number" ? row.type : null,
       parentId: row.parentId ?? null,
       position: typeof row.position === "number" ? row.position : null,
+      active: row.active,
+      lastSeenAt: row.lastSeenAt,
+      updatedAt: row.updatedAt,
+    }));
+  },
+});
+
+export const listBotGuildRoles = query({
+  args: {
+    guildId: v.optional(v.string()),
+    includeInactive: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const includeInactive = args.includeInactive === true;
+    const guildId = args.guildId?.trim() ?? "";
+    const rows = includeInactive
+      ? guildId
+        ? await ctx.db
+            .query("discordBotRoles")
+            .withIndex("by_guildId", (q) => q.eq("guildId", guildId))
+            .collect()
+        : await ctx.db.query("discordBotRoles").collect()
+      : await ctx.db
+          .query("discordBotRoles")
+          .withIndex("by_active", (q) => q.eq("active", true))
+          .collect();
+
+    const filtered = guildId ? rows.filter((row) => row.guildId === guildId) : rows;
+    filtered.sort((a, b) => {
+      const byGuild = a.guildId.localeCompare(b.guildId);
+      if (byGuild !== 0) return byGuild;
+      const posA = typeof a.position === "number" ? a.position : Number.MIN_SAFE_INTEGER;
+      const posB = typeof b.position === "number" ? b.position : Number.MIN_SAFE_INTEGER;
+      if (posA !== posB) return posB - posA;
+      return a.name.localeCompare(b.name);
+    });
+    return filtered.map((row) => ({
+      guildId: row.guildId,
+      roleId: row.roleId,
+      name: row.name,
+      position: typeof row.position === "number" ? row.position : null,
+      managed: typeof row.managed === "boolean" ? row.managed : null,
+      mentionable: typeof row.mentionable === "boolean" ? row.mentionable : null,
+      hoist: typeof row.hoist === "boolean" ? row.hoist : null,
       active: row.active,
       lastSeenAt: row.lastSeenAt,
       updatedAt: row.updatedAt,

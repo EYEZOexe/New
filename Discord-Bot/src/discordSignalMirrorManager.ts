@@ -6,6 +6,8 @@ import {
 import type { APIAllowedMentions, APIEmbed, Channel, Message } from "discord.js";
 
 import type { ClaimedSignalMirrorJob } from "./convexSignalMirrorClient";
+import type { DiscordMirrorOwnershipCache } from "./discordMirrorOwnershipCache";
+import { logWarn } from "./logger";
 
 export type SignalMirrorExecutionResult = {
   ok: boolean;
@@ -34,6 +36,11 @@ type RoleMentionSanitizationResult = {
   removedRoleIds: string[];
 };
 
+type MirrorOwnershipLookup = Pick<
+  DiscordMirrorOwnershipCache,
+  "isReady" | "hasGuild" | "hasRole" | "hasRoleInGuild"
+>;
+
 class MirrorOperationError extends Error {
   constructor(message: string) {
     super(message);
@@ -43,12 +50,36 @@ class MirrorOperationError extends Error {
 
 export class DiscordSignalMirrorManager {
   private readonly client: Client;
+  private readonly ownershipLookup: MirrorOwnershipLookup | null;
 
-  constructor(client: Client) {
+  constructor(
+    client: Client,
+    args?: {
+      ownershipLookup?: MirrorOwnershipLookup;
+    },
+  ) {
     this.client = client;
+    this.ownershipLookup = args?.ownershipLookup ?? null;
   }
 
   async executeJob(job: ClaimedSignalMirrorJob): Promise<SignalMirrorExecutionResult> {
+    const sanitizedForeignReferences =
+      job.eventType === "delete"
+        ? {
+            content: job.content,
+            removedEventGuildIds: [] as string[],
+            removedRoleIds: [] as string[],
+          }
+        : this.sanitizeForeignReferences(job.content);
+    if (
+      sanitizedForeignReferences.removedEventGuildIds.length > 0 ||
+      sanitizedForeignReferences.removedRoleIds.length > 0
+    ) {
+      logWarn(
+        `[mirror] stripped foreign references source_message=${job.sourceMessageId} target_channel=${job.targetChannelId} event_guilds=${sanitizedForeignReferences.removedEventGuildIds.join(",") || "none"} roles=${sanitizedForeignReferences.removedRoleIds.join(",") || "none"}`,
+      );
+    }
+
     const channel = await this.client.channels
       .fetch(job.targetChannelId)
       .catch((error: unknown) => {
@@ -118,7 +149,7 @@ export class DiscordSignalMirrorManager {
     }
 
     const sanitizedContent = await this.sanitizeRoleMentions({
-      content: job.content,
+      content: sanitizedForeignReferences.content,
       guildId,
       sourceMessageId: job.sourceMessageId,
       targetChannelId: job.targetChannelId,
@@ -218,11 +249,33 @@ export class DiscordSignalMirrorManager {
     if (!args.guildId || mentionedRoleIds.length === 0) {
       return { content: args.content, removedRoleIds: [] };
     }
+    const guildId = args.guildId;
 
-    const guild = await this.client.guilds.fetch(args.guildId).catch((error: unknown) => {
+    if (this.ownershipLookup && !this.ownershipLookup.isReady()) {
+      return { content: args.content, removedRoleIds: [] };
+    }
+
+    const ownershipLookup = this.getReadyOwnershipLookup();
+    if (ownershipLookup) {
+      const removedRoleIds = mentionedRoleIds.filter(
+        (roleId) => !ownershipLookup.hasRoleInGuild(guildId, roleId),
+      );
+      if (removedRoleIds.length === 0) {
+        return { content: args.content, removedRoleIds: [] };
+      }
+      console.info(
+        `[mirror] stripped missing role mentions guild=${guildId} source_message=${args.sourceMessageId} target_channel=${args.targetChannelId} roles=${removedRoleIds.join(",")} mode=cache`,
+      );
+      return {
+        content: stripMissingRoleMentions(args.content, removedRoleIds),
+        removedRoleIds,
+      };
+    }
+
+    const guild = await this.client.guilds.fetch(guildId).catch((error: unknown) => {
       const parsed = parseDiscordError(error);
       console.warn(
-        `[mirror] skipped role mention validation guild=${args.guildId} source_message=${args.sourceMessageId} target_channel=${args.targetChannelId} reason=${parsed.message}`,
+        `[mirror] skipped role mention validation guild=${guildId} source_message=${args.sourceMessageId} target_channel=${args.targetChannelId} reason=${parsed.message}`,
       );
       return null;
     });
@@ -277,6 +330,21 @@ export class DiscordSignalMirrorManager {
       return null;
     }
 
+    if (this.ownershipLookup && !this.ownershipLookup.isReady()) {
+      return null;
+    }
+
+    const ownershipLookup = this.getReadyOwnershipLookup();
+    if (ownershipLookup) {
+      if (!ownershipLookup.hasRoleInGuild(args.guildId, rolePingId)) {
+        console.info(
+          `[mirror] skipped missing role ping guild=${args.guildId} role=${rolePingId} source_message=${args.sourceMessageId} target_channel=${args.targetChannelId} mode=cache`,
+        );
+        return null;
+      }
+      return rolePingId;
+    }
+
     const guild = await this.client.guilds.fetch(args.guildId).catch((error: unknown) => {
       const parsed = parseDiscordError(error);
       console.warn(
@@ -311,6 +379,124 @@ export class DiscordSignalMirrorManager {
 
     return rolePingId;
   }
+
+  private sanitizeForeignReferences(content: string): {
+    content: string;
+    removedEventGuildIds: string[];
+    removedRoleIds: string[];
+  } {
+    const foreignEventGuildIds = this.extractForeignEventGuildIds(content);
+    const foreignRoleIds = this.extractForeignRoleIds(content);
+    const contentWithoutForeignEvents = stripForeignEventLinks(content, foreignEventGuildIds);
+    const contentWithoutForeignRoles = stripRoleReferences(
+      contentWithoutForeignEvents,
+      foreignRoleIds,
+    );
+    return {
+      content: contentWithoutForeignRoles,
+      removedEventGuildIds: foreignEventGuildIds,
+      removedRoleIds: foreignRoleIds,
+    };
+  }
+
+  private extractForeignEventGuildIds(content: string): string[] {
+    const guildIds = extractDiscordEventGuildIds(content);
+    if (guildIds.length === 0) {
+      return [];
+    }
+    if (this.ownershipLookup && !this.ownershipLookup.isReady()) {
+      return [];
+    }
+    const ownershipLookup = this.getReadyOwnershipLookup();
+    if (ownershipLookup) {
+      return guildIds.filter((guildId) => !ownershipLookup.hasGuild(guildId));
+    }
+    const guildCache = this.getGuildCache();
+    if (!guildCache) {
+      return [];
+    }
+    return guildIds.filter((guildId) => !guildCache.has(guildId));
+  }
+
+  private extractForeignRoleIds(content: string): string[] {
+    const roleIds = extractRoleReferenceIds(content);
+    if (roleIds.length === 0) {
+      return [];
+    }
+    if (this.ownershipLookup && !this.ownershipLookup.isReady()) {
+      return [];
+    }
+
+    const ownershipLookup = this.getReadyOwnershipLookup();
+    if (ownershipLookup) {
+      return roleIds.filter((roleId) => !ownershipLookup.hasRole(roleId));
+    }
+
+    const guildCache = this.getGuildCache();
+    if (!guildCache) {
+      return [];
+    }
+
+    const knownRoleIds = new Set<string>();
+    for (const guild of guildCache.values()) {
+      const roleCache = guild.roles?.cache;
+      if (!hasKeyIterable(roleCache)) continue;
+      for (const roleId of roleCache.keys()) {
+        const normalizedRoleId = String(roleId).trim();
+        if (normalizedRoleId) {
+          knownRoleIds.add(normalizedRoleId);
+        }
+      }
+    }
+
+    if (knownRoleIds.size === 0) {
+      return [];
+    }
+
+    return roleIds.filter((roleId) => !knownRoleIds.has(roleId));
+  }
+
+  private getGuildCache(): GuildCacheLike | null {
+    const cache = (this.client.guilds as { cache?: unknown } | undefined)?.cache;
+    if (!isGuildCacheLike(cache)) {
+      return null;
+    }
+    return cache;
+  }
+
+  private getReadyOwnershipLookup(): MirrorOwnershipLookup | null {
+    if (!this.ownershipLookup || !this.ownershipLookup.isReady()) {
+      return null;
+    }
+    return this.ownershipLookup;
+  }
+}
+
+type GuildWithRolesCache = {
+  roles?: {
+    cache?: unknown;
+  };
+};
+
+type GuildCacheLike = {
+  has: (guildId: string) => boolean;
+  values: () => IterableIterator<GuildWithRolesCache>;
+};
+
+function isGuildCacheLike(value: unknown): value is GuildCacheLike {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const maybe = value as { has?: unknown; values?: unknown };
+  return typeof maybe.has === "function" && typeof maybe.values === "function";
+}
+
+function hasKeyIterable(value: unknown): value is { keys: () => IterableIterator<string> } {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const maybe = value as { keys?: unknown };
+  return typeof maybe.keys === "function";
 }
 
 function supportsMessageOps(channel: Channel): channel is MessageCapableChannel {
@@ -331,6 +517,67 @@ function extractRoleMentionIds(content: string): string[] {
     }
   }
   return [...roleIds];
+}
+
+function extractRoleReferenceIds(content: string): string[] {
+  const roleIds = new Set<string>(extractRoleMentionIds(content));
+  const mappedRolePattern = /@role:(\d{2,})/gi;
+  for (const match of content.matchAll(mappedRolePattern)) {
+    const roleId = match[1]?.trim() ?? "";
+    if (roleId) {
+      roleIds.add(roleId);
+    }
+  }
+  return [...roleIds];
+}
+
+function extractDiscordEventGuildIds(content: string): string[] {
+  const guildIds = new Set<string>();
+  const eventPattern =
+    /(?:https?:\/\/)?(?:canary\.|ptb\.)?discord\.com\/events\/(\d{5,25})\/\d{5,25}\/\d{5,25}(?:[/?#]\S*)?/gi;
+  for (const match of content.matchAll(eventPattern)) {
+    const guildId = match[1]?.trim() ?? "";
+    if (guildId) {
+      guildIds.add(guildId);
+    }
+  }
+  return [...guildIds];
+}
+
+function stripForeignEventLinks(content: string, guildIdsToRemove: string[]): string {
+  if (guildIdsToRemove.length === 0) {
+    return content;
+  }
+  const removalSet = new Set(
+    guildIdsToRemove.map((guildId) => guildId.trim()).filter((guildId) => guildId.length > 0),
+  );
+  if (removalSet.size === 0) {
+    return content;
+  }
+
+  const eventPattern =
+    /(?:https?:\/\/)?(?:canary\.|ptb\.)?discord\.com\/events\/(\d{5,25})\/\d{5,25}\/\d{5,25}(?:[/?#]\S*)?/gi;
+  const stripped = content.replace(eventPattern, (fullMatch, guildId: string) =>
+    removalSet.has(guildId) ? "" : fullMatch,
+  );
+  return normalizeStrippedContent(stripped);
+}
+
+function stripRoleReferences(content: string, roleIdsToRemove: string[]): string {
+  if (roleIdsToRemove.length === 0) {
+    return content;
+  }
+  const withoutMentions = stripMissingRoleMentions(content, roleIdsToRemove);
+  const removalSet = new Set(
+    roleIdsToRemove.map((roleId) => roleId.trim()).filter((roleId) => roleId.length > 0),
+  );
+  if (removalSet.size === 0) {
+    return withoutMentions;
+  }
+  const stripped = withoutMentions.replace(/@role:(\d{2,})/gi, (fullMatch, roleId: string) =>
+    removalSet.has(roleId) ? "" : fullMatch,
+  );
+  return normalizeStrippedContent(stripped);
 }
 
 function normalizeRoleId(value: string | null): string | null {
@@ -354,6 +601,13 @@ function stripMissingRoleMentions(content: string, roleIdsToRemove: string[]): s
   return content.replace(/<@&(\d{2,})>/g, (fullMatch, roleId: string) =>
     removalSet.has(roleId) ? "" : fullMatch,
   );
+}
+
+function normalizeStrippedContent(content: string): string {
+  return content
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n");
 }
 
 function buildMirroredPayload(
