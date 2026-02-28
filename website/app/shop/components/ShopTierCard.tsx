@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Check, Sparkles, Star } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 import type { CatalogTier, CatalogVariant } from "../types";
-import { buildCheckoutUrl } from "../utils";
+import { buildCheckoutStatusUrl, buildCheckoutUrl } from "../utils";
 
 type ShopTierCardProps = {
   tier: CatalogTier;
@@ -69,6 +70,7 @@ function isFreeVariant(variant: CatalogVariant): boolean {
 }
 
 export function ShopTierCard(props: ShopTierCardProps) {
+  const router = useRouter();
   const selected = props.selectedVariant;
   const tierIsFeatured = props.tier.variants.some((variant) => variant.isFeatured);
   const palette = getTierPalette(props.tier.tier);
@@ -83,6 +85,14 @@ export function ShopTierCard(props: ShopTierCardProps) {
         props.viewerEmail,
       )
     : undefined;
+  const statusHref = selected
+    ? buildCheckoutStatusUrl({
+        tier: props.tier.tier,
+        durationDays: selected.durationDays,
+        checkoutUrl,
+        launch: "blocked",
+      })
+    : "/checkout/return";
 
   return (
     <Card
@@ -216,23 +226,37 @@ export function ShopTierCard(props: ShopTierCardProps) {
             ) : null}
 
             <div className="mt-auto space-y-3 pt-1">
-              <Button asChild className={cn("h-11 w-full rounded-xl text-sm font-semibold", palette.cta)}>
-                <a
-                  href={checkoutUrl ?? selected.checkoutUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={() => {
-                    console.info(
-                      `[shop] checkout launch tier=${props.tier.tier} duration_days=${selected.durationDays} email_prefill=${props.viewerEmail ? "yes" : "no"}`,
-                    );
-                  }}
-                >
-                  Start {props.tier.title}
-                </a>
+              <Button
+                type="button"
+                className={cn("h-11 w-full rounded-xl text-sm font-semibold", palette.cta)}
+                onClick={() => {
+                  const launchUrl = checkoutUrl ?? selected.checkoutUrl;
+                  const popup =
+                    typeof window !== "undefined"
+                      ? window.open(launchUrl, "_blank")
+                      : null;
+                  if (popup) {
+                    popup.opener = null;
+                  }
+                  const launchMode = popup ? "opened" : "blocked";
+                  console.info(
+                    `[shop] checkout launch tier=${props.tier.tier} duration_days=${selected.durationDays} email_prefill=${props.viewerEmail ? "yes" : "no"} launch_mode=${launchMode}`,
+                  );
+                  router.push(
+                    buildCheckoutStatusUrl({
+                      tier: props.tier.tier,
+                      durationDays: selected.durationDays,
+                      checkoutUrl: launchUrl,
+                      launch: launchMode,
+                    }),
+                  );
+                }}
+              >
+                Start {props.tier.title}
               </Button>
               <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span>Need help after payment?</span>
-                <Link href="/checkout/return" className="underline underline-offset-4 hover:text-foreground">
+                <Link href={statusHref} className="underline underline-offset-4 hover:text-foreground">
                   Open order status
                 </Link>
               </div>
