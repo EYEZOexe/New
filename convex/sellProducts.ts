@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
+import { sellRequest } from "./sellApi";
 
 type SellProductVisibility = "PUBLIC" | "ON_HOLD" | "HIDDEN" | "PRIVATE";
 type SellPaymentMethod =
@@ -61,10 +62,6 @@ type SellProductVariantRow = {
   updated_at: string | null;
 };
 
-type SellApiResponse<T> = {
-  data: T;
-};
-
 const SELL_PAYMENT_METHOD_ORDER: SellPaymentMethod[] = [
   "PAYPAL",
   "STRIPE",
@@ -96,14 +93,6 @@ function normalizeRequired(value: string, fieldName: string): string {
   const trimmed = value.trim();
   if (!trimmed) throw new Error(`${fieldName}_required`);
   return trimmed;
-}
-
-function getSellApiToken(): string {
-  const token = process.env.SELLAPP_API_TOKEN?.trim() ?? "";
-  if (!token) {
-    throw new Error("sell_api_token_missing");
-  }
-  return token;
 }
 
 function normalizePositiveInteger(value: number, fieldName: string): number {
@@ -147,38 +136,6 @@ function sortSellPaymentMethods(methods: SellPaymentMethod[]): SellPaymentMethod
     if (right === -1) return -1;
     return left - right;
   });
-}
-
-async function parseSellError(response: Response): Promise<string> {
-  const text = await response.text();
-  if (!text) return `sell_api_error_${response.status}`;
-  try {
-    const parsed = JSON.parse(text) as { message?: string; errors?: unknown };
-    if (parsed.message && parsed.message.trim()) return parsed.message.trim();
-    return `sell_api_error_${response.status}`;
-  } catch {
-    return `sell_api_error_${response.status}`;
-  }
-}
-
-async function sellRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getSellApiToken();
-  const response = await fetch(`https://sell.app/api/v2${path}`, {
-    ...init,
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${token}`,
-      ...(init?.headers ?? {}),
-    },
-  });
-
-  if (!response.ok) {
-    const message = await parseSellError(response);
-    throw new Error(message);
-  }
-
-  const json = (await response.json()) as SellApiResponse<T>;
-  return json.data;
 }
 
 function toSellProductRow(raw: Record<string, unknown>): SellProductRow {

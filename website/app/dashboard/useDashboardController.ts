@@ -4,7 +4,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { makeFunctionReference } from "convex/server";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useViewerConnectorSelection } from "@/app/workspace/lib/useViewerConnectorSelection";
 
@@ -66,6 +66,7 @@ export function useDashboardController() {
   const [discordCallbackLinkState, setDiscordCallbackLinkState] = useState<string | null>(null);
   const [discordCallbackError, setDiscordCallbackError] = useState<string | null>(null);
   const [countdownNow, setCountdownNow] = useState(() => Date.now());
+  const reminderLogKeyRef = useRef<string | null>(null);
 
   const viewer = useQuery(viewerRef, isAuthenticated ? {} : "skip");
   const viewerDiscordLink = useQuery(viewerDiscordLinkRef, isAuthenticated ? {} : "skip");
@@ -258,6 +259,14 @@ export function useDashboardController() {
   const remainingMs = viewer?.subscriptionEndsAt ? viewer.subscriptionEndsAt - countdownNow : null;
   const hasRemainingTime = typeof remainingMs === "number" && remainingMs > 0;
   const remainingText = typeof remainingMs === "number" ? formatRemainingMs(remainingMs) : null;
+  const isEndingWithinOneDay =
+    viewer?.subscriptionStatus === "active" &&
+    typeof remainingMs === "number" &&
+    remainingMs > 0 &&
+    remainingMs <= 24 * 60 * 60 * 1000;
+  const renewalReminderText = isEndingWithinOneDay
+    ? `Your subscription ends in ${remainingText}. Renew now to avoid access interruption.`
+    : null;
   const configuredVisibleMappings = (mappings ?? []).filter(
     (mapping) => mapping.dashboardEnabled === true && mapping.minimumTier,
   );
@@ -287,6 +296,16 @@ export function useDashboardController() {
     visibleMappingsForTier.length,
   ]);
 
+  useEffect(() => {
+    if (!viewer || !viewer.subscriptionEndsAt || !isEndingWithinOneDay) return;
+    const reminderKey = `${viewer.userId}:${viewer.subscriptionEndsAt}`;
+    if (reminderLogKeyRef.current === reminderKey) return;
+    reminderLogKeyRef.current = reminderKey;
+    console.info(
+      `[dashboard/notifications] renewal reminder user=${viewer.userId} tier=${viewer.tier ?? "none"} ends_at=${viewer.subscriptionEndsAt} remaining=${remainingText ?? "unknown"}`,
+    );
+  }, [isEndingWithinOneDay, remainingText, viewer]);
+
   return {
     isAuthenticated,
     isLoading,
@@ -313,6 +332,8 @@ export function useDashboardController() {
     lockedMappings,
     remainingText,
     hasRemainingTime,
+    isEndingWithinOneDay,
+    renewalReminderText,
     signalState,
   };
 }

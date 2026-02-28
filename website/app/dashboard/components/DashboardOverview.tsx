@@ -12,6 +12,8 @@ type DashboardOverviewProps = {
   hasSignalAccess: boolean;
   remainingText: string | null;
   hasRemainingTime: boolean;
+  isEndingWithinOneDay: boolean;
+  renewalReminderText: string | null;
   configuredVisibleCount: number;
   visibleMappingsCount: number;
   lockedMappings: number;
@@ -59,6 +61,17 @@ export function DashboardOverview(props: DashboardOverviewProps) {
             <Alert className="border-amber-400/40 bg-amber-500/10">
               <AlertDescription className="text-amber-100/90">
                 Signal access is disabled until subscription becomes active.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          {props.isEndingWithinOneDay ? (
+            <Alert className="border-orange-400/40 bg-orange-500/10">
+              <AlertDescription className="text-orange-100/90">
+                {props.renewalReminderText}{" "}
+                <Link href="/shop" className="underline underline-offset-4">
+                  Renew in shop
+                </Link>
+                .
               </AlertDescription>
             </Alert>
           ) : null}

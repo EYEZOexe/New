@@ -48,11 +48,22 @@ describe("shop grouping", () => {
     const state = getAdminNavState("/shop/policies");
     expect(state.activeGroup).toBe("shop");
   });
+
+  it("marks statistics route as active shop child", () => {
+    const state = getAdminNavState("/shop/statistics");
+    expect(state.activeGroup).toBe("shop");
+    expect(state.activeShopRoute).toBe("statistics");
+  });
 });
 
 describe("breadcrumbs", () => {
   it("builds connector detail breadcrumb", () => {
     const crumbs = buildAdminBreadcrumbs("/mappings/t1/conn_01");
     expect(crumbs.join(" / ")).toBe("Mappings / t1 / conn_01");
+  });
+
+  it("builds shop statistics breadcrumb", () => {
+    const crumbs = buildAdminBreadcrumbs("/shop/statistics");
+    expect(crumbs.join(" / ")).toBe("Shop / Statistics");
   });
 });

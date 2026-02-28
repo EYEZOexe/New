@@ -19,6 +19,8 @@ export function OverviewHero(props: OverviewHeroProps) {
         hasSignalAccess={overview.hasSignalAccess}
         remainingText={overview.remainingText}
         hasRemainingTime={overview.hasRemainingTime}
+        isEndingWithinOneDay={overview.isEndingWithinOneDay}
+        renewalReminderText={overview.renewalReminderText}
         configuredVisibleCount={overview.configuredVisibleMappings.length}
         visibleMappingsCount={overview.visibleMappingsForTier.length}
         lockedMappings={overview.lockedMappings}
@@ -34,4 +36,3 @@ export function OverviewHero(props: OverviewHeroProps) {
     </>
   );
 }
-

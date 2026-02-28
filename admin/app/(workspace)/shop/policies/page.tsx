@@ -276,6 +276,9 @@ export default function ShopPoliciesPage() {
             <Link href="/shop/customers" className="admin-link">
               Customers
             </Link>
+            <Link href="/shop/statistics" className="admin-link">
+              Statistics
+            </Link>
             <Link href="/mappings" className="admin-link">
               Mappings
             </Link>

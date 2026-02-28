@@ -395,6 +395,9 @@ export default function ShopCustomersPage() {
             <Link href="/shop/policies" className="admin-link">
               Policies
             </Link>
+            <Link href="/shop/statistics" className="admin-link">
+              Statistics
+            </Link>
             <Link href="/discord-bot" className="admin-link">
               Discord Bot
             </Link>
