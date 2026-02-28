@@ -47,15 +47,26 @@ function getDurationFromSearch(value: string | null): number | null {
   return parsed;
 }
 
+function normalizeEmail(value: string | null): string | null {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ? normalized : null;
+}
+
 export default function CheckoutReturnPage() {
   const router = useRouter();
   const { isAuthenticated } = useConvexAuth();
   const [expectedTier, setExpectedTier] = useState<SubscriptionTier | null>(null);
   const [expectedDurationDays, setExpectedDurationDays] = useState<number | null>(null);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [sellOrderId, setSellOrderId] = useState<string | null>(null);
+  const [sellCustomerEmail, setSellCustomerEmail] = useState<string | null>(null);
   const [launchMode, setLaunchMode] = useState<CheckoutLaunchMode>("unknown");
   const [refreshHref, setRefreshHref] = useState("/checkout/return");
+  const [loginHref, setLoginHref] = useState("/login?redirectTo=%2Fcheckout%2Freturn");
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
+  const [checkoutLaunchWarning, setCheckoutLaunchWarning] = useState<string | null>(null);
 
   const viewerRef = useMemo(
     () =>
@@ -70,9 +81,16 @@ export default function CheckoutReturnPage() {
     setExpectedTier(getTierFromSearch(params.get("tier")));
     setExpectedDurationDays(getDurationFromSearch(params.get("duration_days")));
     setCheckoutUrl(normalizeCheckoutPortalUrl(params.get("checkout_url")));
+    const orderIdValue = (params.get("order_id") ?? params.get("orderId") ?? "").trim();
+    setSellOrderId(orderIdValue ? orderIdValue : null);
+    setSellCustomerEmail(
+      normalizeEmail(params.get("customer_email") ?? params.get("email")),
+    );
     setLaunchMode(getLaunchModeFromSearch(params.get("launch")));
     const rawParams = params.toString();
-    setRefreshHref(rawParams ? `/checkout/return?${rawParams}` : "/checkout/return");
+    const nextRefreshHref = rawParams ? `/checkout/return?${rawParams}` : "/checkout/return";
+    setRefreshHref(nextRefreshHref);
+    setLoginHref(`/login?redirectTo=${encodeURIComponent(nextRefreshHref)}`);
   }, []);
 
   const status: "pending" | "success" | "failure" = (() => {
@@ -118,24 +136,29 @@ export default function CheckoutReturnPage() {
 
   useEffect(() => {
     console.info(
-      `[checkout/return] status=${status} tier_expected=${expectedTier ?? "none"} tier_current=${viewer?.tier ?? "none"} launch_mode=${launchMode} checkout_url=${checkoutUrl ? "present" : "missing"}`,
+      `[checkout/return] status=${status} tier_expected=${expectedTier ?? "none"} tier_current=${viewer?.tier ?? "none"} launch_mode=${launchMode} checkout_url=${checkoutUrl ? "present" : "missing"} order_id=${sellOrderId ?? "none"} customer_email=${sellCustomerEmail ?? "none"}`,
     );
-  }, [checkoutUrl, expectedTier, launchMode, status, viewer?.tier]);
+  }, [checkoutUrl, expectedTier, launchMode, sellCustomerEmail, sellOrderId, status, viewer?.tier]);
 
   const handleOpenCheckoutPortal = useCallback(() => {
     if (!checkoutUrl || typeof window === "undefined") return;
     const popup = window.open(checkoutUrl, "_blank");
     if (popup) {
       popup.opener = null;
+      setCheckoutLaunchWarning(null);
       console.info("[checkout/return] checkout portal opened in new tab");
       return;
     }
-    console.warn("[checkout/return] popup blocked, navigating current tab to checkout portal");
-    window.location.assign(checkoutUrl);
+    setCheckoutLaunchWarning(
+      "Browser blocked a popup tab. Allow popups for this site, then try Open checkout again.",
+    );
+    console.warn("[checkout/return] popup blocked while opening checkout portal");
   }, [checkoutUrl]);
 
   const pendingCopy =
-    launchMode === "opened"
+    sellOrderId
+      ? `Sell redirected you back (order ${sellOrderId}). We are waiting for payment webhook confirmation to activate access.`
+      : launchMode === "opened"
       ? "Checkout should be open in a separate tab. Complete payment there and this page will update automatically."
       : launchMode === "blocked"
         ? "Your browser blocked automatic checkout launch. Use the button below to open the checkout portal."
@@ -160,6 +183,16 @@ export default function CheckoutReturnPage() {
               <Clock3 className="size-4" />
               <AlertTitle>Still processing</AlertTitle>
               <AlertDescription>{pendingCopy}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {!isAuthenticated ? (
+            <Alert>
+              <Clock3 className="size-4" />
+              <AlertTitle>Sign in to confirm activation</AlertTitle>
+              <AlertDescription>
+                Access status is attached to your account. Sign in with the same email used at checkout to complete verification.
+              </AlertDescription>
             </Alert>
           ) : null}
 
@@ -201,11 +234,14 @@ export default function CheckoutReturnPage() {
               <Link href="/shop">Back to pricing</Link>
             </Button>
             <Button asChild className="rounded-full px-5">
-              <Link href={status === "failure" ? "/shop" : "/dashboard"}>
-                {status === "failure" ? "Retry plans" : "Open dashboard"}
+              <Link href={!isAuthenticated ? loginHref : status === "failure" ? "/shop" : "/dashboard"}>
+                {!isAuthenticated ? "Log in to verify" : status === "failure" ? "Retry plans" : "Open dashboard"}
               </Link>
             </Button>
           </div>
+          {checkoutLaunchWarning ? (
+            <p className="text-sm text-amber-200">{checkoutLaunchWarning}</p>
+          ) : null}
         </div>
 
         <Card className="site-card-hover rounded-2xl border border-border/70 bg-background/45 p-4">
@@ -218,6 +254,10 @@ export default function CheckoutReturnPage() {
                 <Badge variant="outline" className="rounded-full">
                   Duration: {expectedDurationDays} days
                 </Badge>
+              ) : null}
+              {sellOrderId ? <Badge variant="outline" className="rounded-full">Order: {sellOrderId}</Badge> : null}
+              {sellCustomerEmail ? (
+                <Badge variant="outline" className="rounded-full">Email: {sellCustomerEmail}</Badge>
               ) : null}
               <Badge variant="outline" className="rounded-full">Launch: {launchMode}</Badge>
               {viewer?.tier ? <Badge variant="outline" className="rounded-full">Current: {viewer.tier}</Badge> : null}

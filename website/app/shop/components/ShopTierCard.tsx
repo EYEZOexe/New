@@ -226,33 +226,29 @@ export function ShopTierCard(props: ShopTierCardProps) {
             ) : null}
 
             <div className="mt-auto space-y-3 pt-1">
-              <Button
-                type="button"
-                className={cn("h-11 w-full rounded-xl text-sm font-semibold", palette.cta)}
-                onClick={() => {
-                  const launchUrl = checkoutUrl ?? selected.checkoutUrl;
-                  const popup =
-                    typeof window !== "undefined"
-                      ? window.open(launchUrl, "_blank")
-                      : null;
-                  if (popup) {
-                    popup.opener = null;
-                  }
-                  const launchMode = popup ? "opened" : "blocked";
-                  console.info(
-                    `[shop] checkout launch tier=${props.tier.tier} duration_days=${selected.durationDays} email_prefill=${props.viewerEmail ? "yes" : "no"} launch_mode=${launchMode}`,
-                  );
-                  router.push(
-                    buildCheckoutStatusUrl({
+              <Button asChild className={cn("h-11 w-full rounded-xl text-sm font-semibold", palette.cta)}>
+                <a
+                  href={checkoutUrl ?? selected.checkoutUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => {
+                    const launchUrl = checkoutUrl ?? selected.checkoutUrl;
+                    console.info(
+                      `[shop] checkout launch tier=${props.tier.tier} duration_days=${selected.durationDays} email_prefill=${props.viewerEmail ? "yes" : "no"} launch_mode=opened`,
+                    );
+                    const statusUrl = buildCheckoutStatusUrl({
                       tier: props.tier.tier,
                       durationDays: selected.durationDays,
                       checkoutUrl: launchUrl,
-                      launch: launchMode,
-                    }),
-                  );
-                }}
-              >
-                Start {props.tier.title}
+                      launch: "opened",
+                    });
+                    window.setTimeout(() => {
+                      router.push(statusUrl);
+                    }, 80);
+                  }}
+                >
+                  Start {props.tier.title}
+                </a>
               </Button>
               <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span>Need help after payment?</span>
