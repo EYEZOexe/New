@@ -5,7 +5,14 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminSectionCard } from "@/components/admin/admin-section-card";
 import type { CatalogQueryResult, SubscriptionTier } from "../types";
-import { buildAutoCheckoutUrl, formatCatalogError, normalizeStorefrontUrl } from "../utils";
+import {
+  buildAutoCheckoutUrl,
+  formatCatalogError,
+  normalizeStorefrontUrl,
+  parseDisplayPriceToCents,
+  parseProductIdFromPolicyExternalId,
+  parseProductSlugFromPolicyExternalId,
+} from "../utils";
 
 type SellProductVisibility = "PUBLIC" | "ON_HOLD" | "HIDDEN" | "PRIVATE";
 type SellProductVariantRow = {
@@ -100,27 +107,6 @@ function defaultTierTitle(tier: SubscriptionTier): string {
   if (tier === "basic") return "Starter";
   if (tier === "advanced") return "Advanced";
   return "Pro";
-}
-
-function parseProductIdFromExternalId(externalId: string): number | null {
-  const [idPart] = externalId.split("|");
-  const parsed = Number.parseInt((idPart ?? "").trim(), 10);
-  if (!Number.isInteger(parsed) || parsed <= 0) return null;
-  return parsed;
-}
-
-function parseProductSlugFromExternalId(externalId: string): string | null {
-  const [, slugPart] = externalId.split("|");
-  const slug = (slugPart ?? "").trim();
-  return slug.length > 0 ? slug : null;
-}
-
-function parseDisplayPriceToCents(displayPrice: string): number | null {
-  const normalized = displayPrice.trim().replace(/[^0-9.]/g, "");
-  if (!normalized) return null;
-  const value = Number.parseFloat(normalized);
-  if (!Number.isFinite(value) || value < 0) return null;
-  return Math.round(value * 100);
 }
 
 export function CatalogSetupWizard({
@@ -492,8 +478,8 @@ export function CatalogSetupWizard({
       if (!Number.isInteger(parsedDuration) || parsedDuration <= 0) {
         throw new Error("Variant duration days must be a positive integer.");
       }
-      const productId = parseProductIdFromExternalId(selectedPolicyExternalId);
-      const productSlug = parseProductSlugFromExternalId(selectedPolicyExternalId);
+      const productId = parseProductIdFromPolicyExternalId(selectedPolicyExternalId);
+      const productSlug = parseProductSlugFromPolicyExternalId(selectedPolicyExternalId);
       const productUniqid = selectedProduct?.uniqid ?? null;
       if (!productId) {
         throw new Error("Could not resolve product ID from selected policy key.");

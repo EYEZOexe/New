@@ -1,7 +1,7 @@
 "use client";
 
 import { makeFunctionReference } from "convex/server";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type {
@@ -18,7 +18,10 @@ import type {
 import {
   buildAutoCheckoutUrl,
   formatCatalogError,
+  parseDisplayPriceToCents,
   parsePolicyOptionValue,
+  parseProductIdFromPolicyExternalId,
+  parseProductSlugFromPolicyExternalId,
 } from "./utils";
 
 const STOREFRONT_STORAGE_KEY = "admin.catalog.sellStorefront";
@@ -80,6 +83,37 @@ const setVariantActiveRef = makeFunctionReference<
   SetVariantActiveResult
 >("shopCatalog:setShopVariantActive");
 
+type UpsertSellProductVariantResult =
+  | {
+      ok: true;
+      variant: {
+        id: number | null;
+        uniqid: string | null;
+        title: string;
+        pricing: {
+          type: string | null;
+          humble: boolean | null;
+          price: { price: number | null; currency: string | null };
+        };
+      };
+    }
+  | { ok: false; error: string };
+
+const upsertSellProductVariantRef = makeFunctionReference<
+  "action",
+  {
+    productId: number;
+    productSlug?: string;
+    title: string;
+    description: string;
+    priceCents: number;
+    currency?: string;
+    minimumPurchaseQuantity?: number;
+    manualComment?: string;
+  },
+  UpsertSellProductVariantResult
+>("sellProducts:upsertSellProductVariant");
+
 export function useCatalogEditor(defaultStorefrontUrl: string) {
   const catalog = useQuery(listAdminRef, {});
   const policies = useQuery(listPoliciesRef, {});
@@ -87,6 +121,7 @@ export function useCatalogEditor(defaultStorefrontUrl: string) {
   const upsertVariant = useMutation(upsertVariantRef);
   const removeVariant = useMutation(removeVariantRef);
   const setVariantActiveMutation = useMutation(setVariantActiveRef);
+  const upsertSellProductVariant = useAction(upsertSellProductVariantRef);
 
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -337,6 +372,55 @@ export function useCatalogEditor(defaultStorefrontUrl: string) {
         );
       }
 
+      let sellSyncSummary = "";
+      let sellSyncSkippedReason: string | null = null;
+      if (policyScope === "product") {
+        const productId = parseProductIdFromPolicyExternalId(policyExternalId);
+        if (!productId) {
+          sellSyncSkippedReason =
+            "policy external ID must include numeric product ID (`productId|slug`)";
+          console.warn(
+            `[admin/catalog] sell variant sync skipped reason=${sellSyncSkippedReason} policy_id=${policyExternalId}`,
+          );
+        } else {
+          const priceCents = parseDisplayPriceToCents(displayPrice);
+          if (priceCents === null) {
+            sellSyncSkippedReason =
+              "display price must be a valid non-negative number for provider sync";
+            console.warn(
+              `[admin/catalog] sell variant sync skipped reason=${sellSyncSkippedReason} display_price=${displayPrice}`,
+            );
+          } else {
+            const productSlug = parseProductSlugFromPolicyExternalId(policyExternalId);
+            const tierSubtitle =
+              catalog?.tiers.find((row) => row.tier === variantTier)?.subtitle?.trim() ?? "";
+            const sellVariantResult = await upsertSellProductVariant({
+              productId,
+              productSlug: productSlug ?? undefined,
+              title: `${parsedDuration}d`,
+              description:
+                tierSubtitle || `${variantTier.toUpperCase()} plan for ${parsedDuration} days`,
+              priceCents,
+              currency: "USD",
+              minimumPurchaseQuantity: 1,
+              manualComment:
+                "Access is delivered automatically after payment confirmation in the dashboard.",
+            });
+            if (!sellVariantResult.ok) {
+              throw new Error(`Sell variant sync failed: ${sellVariantResult.error}`);
+            }
+            sellSyncSummary = ` and Sell variant #${sellVariantResult.variant.id ?? "unknown"} synced`;
+            console.info(
+              `[admin/catalog] sell variant synced product=${productId} slug=${productSlug ?? "none"} sell_variant=${sellVariantResult.variant.id ?? "none"} price_cents=${priceCents} title=${parsedDuration}d`,
+            );
+          }
+        }
+      } else {
+        console.info(
+          `[admin/catalog] sell variant sync skipped policy_scope=${policyScope} policy_id=${policyExternalId}`,
+        );
+      }
+
       const result = await upsertVariant({
         variantId: selectedVariantId || undefined,
         tier: variantTier,
@@ -356,10 +440,14 @@ export function useCatalogEditor(defaultStorefrontUrl: string) {
         return;
       }
 
-      setMessage(
+      const baseMessage =
         selectedVariantId
-          ? `Variant ${selectedVariantId} updated.`
-          : `Variant ${result.variantId} created.`,
+          ? `Variant ${selectedVariantId} updated${sellSyncSummary}.`
+          : `Variant ${result.variantId} created${sellSyncSummary}.`;
+      setMessage(
+        sellSyncSkippedReason
+          ? `${baseMessage} Sell sync skipped: ${sellSyncSkippedReason}.`
+          : baseMessage,
       );
       console.info(
         `[admin/catalog] variant saved variant=${result.variantId} tier=${variantTier} duration_days=${parsedDuration} active=${variantActive} policy_scope=${policyScope} policy_id=${policyExternalId} checkout_source=${useCustomCheckoutUrl ? "custom" : "policy_product"} checkout_url=${checkoutUrlToSave}`,
@@ -382,6 +470,8 @@ export function useCatalogEditor(defaultStorefrontUrl: string) {
     customCheckoutUrl,
     autoCheckoutUrl,
     policyScope,
+    catalog,
+    upsertSellProductVariant,
     upsertVariant,
     selectedVariantId,
     variantTier,

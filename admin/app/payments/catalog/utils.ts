@@ -16,6 +16,27 @@ export function normalizeStorefrontUrl(url: string): string | null {
   }
 }
 
+export function parseProductIdFromPolicyExternalId(externalId: string): number | null {
+  const [idPart] = externalId.split("|");
+  const parsed = Number.parseInt((idPart ?? "").trim(), 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+export function parseProductSlugFromPolicyExternalId(externalId: string): string | null {
+  const [, slugPart] = externalId.split("|");
+  const slug = (slugPart ?? "").trim();
+  return slug.length > 0 ? slug : null;
+}
+
+export function parseDisplayPriceToCents(displayPrice: string): number | null {
+  const normalized = displayPrice.trim().replace(/[^0-9.]/g, "");
+  if (!normalized) return null;
+  const value = Number.parseFloat(normalized);
+  if (!Number.isFinite(value) || value < 0) return null;
+  return Math.round(value * 100);
+}
+
 function splitPolicyExternalIdForCheckout(externalId: string): {
   matchExternalId: string;
   checkoutHint: string;
