@@ -251,14 +251,11 @@ export function CatalogSetupWizard({
   const [productTitle, setProductTitle] = useState("");
   const [productDescription, setProductDescription] = useState("");
   const [productVisibility, setProductVisibility] = useState<SellProductVisibility>("HIDDEN");
+  const [productSelectionMode, setProductSelectionMode] = useState<"existing" | "new">(
+    "existing",
+  );
   const [isCreatingProduct, setIsCreatingProduct] = useState(false);
   const [selectedPolicyExternalId, setSelectedPolicyExternalId] = useState("");
-
-  const [mappingTier, setMappingTier] = useState<SubscriptionTier>("basic");
-  const [mappingDurationDays, setMappingDurationDays] = useState("30");
-  const [isSavingMapping, setIsSavingMapping] = useState(false);
-  const [mappingMessage, setMappingMessage] = useState<string | null>(null);
-  const [mappingError, setMappingError] = useState<string | null>(null);
 
   const [variantTier, setVariantTier] = useState<SubscriptionTier>("basic");
   const [variantDurationDays, setVariantDurationDays] = useState("30");
@@ -291,9 +288,7 @@ export function CatalogSetupWizard({
       (row) => row.scope === "product" && row.externalId === selectedPolicyExternalId,
     );
     if (!policy) return;
-    setMappingTier(policy.tier);
     if (policy.durationDays !== null) {
-      setMappingDurationDays(String(policy.durationDays));
       setVariantDurationDays(String(policy.durationDays));
     }
     setVariantTier(policy.tier);
@@ -334,6 +329,7 @@ export function CatalogSetupWizard({
       ) ?? null,
     [selectedPolicyExternalId, productOptions],
   );
+  const canCreateProduct = productTitle.trim().length > 0;
 
   const loadSellProducts = useCallback(async () => {
     setIsLoadingProducts(true);
@@ -388,6 +384,10 @@ export function CatalogSetupWizard({
   }, [loadSellPaymentMethods]);
 
   async function onCreateProduct() {
+    if (!canCreateProduct) {
+      setProductsError("Product title is required.");
+      return;
+    }
     setIsCreatingProduct(true);
     setProductsMessage(null);
     setProductsError(null);
@@ -399,23 +399,22 @@ export function CatalogSetupWizard({
       });
       const policyId = policyIdFromProduct(result.product);
       setSelectedPolicyExternalId(policyId);
-      setTierTitle(result.product.title || defaultTierTitle(mappingTier));
+      setTierTitle(result.product.title || defaultTierTitle(variantTier));
       setDraftProducts((current) => mergeProducts(current, [result.product]));
-      const parsedDuration = Number.parseInt(mappingDurationDays.trim(), 10);
+      const parsedDuration = Number.parseInt(variantDurationDays.trim(), 10);
       if (Number.isInteger(parsedDuration) && parsedDuration > 0) {
         await upsertPolicy({
           scope: "product",
           externalId: policyId,
-          tier: mappingTier,
+          tier: variantTier,
           durationDays: parsedDuration,
           enabled: true,
         });
-        setVariantTier(mappingTier);
-        setVariantDurationDays(String(parsedDuration));
       }
       setProductsMessage(`Created product ${result.product.title} (${policyId}).`);
       setProductTitle("");
       setProductDescription("");
+      setProductSelectionMode("existing");
       await loadSellProducts();
       console.info(`[admin/shop-wizard] sell product created id=${policyId}`);
     } catch (error) {
@@ -424,44 +423,6 @@ export function CatalogSetupWizard({
       console.error(`[admin/shop-wizard] sell product create failed: ${text}`);
     } finally {
       setIsCreatingProduct(false);
-    }
-  }
-
-  async function onSaveMapping() {
-    if (!selectedPolicyExternalId) {
-      setMappingError("Select or create a product first.");
-      return;
-    }
-    setIsSavingMapping(true);
-    setMappingMessage(null);
-    setMappingError(null);
-    try {
-      const parsedDuration = Number.parseInt(mappingDurationDays.trim(), 10);
-      if (!Number.isInteger(parsedDuration) || parsedDuration <= 0) {
-        throw new Error("Duration days must be a positive integer.");
-      }
-      await upsertPolicy({
-        scope: "product",
-        externalId: selectedPolicyExternalId,
-        tier: mappingTier,
-        durationDays: parsedDuration,
-        enabled: true,
-      });
-      setVariantTier(mappingTier);
-      setVariantDurationDays(String(parsedDuration));
-      if (!tierTitle.trim()) {
-        setTierTitle(defaultTierTitle(mappingTier));
-      }
-      setMappingMessage(`Saved product mapping for ${selectedPolicyExternalId}.`);
-      console.info(
-        `[admin/shop-wizard] policy mapped external_id=${selectedPolicyExternalId} tier=${mappingTier} duration_days=${parsedDuration}`,
-      );
-    } catch (error) {
-      const text = error instanceof Error ? error.message : "Failed to save mapping";
-      setMappingError(text);
-      console.error(`[admin/shop-wizard] policy map failed: ${text}`);
-    } finally {
-      setIsSavingMapping(false);
     }
   }
 
@@ -498,6 +459,17 @@ export function CatalogSetupWizard({
           "Auto checkout URL could not be generated. Use a valid https storefront URL and a product slug mapping.",
         );
       }
+
+      await upsertPolicy({
+        scope: "product",
+        externalId: selectedPolicyExternalId,
+        tier: variantTier,
+        durationDays: parsedDuration,
+        enabled: true,
+      });
+      console.info(
+        `[admin/shop-wizard] policy mapped from variant save external_id=${selectedPolicyExternalId} tier=${variantTier} duration_days=${parsedDuration}`,
+      );
 
       const tierResult = await upsertTier({
         tier: variantTier,
@@ -587,137 +559,158 @@ export function CatalogSetupWizard({
         <div className="admin-surface-soft">
           <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300">Step 1</p>
           <h3 className="mt-1 text-base font-semibold text-slate-100">Select or create Sell product</h3>
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
-            <label className="admin-label">
-              Existing product
-              <select
-                className="admin-input"
-                value={selectedPolicyExternalId}
-                onChange={(event) => setSelectedPolicyExternalId(event.target.value)}
-              >
-                <option value="">Select product...</option>
-                {productOptions.map((product) => {
-                  const policyId = policyIdFromProduct(product);
-                  return (
-                    <option key={product.id} value={policyId}>
-                      {product.title} ({policyId}) [{product.visibility}]
-                    </option>
-                  );
-                })}
-              </select>
-            </label>
-            <label className="admin-label">
-              Visibility
-              <select
-                className="admin-input"
-                value={productVisibility}
-                onChange={(event) =>
-                  setProductVisibility(event.target.value as SellProductVisibility)
-                }
-              >
-                <option value="PUBLIC">PUBLIC</option>
-                <option value="ON_HOLD">ON_HOLD</option>
-                <option value="HIDDEN">HIDDEN</option>
-                <option value="PRIVATE">PRIVATE</option>
-              </select>
-            </label>
-            <label className="admin-label">
-              New product title
-              <input
-                className="admin-input"
-                value={productTitle}
-                onChange={(event) => setProductTitle(event.target.value)}
-                placeholder="Basic plan"
-              />
-            </label>
-            <label className="admin-label">
-              New product description
-              <input
-                className="admin-input"
-                value={productDescription}
-                onChange={(event) => setProductDescription(event.target.value)}
-                placeholder="Basic plan description"
-              />
-            </label>
+          <p className="mt-1 text-xs text-slate-400">
+            Pick one flow to reduce duplicate fields: use an existing Sell product or create a new
+            one.
+          </p>
+          <div className="mt-3 inline-flex rounded-full border border-slate-800 bg-slate-950/60 p-1">
+            <button
+              type="button"
+              onClick={() => setProductSelectionMode("existing")}
+              className={
+                productSelectionMode === "existing"
+                  ? "rounded-full bg-cyan-500 px-4 py-1.5 text-xs font-semibold text-slate-950"
+                  : "rounded-full px-4 py-1.5 text-xs font-semibold text-slate-300"
+              }
+            >
+              Use existing product
+            </button>
+            <button
+              type="button"
+              onClick={() => setProductSelectionMode("new")}
+              className={
+                productSelectionMode === "new"
+                  ? "rounded-full bg-cyan-500 px-4 py-1.5 text-xs font-semibold text-slate-950"
+                  : "rounded-full px-4 py-1.5 text-xs font-semibold text-slate-300"
+              }
+            >
+              Create new product
+            </button>
           </div>
+
+          {productSelectionMode === "existing" ? (
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <label className="admin-label md:col-span-2">
+                Existing product
+                <select
+                  className="admin-input"
+                  value={selectedPolicyExternalId}
+                  onChange={(event) => setSelectedPolicyExternalId(event.target.value)}
+                >
+                  <option value="">Select product...</option>
+                  {productOptions.map((product) => {
+                    const policyId = policyIdFromProduct(product);
+                    return (
+                      <option key={product.id} value={policyId}>
+                        {product.title} ({policyId}) [{product.visibility}]
+                      </option>
+                    );
+                  })}
+                </select>
+              </label>
+            </div>
+          ) : (
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <label className="admin-label">
+                New product title
+                <input
+                  className="admin-input"
+                  value={productTitle}
+                  onChange={(event) => setProductTitle(event.target.value)}
+                  placeholder="Basic plan"
+                />
+              </label>
+              <label className="admin-label">
+                New product description
+                <input
+                  className="admin-input"
+                  value={productDescription}
+                  onChange={(event) => setProductDescription(event.target.value)}
+                  placeholder="Basic plan description"
+                />
+              </label>
+              <label className="admin-label md:col-span-2">
+                Visibility
+                <select
+                  className="admin-input"
+                  value={productVisibility}
+                  onChange={(event) =>
+                    setProductVisibility(event.target.value as SellProductVisibility)
+                  }
+                >
+                  <option value="PUBLIC">PUBLIC</option>
+                  <option value="ON_HOLD">ON_HOLD</option>
+                  <option value="HIDDEN">HIDDEN</option>
+                  <option value="PRIVATE">PRIVATE</option>
+                </select>
+              </label>
+            </div>
+          )}
+
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" onClick={() => void loadSellProducts()} className="admin-btn-secondary">
               {isLoadingProducts ? "Refreshing..." : "Refresh products"}
             </button>
-            <button
-              type="button"
-              onClick={() => void onCreateProduct()}
-              disabled={isCreatingProduct}
-              className="admin-btn-primary"
-            >
-              {isCreatingProduct ? "Creating..." : "Create product"}
-            </button>
+            {productSelectionMode === "new" ? (
+              <button
+                type="button"
+                onClick={() => void onCreateProduct()}
+                disabled={isCreatingProduct || !canCreateProduct}
+                className="admin-btn-primary"
+              >
+                {isCreatingProduct ? "Creating..." : "Create product"}
+              </button>
+            ) : null}
           </div>
           {selectedProduct ? (
-          <p className="mt-3 text-xs text-slate-300">
-            Selected: {selectedProduct.title} ({selectedPolicyExternalId})
+            <p className="mt-3 text-xs text-slate-300">
+              Selected: {selectedProduct.title} ({selectedPolicyExternalId})
+            </p>
+          ) : null}
+          <p className="mt-2 text-xs text-slate-400">
+            Note: Sell list API only returns public/live products. Draft/hidden products are kept
+            here when created or already linked by policy.
           </p>
-        ) : null}
-        <p className="mt-2 text-xs text-slate-400">
-          Note: Sell list API only returns public/live products. Draft/hidden products are kept here
-          when created or already linked by policy.
-        </p>
-        {productsMessage ? <p className="mt-2 text-sm text-emerald-400">{productsMessage}</p> : null}
-        {productsError ? <p className="mt-2 text-sm text-rose-400">{productsError}</p> : null}
-      </div>
+          {productsMessage ? <p className="mt-2 text-sm text-emerald-400">{productsMessage}</p> : null}
+          {productsError ? <p className="mt-2 text-sm text-rose-400">{productsError}</p> : null}
+        </div>
 
         <div className="admin-surface-soft">
           <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300">Step 2</p>
-          <h3 className="mt-1 text-base font-semibold text-slate-100">Access mapping (policy)</h3>
+          <h3 className="mt-1 text-base font-semibold text-slate-100">Access mapping summary</h3>
           <p className="mt-1 text-xs text-slate-400">
-            Product policy key is auto-linked from your selected Sell product.
+            Product policy mapping is saved automatically when Step 3 variant is saved.
           </p>
-          <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
             <div className="admin-label md:col-span-2">
               Linked product policy key
               <div className="admin-input flex items-center font-mono text-xs text-cyan-300">
                 {selectedPolicyExternalId || "Select a product in Step 1"}
               </div>
             </div>
-            <label className="admin-label">
-              Tier
-              <select
-                className="admin-input"
-                value={mappingTier}
-                onChange={(event) => setMappingTier(event.target.value as SubscriptionTier)}
-              >
-                <option value="basic">basic</option>
-                <option value="advanced">advanced</option>
-                <option value="pro">pro</option>
-              </select>
-            </label>
-            <label className="admin-label">
-              Duration days
-              <input
-                className="admin-input"
-                value={mappingDurationDays}
-                onChange={(event) => setMappingDurationDays(event.target.value)}
-              />
-            </label>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => void onSaveMapping()}
-              disabled={isSavingMapping}
-              className="admin-btn-primary"
-            >
-              {isSavingMapping ? "Saving..." : "Save access mapping"}
-            </button>
+            <div className="admin-label">
+              Tier from Step 3
+              <div className="admin-input flex items-center text-sm font-semibold text-slate-100">
+                {variantTier}
+              </div>
+            </div>
+            <div className="admin-label">
+              Duration from Step 3
+              <div className="admin-input flex items-center text-sm font-semibold text-slate-100">
+                {variantDurationDays || "n/a"} days
+              </div>
+            </div>
           </div>
           {selectedEnabledPolicy ? (
             <p className="mt-2 text-xs text-emerald-300">
               Active mapping found: {selectedEnabledPolicy.tier} /{" "}
               {selectedEnabledPolicy.durationDays ?? "n/a"}d.
             </p>
-          ) : null}
-          {mappingMessage ? <p className="mt-2 text-sm text-emerald-400">{mappingMessage}</p> : null}
-          {mappingError ? <p className="mt-2 text-sm text-rose-400">{mappingError}</p> : null}
+          ) : (
+            <p className="mt-2 text-xs text-slate-400">
+              No active mapping found yet for this product. Save Step 3 to create one.
+            </p>
+          )}
         </div>
 
         <div className="admin-surface-soft">
