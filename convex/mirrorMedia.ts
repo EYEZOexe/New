@@ -3,6 +3,7 @@ import { v } from "convex/values";
 
 import type { Id } from "./_generated/dataModel";
 import { internalAction, internalMutation } from "./_generated/server";
+import { enqueueMirrorJobsForSignal } from "./mirrorQueue";
 
 type SignalAttachment = {
   attachmentId?: string;
@@ -214,6 +215,8 @@ export const applyHydratedSignalMedia = internalMutation({
       .first();
 
     let applied = 0;
+    let signalAttachmentsChanged = false;
+    let nextSignalAttachments: SignalAttachment[] | null = null;
     if (signal?.attachments?.length) {
       const updated = applyResultsToAttachments(signal.attachments, resultByKey);
       if (updated.changed) {
@@ -221,6 +224,8 @@ export const applyHydratedSignalMedia = internalMutation({
           attachments: updated.attachments,
         });
         applied += 1;
+        signalAttachmentsChanged = true;
+        nextSignalAttachments = updated.attachments;
       }
     }
 
@@ -248,8 +253,82 @@ export const applyHydratedSignalMedia = internalMutation({
       applied += 1;
     }
 
+    let mirrorUpdateEnqueued = 0;
+    let mirrorUpdateDeduped = 0;
+    let mirrorUpdateSkipped = 0;
+    if (
+      signal &&
+      signalAttachmentsChanged &&
+      nextSignalAttachments &&
+      typeof signal.deletedAt !== "number"
+    ) {
+      const connector = await ctx.db
+        .query("connectors")
+        .withIndex("by_tenant_connectorId", (q) =>
+          q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+        )
+        .first();
+      const forwardingEnabled = connector?.forwardEnabled === true;
+
+      if (forwardingEnabled) {
+        const mappings = await ctx.db
+          .query("connectorMappings")
+          .withIndex("by_tenant_connector_sourceChannelId", (q) =>
+            q
+              .eq("tenantKey", args.tenantKey)
+              .eq("connectorId", args.connectorId)
+              .eq("sourceChannelId", signal.sourceChannelId),
+          )
+          .collect();
+
+        const targets: Array<{ targetChannelId: string; targetGuildId?: string }> = [];
+        for (const mapping of mappings) {
+          const targetChannelId = mapping.targetChannelId.trim();
+          if (!targetChannelId) continue;
+          const existingMirror = await ctx.db
+            .query("mirroredSignals")
+            .withIndex("by_source_target", (q) =>
+              q
+                .eq("tenantKey", args.tenantKey)
+                .eq("connectorId", args.connectorId)
+                .eq("sourceMessageId", signal.sourceMessageId)
+                .eq("targetChannelId", targetChannelId),
+            )
+            .first();
+          if (!existingMirror?.mirroredMessageId?.trim()) continue;
+          targets.push({
+            targetChannelId,
+            targetGuildId: existingMirror.mirroredGuildId?.trim() || undefined,
+          });
+        }
+
+        if (targets.length > 0) {
+          const mirrorResult = await enqueueMirrorJobsForSignal(ctx, {
+            tenantKey: args.tenantKey,
+            connectorId: args.connectorId,
+            sourceMessageId: signal.sourceMessageId,
+            sourceChannelId: signal.sourceChannelId,
+            sourceGuildId: signal.sourceGuildId,
+            targets,
+            eventType: "update",
+            content: signal.content,
+            attachments: nextSignalAttachments,
+            sourceCreatedAt: signal.createdAt,
+            sourceEditedAt: args.now,
+            sourceDeletedAt: undefined,
+            now: args.now,
+          });
+          mirrorUpdateEnqueued = mirrorResult.enqueued;
+          mirrorUpdateDeduped = mirrorResult.deduped;
+          mirrorUpdateSkipped = mirrorResult.skipped;
+        } else {
+          mirrorUpdateSkipped = 1;
+        }
+      }
+    }
+
     console.info(
-      `[mirror-media] applied hydration source_message=${args.sourceMessageId} results=${args.results.length} rows_updated=${applied}`,
+      `[mirror-media] applied hydration source_message=${args.sourceMessageId} results=${args.results.length} rows_updated=${applied} signal_attachments_changed=${signalAttachmentsChanged} mirror_update_enqueued=${mirrorUpdateEnqueued} mirror_update_deduped=${mirrorUpdateDeduped} mirror_update_skipped=${mirrorUpdateSkipped}`,
     );
     return { applied };
   },
