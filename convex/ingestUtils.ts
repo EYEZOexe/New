@@ -1,9 +1,20 @@
+import { isLikelyImageAttachment, normalizeContentType } from "./imageDetection";
+
 type IngestAttachment = {
   discord_attachment_id: string;
   filename: string;
   source_url: string;
   size: number;
   content_type?: string | null;
+};
+
+type IngestEmbed = {
+  embed_index?: number;
+  embed_type?: string | null;
+  title?: string | null;
+  description?: string | null;
+  url?: string | null;
+  raw_json?: Record<string, unknown> | null;
 };
 
 type IngestMessageEvent = {
@@ -16,6 +27,7 @@ type IngestMessageEvent = {
   edited_at?: string | null;
   deleted_at?: string | null;
   attachments: IngestAttachment[];
+  embeds?: IngestEmbed[];
 };
 
 type IngestNormalizationOptions = {
@@ -58,11 +70,13 @@ export function messageEventToSignalFields(
   editedAt?: number;
   deletedAt?: number;
 } {
-  const attachments = (event.attachments ?? []).flatMap((a) => {
+  const attachmentUrls = new Set<string>();
+  const directAttachments = (event.attachments ?? []).flatMap((a) => {
     const rawUrl = typeof a.source_url === "string" ? a.source_url.trim() : "";
     if (!isSafeAttachmentUrl(rawUrl)) {
       return [];
     }
+    attachmentUrls.add(rawUrl);
 
     const rawName = typeof a.filename === "string" ? a.filename.trim() : "";
     const normalizedName =
@@ -91,6 +105,8 @@ export function messageEventToSignalFields(
       },
     ];
   });
+  const embedMediaAttachments = extractEmbedMediaAttachments(event.embeds, attachmentUrls);
+  const attachments = [...directAttachments, ...embedMediaAttachments];
 
   const editedAtFromPayload = parseOptionalIsoToMs(event.edited_at);
   const deletedAtFromPayload = parseOptionalIsoToMs(event.deleted_at);
@@ -128,4 +144,94 @@ function isSafeAttachmentUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function getFirstString(
+  object: Record<string, unknown>,
+  keys: string[],
+): string | null {
+  for (const key of keys) {
+    const value = object[key];
+    if (typeof value === "string") {
+      const normalized = value.trim();
+      if (normalized) {
+        return normalized;
+      }
+    }
+  }
+  return null;
+}
+
+function pickMediaUrl(embed: Record<string, unknown>, key: string): string | null {
+  const value = embed[key];
+  if (!isRecord(value)) return null;
+  return getFirstString(value, ["url", "proxy_url", "proxyUrl"]);
+}
+
+function extractEmbedMediaAttachments(
+  embeds: IngestEmbed[] | undefined,
+  existingUrls: Set<string>,
+): Array<{
+  attachmentId?: string;
+  url: string;
+  name?: string;
+  contentType?: string;
+}> {
+  if (!Array.isArray(embeds) || embeds.length === 0) {
+    return [];
+  }
+
+  const extracted: Array<{
+    attachmentId?: string;
+    url: string;
+    name?: string;
+    contentType?: string;
+  }> = [];
+
+  for (let index = 0; index < embeds.length; index += 1) {
+    const embed = embeds[index];
+    const raw = isRecord(embed?.raw_json) ? embed.raw_json : null;
+    if (!raw) continue;
+
+    const type = typeof embed?.embed_type === "string" ? embed.embed_type.trim().toLowerCase() : "";
+    const title = typeof embed?.title === "string" ? embed.title.trim() : "";
+    const contentType = normalizeContentType(
+      getFirstString(raw, ["content_type", "contentType"]),
+    );
+    const mediaCandidates = [
+      { slot: "image", url: pickMediaUrl(raw, "image") },
+      { slot: "thumbnail", url: pickMediaUrl(raw, "thumbnail") },
+      { slot: "video", url: pickMediaUrl(raw, "video") },
+    ];
+
+    for (const candidate of mediaCandidates) {
+      const url = candidate.url?.trim() ?? "";
+      if (!isSafeAttachmentUrl(url)) continue;
+      if (
+        !isLikelyImageAttachment({
+          url,
+          contentType: contentType || undefined,
+        })
+      ) {
+        continue;
+      }
+      if (existingUrls.has(url)) continue;
+      existingUrls.add(url);
+
+      const attachmentId = `embed:${index}:${candidate.slot}`;
+      const defaultName = type ? `${type}-${candidate.slot}` : `embed-${candidate.slot}`;
+      extracted.push({
+        attachmentId,
+        url,
+        name: title || defaultName,
+        ...(contentType ? { contentType } : {}),
+      });
+    }
+  }
+
+  return extracted;
 }

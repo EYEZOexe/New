@@ -4,6 +4,7 @@ import { makeFunctionReference } from "convex/server";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { enqueueSeatAuditJobForServer } from "./discordSeatAudit";
+import { isLikelyImageAttachment } from "./imageDetection";
 import { getMirrorBotTokenFromEnv, nextMirrorRetryAt } from "./mirrorQueue";
 import { evaluateSeatGate } from "./seatEnforcement";
 
@@ -79,28 +80,6 @@ function normalizeRolePingId(value: unknown): string | null {
 function extractRolePingIdFromTransformJson(transformJson: unknown): string | null {
   if (!isRecord(transformJson)) return null;
   return normalizeRolePingId(transformJson.rolePingId);
-}
-
-function normalizeContentType(value: string | undefined): string {
-  if (!value) return "";
-  return value.split(";")[0]?.trim().toLowerCase() ?? "";
-}
-
-function isLikelyImageAttachment(attachment: {
-  url?: string;
-  contentType?: string;
-}): boolean {
-  const contentType = normalizeContentType(attachment.contentType);
-  if (contentType.startsWith("image/")) return true;
-  const url = attachment.url?.toLowerCase() ?? "";
-  return (
-    url.includes(".png") ||
-    url.includes(".jpg") ||
-    url.includes(".jpeg") ||
-    url.includes(".webp") ||
-    url.includes(".gif") ||
-    url.includes(".bmp")
-  );
 }
 
 function hasPendingImageHydration(

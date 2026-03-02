@@ -720,7 +720,7 @@ function buildMirroredPayload(
     const url = attachment.url?.trim();
     if (!url) continue;
     const mirrorUrl = attachment.mirrorUrl?.trim() ?? "";
-    if (isLikelyImage(url, attachment.contentType)) {
+    if (isLikelyImage(url, attachment.contentType, attachment.name)) {
       if (!mirrorUrl) {
         pendingConvexSyncImageCount += 1;
         continue;
@@ -809,21 +809,33 @@ function buildMirroredPayload(
   };
 }
 
-function isLikelyImage(url: string, contentType?: string): boolean {
+function isLikelyImage(url: string, contentType?: string, name?: string): boolean {
   const normalizedType = contentType?.toLowerCase().trim();
   if (normalizedType?.startsWith("image/")) {
     return true;
   }
 
-  const lower = url.toLowerCase();
-  return (
-    lower.endsWith(".png") ||
-    lower.endsWith(".jpg") ||
-    lower.endsWith(".jpeg") ||
-    lower.endsWith(".webp") ||
-    lower.endsWith(".gif") ||
-    lower.endsWith(".bmp")
-  );
+  const normalizedName = name?.trim().toLowerCase() ?? "";
+  if (normalizedName && /\.(?:png|jpe?g|webp|gif|bmp|tiff?|avif|svg)$/i.test(normalizedName)) {
+    return true;
+  }
+
+  const normalizedUrl = url.trim();
+  if (!normalizedUrl) return false;
+  try {
+    const parsed = new URL(normalizedUrl);
+    if (/\.(?:png|jpe?g|webp|gif|bmp|tiff?|avif|svg)$/i.test(parsed.pathname.toLowerCase())) {
+      return true;
+    }
+    const format =
+      parsed.searchParams.get("format") ??
+      parsed.searchParams.get("fm") ??
+      parsed.searchParams.get("ext");
+    return Boolean(format && /^(?:png|jpe?g|webp|gif|bmp|tiff?|avif|svg)$/i.test(format));
+  } catch {
+    const lower = normalizedUrl.toLowerCase();
+    return /(?:\.png|\.jpe?g|\.webp|\.gif|\.bmp|\.tiff?|\.avif|\.svg)(?:$|[?#])/i.test(lower);
+  }
 }
 
 function parseDiscordError(error: unknown): {

@@ -5,6 +5,7 @@ import { internalMutation } from "./_generated/server";
 import { resolveAttachmentsForExistingSignalPatch } from "./ingestAttachmentMerge";
 import { resolveContentForExistingSignalPatch } from "./ingestContentMerge";
 import { messageEventToSignalFields } from "./ingestUtils";
+import { isLikelyImageAttachment } from "./imageDetection";
 import { enqueueMirrorJobsForSignal } from "./mirrorQueue";
 
 const hydrateSignalMediaForMessageRef = makeFunctionReference<
@@ -476,22 +477,3 @@ export const ingestThread = internalMutation({
     return { ok: true };
   },
 });
-
-function isLikelyImageAttachment(attachment: {
-  url: string;
-  contentType?: string;
-}): boolean {
-  const contentType = attachment.contentType?.trim().toLowerCase() ?? "";
-  if (contentType.startsWith("image/")) {
-    return true;
-  }
-  const lower = attachment.url.toLowerCase();
-  return (
-    lower.endsWith(".png") ||
-    lower.endsWith(".jpg") ||
-    lower.endsWith(".jpeg") ||
-    lower.endsWith(".webp") ||
-    lower.endsWith(".gif") ||
-    lower.endsWith(".bmp")
-  );
-}

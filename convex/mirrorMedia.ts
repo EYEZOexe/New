@@ -3,6 +3,7 @@ import { v } from "convex/values";
 
 import type { Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { isLikelyImageAttachment } from "./imageDetection";
 import { enqueueMirrorJobsForSignal } from "./mirrorQueue";
 
 type SignalAttachment = {
@@ -889,20 +890,6 @@ function buildAttachmentKey(attachment: { attachmentId?: string; url: string }):
   if (attachmentId) return `id:${attachmentId}`;
   const url = attachment.url.trim();
   return url ? `url:${url}` : "";
-}
-
-function isLikelyImageAttachment(attachment: { url: string; contentType?: string }): boolean {
-  const type = normalizeContentType(attachment.contentType ?? undefined);
-  if (type?.startsWith("image/")) return true;
-  const lower = attachment.url.toLowerCase();
-  return (
-    lower.endsWith(".png") ||
-    lower.endsWith(".jpg") ||
-    lower.endsWith(".jpeg") ||
-    lower.endsWith(".webp") ||
-    lower.endsWith(".gif") ||
-    lower.endsWith(".bmp")
-  );
 }
 
 function formatError(error: unknown): string {

@@ -5,6 +5,7 @@ import type { ActionCtx } from "./_generated/server";
 
 import { computeConnectorTokenHashFromRequest } from "./connectorsAuth";
 import { getCorrelationId, jsonError, jsonResponse } from "./httpHelpers";
+import { isLikelyImageAttachment } from "./imageDetection";
 
 async function authenticateConnector(ctx: ActionCtx, request: Request) {
   const correlationId = getCorrelationId(request);
@@ -85,22 +86,6 @@ function toFiniteNumber(value: unknown): number | undefined {
   return value;
 }
 
-function isLikelyImageAttachment(url: string, contentType?: string): boolean {
-  const normalizedType = contentType?.trim().toLowerCase() ?? "";
-  if (normalizedType.startsWith("image/")) {
-    return true;
-  }
-  const lower = url.toLowerCase();
-  return (
-    lower.endsWith(".png") ||
-    lower.endsWith(".jpg") ||
-    lower.endsWith(".jpeg") ||
-    lower.endsWith(".webp") ||
-    lower.endsWith(".gif") ||
-    lower.endsWith(".bmp")
-  );
-}
-
 function isHttpUrl(value: string): boolean {
   if (!value) return false;
   try {
@@ -137,11 +122,19 @@ function buildInlineHydrationCandidates(args: {
       const url = normalizeString(rawAttachment.source_url);
       if (!isHttpUrl(url)) continue;
 
+      const name = normalizeString(rawAttachment.filename);
       const contentType = normalizeString(rawAttachment.content_type).toLowerCase();
-      if (!isLikelyImageAttachment(url, contentType || undefined)) continue;
+      if (
+        !isLikelyImageAttachment({
+          url,
+          contentType: contentType || undefined,
+          name,
+        })
+      ) {
+        continue;
+      }
 
       const attachmentId = normalizeString(rawAttachment.discord_attachment_id);
-      const name = normalizeString(rawAttachment.filename);
       const size = toFiniteNumber(rawAttachment.size);
 
       attachments.push({

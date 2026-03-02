@@ -90,4 +90,78 @@ describe("ingestUtils", () => {
 
     expect(fields.editedAt).toBe(1771301000000);
   });
+
+  it("extracts embed image media into synthetic attachment refs", () => {
+    const fields = messageEventToSignalFields(
+      {
+        event_type: "create",
+        discord_message_id: "m4",
+        discord_channel_id: "c1",
+        discord_guild_id: "g1",
+        content_clean: "signal text",
+        created_at: "2026-02-16T00:00:00.000Z",
+        edited_at: null,
+        deleted_at: null,
+        attachments: [],
+        embeds: [
+          {
+            embed_index: 0,
+            embed_type: "rich",
+            title: "TradingView",
+            raw_json: {
+              image: {
+                url: "https://media.discordapp.net/attachments/1/2/chart.png?width=600&height=400",
+              },
+            },
+          },
+        ],
+      },
+      { tenantKey: "t1", connectorId: "conn_01" },
+    );
+
+    expect(fields.attachments).toEqual([
+      {
+        attachmentId: "embed:0:image",
+        url: "https://media.discordapp.net/attachments/1/2/chart.png?width=600&height=400",
+        name: "TradingView",
+      },
+    ]);
+  });
+
+  it("extracts embed image URLs when format is provided in query params", () => {
+    const fields = messageEventToSignalFields(
+      {
+        event_type: "create",
+        discord_message_id: "m5",
+        discord_channel_id: "c1",
+        discord_guild_id: "g1",
+        content_clean: "signal text",
+        created_at: "2026-02-16T00:00:00.000Z",
+        edited_at: null,
+        deleted_at: null,
+        attachments: [],
+        embeds: [
+          {
+            embed_index: 0,
+            embed_type: "rich",
+            title: "Chart",
+            raw_json: {
+              image: {
+                url: "https://cdn.example.com/media/preview?format=png",
+              },
+            },
+          },
+        ],
+      },
+      { tenantKey: "t1", connectorId: "conn_01" },
+    );
+
+    expect(fields.attachments).toEqual([
+      {
+        attachmentId: "embed:0:image",
+        url: "https://cdn.example.com/media/preview?format=png",
+        name: "Chart",
+      },
+    ]);
+  });
 });

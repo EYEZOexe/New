@@ -35,6 +35,23 @@ interface MessageAttachment {
     content_type?: string;
 }
 
+type FluxEmbedMedia = {
+    url?: string | null;
+    proxy_url?: string | null;
+    proxyUrl?: string | null;
+};
+
+type FluxEmbed = {
+    type?: string | null;
+    title?: string | null;
+    description?: string | null;
+    url?: string | null;
+    image?: FluxEmbedMedia | null;
+    thumbnail?: FluxEmbedMedia | null;
+    video?: FluxEmbedMedia | null;
+    [key: string]: unknown;
+};
+
 interface FluxMessage {
     id: string;
     channel_id: string;
@@ -43,6 +60,7 @@ interface FluxMessage {
     timestamp: string;
     edited_timestamp: string | null;
     attachments: MessageAttachment[];
+    embeds?: FluxEmbed[];
     mention_roles: string[];
 }
 
@@ -136,6 +154,35 @@ function normalizeContent(input: string) {
         .replace(/<#(\d+)>/g, "#channel:$1")
         .replace(/\s+/g, " ")
         .trim();
+}
+
+function toIngestEmbeds(embeds: FluxEmbed[] | undefined): IngestMessageEvent["embeds"] {
+    if (!Array.isArray(embeds) || embeds.length === 0) return [];
+
+    return embeds.flatMap((embed, index) => {
+        if (!embed || typeof embed !== "object") return [];
+        const source = embed as Record<string, unknown>;
+        const raw_json: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(source)) {
+            if (value !== undefined) {
+                raw_json[key] = value;
+            }
+        }
+
+        const embed_type = typeof embed.type === "string" ? embed.type.trim() : "";
+        const title = typeof embed.title === "string" ? embed.title.trim() : "";
+        const description = typeof embed.description === "string" ? embed.description.trim() : "";
+        const url = typeof embed.url === "string" ? embed.url.trim() : "";
+
+        return [{
+            embed_index: index,
+            ...(embed_type ? { embed_type } : {}),
+            ...(title ? { title } : {}),
+            ...(description ? { description } : {}),
+            ...(url ? { url } : {}),
+            raw_json,
+        }];
+    });
 }
 
 const settings = definePluginSettings({
@@ -1063,7 +1110,7 @@ async function handleMessage(message: FluxMessage, isUpdate: boolean) {
             size: Number(attachment.size ?? 0),
             content_type: attachment.content_type ?? null,
         })),
-        embeds: [],
+        embeds: toIngestEmbeds(message.embeds),
         mentioned_role_ids: Array.isArray(message.mention_roles) ? message.mention_roles.map((r) => String(r)) : [],
     };
 
@@ -1134,7 +1181,11 @@ async function handleMessageDelete(payload: FluxMessageDeleteEvent) {
                 content_type: attachment.content_type ?? null,
             }))
             : [],
-        embeds: [],
+        embeds: toIngestEmbeds(
+            Array.isArray(payload.message?.embeds)
+                ? payload.message.embeds as FluxEmbed[]
+                : undefined
+        ),
         mentioned_role_ids: Array.isArray(payload.message?.mention_roles)
             ? payload.message.mention_roles.map((roleId) => String(roleId))
             : [],
@@ -1258,8 +1309,12 @@ export default definePlugin({
             const attachmentCount = hasAttachmentArray
                 ? (message as { attachments?: unknown[] }).attachments?.length ?? 0
                 : 0;
-            if (!hasStringContent && attachmentCount === 0) {
-                console.debug("[ChannelScraper] Skipping sparse MESSAGE_UPDATE without content or attachments.");
+            const hasEmbedsArray = Array.isArray((message as { embeds?: unknown }).embeds);
+            const embedCount = hasEmbedsArray
+                ? (message as { embeds?: unknown[] }).embeds?.length ?? 0
+                : 0;
+            if (!hasStringContent && attachmentCount === 0 && embedCount === 0) {
+                console.debug("[ChannelScraper] Skipping sparse MESSAGE_UPDATE without content, attachments, or embeds.");
                 return;
             }
             void handleMessage(message, true);
