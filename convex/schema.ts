@@ -488,6 +488,11 @@ export default defineSchema({
   })
     .index("by_status_runAfter", ["status", "runAfter"])
     .index("by_tenant_connector", ["tenantKey", "connectorId"])
+    .index("by_tenant_connector_sourceMessageId", [
+      "tenantKey",
+      "connectorId",
+      "sourceMessageId",
+    ])
     .index("by_dedupe", [
       "tenantKey",
       "connectorId",

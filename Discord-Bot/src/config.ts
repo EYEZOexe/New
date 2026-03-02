@@ -40,12 +40,12 @@ function parseIntEnv(
 export function loadBotConfig(): BotConfig {
   const roleSyncBotToken = requiredEnv("ROLE_SYNC_BOT_TOKEN");
   const dedicatedMirrorToken = process.env.MIRROR_BOT_TOKEN?.trim() ?? "";
-  const queueWakeFallbackMinMs = parseIntEnv("QUEUE_WAKE_FALLBACK_MIN_MS", 250, {
-    min: 50,
+  const queueWakeFallbackMinMs = parseIntEnv("QUEUE_WAKE_FALLBACK_MIN_MS", 25, {
+    min: 10,
     max: 5000,
   });
-  const queueWakeFallbackMaxMs = parseIntEnv("QUEUE_WAKE_FALLBACK_MAX_MS", 1000, {
-    min: 100,
+  const queueWakeFallbackMaxMs = parseIntEnv("QUEUE_WAKE_FALLBACK_MAX_MS", 100, {
+    min: 25,
     max: 10000,
   });
   if (queueWakeFallbackMaxMs < queueWakeFallbackMinMs) {

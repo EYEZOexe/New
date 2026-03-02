@@ -239,6 +239,45 @@ export const claimPendingSignalMirrorJobs = mutation({
             .eq("targetChannelId", job.targetChannelId),
         )
         .first();
+
+      if (job.eventType === "update" && !existingMirror?.mirroredMessageId?.trim()) {
+        const pendingCreate = await ctx.db
+          .query("signalMirrorJobs")
+          .withIndex("by_dedupe", (q) =>
+            q
+              .eq("tenantKey", job.tenantKey)
+              .eq("connectorId", job.connectorId)
+              .eq("sourceMessageId", job.sourceMessageId)
+              .eq("targetChannelId", job.targetChannelId)
+              .eq("eventType", "create")
+              .eq("status", "pending"),
+          )
+          .first();
+        const processingCreate =
+          pendingCreate ??
+          (await ctx.db
+            .query("signalMirrorJobs")
+            .withIndex("by_dedupe", (q) =>
+              q
+                .eq("tenantKey", job.tenantKey)
+                .eq("connectorId", job.connectorId)
+                .eq("sourceMessageId", job.sourceMessageId)
+                .eq("targetChannelId", job.targetChannelId)
+                .eq("eventType", "create")
+                .eq("status", "processing"),
+            )
+            .first());
+
+        if (processingCreate) {
+          await ctx.db.patch(job._id, {
+            runAfter: Math.max(job.runAfter, now + 250),
+            updatedAt: now,
+            lastError: "waiting_for_create",
+          });
+          continue;
+        }
+      }
+
       const mapping = await ctx.db
         .query("connectorMappings")
         .withIndex("by_tenant_connector_sourceChannelId", (q) =>

@@ -37,6 +37,7 @@ type HydrationPerf = {
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 8_000;
+const HYDRATION_CONCURRENCY = 3;
 
 const applyHydratedSignalMediaRef = makeFunctionReference<
   "mutation",
@@ -94,32 +95,59 @@ export const hydrateSignalMediaForMessage = internalAction({
 
     const results: HydrationResult[] = [];
     const perfByAttachment: Array<{ attachmentKey: string; perf: HydrationPerf }> = [];
-    for (const attachment of candidates) {
-      const attachmentKey = buildAttachmentKey(attachment);
-      if (!attachmentKey) continue;
-      const sourceUrl = attachment.url.trim();
-      if (!sourceUrl) continue;
+    for (
+      let index = 0;
+      index < candidates.length;
+      index += HYDRATION_CONCURRENCY
+    ) {
+      const batch = candidates.slice(index, index + HYDRATION_CONCURRENCY);
+      const settled = await Promise.allSettled(
+        batch.map(async (attachment) => {
+          const attachmentKey = buildAttachmentKey(attachment);
+          const sourceUrl = attachment.url.trim();
+          if (!attachmentKey || !sourceUrl) {
+            return null;
+          }
 
-      try {
-        const hydrated = await hydrateSingleImage(ctx, {
-          sourceUrl,
-          contentType: attachment.contentType,
-        });
-        perfByAttachment.push({ attachmentKey, perf: hydrated.perf });
-        results.push({
-          attachmentKey,
-          sourceUrl,
-          status: "ready",
-          storageId: hydrated.storageId,
-          mirrorUrl: hydrated.mirrorUrl ?? undefined,
-          contentType: hydrated.contentType ?? undefined,
-        });
-      } catch (error) {
+          const hydrated = await hydrateSingleImage(ctx, {
+            sourceUrl,
+            contentType: attachment.contentType,
+          });
+
+          return {
+            attachmentKey,
+            sourceUrl,
+            hydrated,
+          };
+        }),
+      );
+
+      for (let offset = 0; offset < settled.length; offset += 1) {
+        const outcome = settled[offset];
+        const attachment = batch[offset];
+        const attachmentKey = buildAttachmentKey(attachment);
+        const sourceUrl = attachment.url.trim();
+        if (!attachmentKey || !sourceUrl) continue;
+
+        if (outcome.status === "fulfilled") {
+          if (!outcome.value) continue;
+          perfByAttachment.push({ attachmentKey, perf: outcome.value.hydrated.perf });
+          results.push({
+            attachmentKey,
+            sourceUrl,
+            status: "ready",
+            storageId: outcome.value.hydrated.storageId,
+            mirrorUrl: outcome.value.hydrated.mirrorUrl ?? undefined,
+            contentType: outcome.value.hydrated.contentType ?? undefined,
+          });
+          continue;
+        }
+
         results.push({
           attachmentKey,
           sourceUrl,
           status: "failed",
-          error: formatError(error),
+          error: formatError(outcome.reason),
         });
       }
     }
@@ -275,14 +303,15 @@ export const applyHydratedSignalMedia = internalMutation({
 
     const jobs = await ctx.db
       .query("signalMirrorJobs")
-      .withIndex("by_tenant_connector", (q) =>
-        q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+      .withIndex("by_tenant_connector_sourceMessageId", (q) =>
+        q
+          .eq("tenantKey", args.tenantKey)
+          .eq("connectorId", args.connectorId)
+          .eq("sourceMessageId", args.sourceMessageId),
       )
       .collect();
     const matchingJobs = jobs.filter(
-      (job) =>
-        job.sourceMessageId === args.sourceMessageId &&
-        (job.status === "pending" || job.status === "processing"),
+      (job) => job.status === "pending" || job.status === "processing",
     );
 
     for (const job of matchingJobs) {
@@ -339,7 +368,6 @@ export const applyHydratedSignalMedia = internalMutation({
                 .eq("targetChannelId", targetChannelId),
             )
             .first();
-          if (!existingMirror?.mirroredMessageId?.trim()) continue;
           targets.push({
             targetChannelId,
             targetGuildId: existingMirror.mirroredGuildId?.trim() || undefined,
