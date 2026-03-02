@@ -69,14 +69,18 @@ export class DiscordSignalMirrorManager {
             content: job.content,
             removedEventGuildIds: [] as string[],
             removedRoleIds: [] as string[],
+            removedGenericLinkCount: 0,
+            removedUnityAcademyMentions: 0,
           }
         : this.sanitizeForeignReferences(job.content);
     if (
       sanitizedForeignReferences.removedEventGuildIds.length > 0 ||
-      sanitizedForeignReferences.removedRoleIds.length > 0
+      sanitizedForeignReferences.removedRoleIds.length > 0 ||
+      sanitizedForeignReferences.removedGenericLinkCount > 0 ||
+      sanitizedForeignReferences.removedUnityAcademyMentions > 0
     ) {
       logWarn(
-        `[mirror] stripped foreign references source_message=${job.sourceMessageId} target_channel=${job.targetChannelId} event_guilds=${sanitizedForeignReferences.removedEventGuildIds.join(",") || "none"} roles=${sanitizedForeignReferences.removedRoleIds.join(",") || "none"}`,
+        `[mirror] stripped content references source_message=${job.sourceMessageId} target_channel=${job.targetChannelId} event_guilds=${sanitizedForeignReferences.removedEventGuildIds.join(",") || "none"} roles=${sanitizedForeignReferences.removedRoleIds.join(",") || "none"} generic_links=${sanitizedForeignReferences.removedGenericLinkCount} unity_mentions=${sanitizedForeignReferences.removedUnityAcademyMentions}`,
       );
     }
 
@@ -155,6 +159,11 @@ export class DiscordSignalMirrorManager {
       targetChannelId: job.targetChannelId,
     });
     const payload = buildMirroredPayload(sanitizedContent.content, job.attachments);
+    if (payload.totalImageCount > 0 || payload.removedAttachmentLinkCount > 0) {
+      console.info(
+        `[mirror] normalized attachments source_message=${job.sourceMessageId} target_channel=${job.targetChannelId} total_images=${payload.totalImageCount} convex_images=${payload.convexBackedImageCount} pending_convex_images=${payload.pendingConvexSyncImageCount} stripped_attachment_links=${payload.removedAttachmentLinkCount}`,
+      );
+    }
     const rolePingId = await this.resolveRolePingId({
       configuredRolePingId: job.rolePingId,
       guildId,
@@ -223,10 +232,19 @@ export class DiscordSignalMirrorManager {
 
     const mirroredExtraMessageIds: string[] = [];
     for (const imageUrl of payload.extraImageUrls) {
-      const imageMessage = await channel.send({ content: imageUrl }).catch((error: unknown) => {
-        const parsed = parseDiscordError(error);
-        throw new MirrorOperationError(classifyDiscordError(parsed, "image_send_failed"));
-      });
+      const imageMessage = await channel
+        .send({
+          embeds: [
+            {
+              color: 0x2f3136,
+              image: { url: imageUrl },
+            },
+          ],
+        })
+        .catch((error: unknown) => {
+          const parsed = parseDiscordError(error);
+          throw new MirrorOperationError(classifyDiscordError(parsed, "image_send_failed"));
+        });
       mirroredExtraMessageIds.push(imageMessage.id);
     }
 
@@ -384,18 +402,29 @@ export class DiscordSignalMirrorManager {
     content: string;
     removedEventGuildIds: string[];
     removedRoleIds: string[];
+    removedGenericLinkCount: number;
+    removedUnityAcademyMentions: number;
   } {
+    const removedUnityAcademyMentions = countUnityAcademyMentions(content);
+    const contentWithoutUnityAcademy = stripUnityAcademyMentions(content);
     const foreignEventGuildIds = this.extractForeignEventGuildIds(content);
     const foreignRoleIds = this.extractForeignRoleIds(content);
-    const contentWithoutForeignEvents = stripForeignEventLinks(content, foreignEventGuildIds);
+    const contentWithoutForeignEvents = stripForeignEventLinks(
+      contentWithoutUnityAcademy,
+      foreignEventGuildIds,
+    );
     const contentWithoutForeignRoles = stripRoleReferences(
       contentWithoutForeignEvents,
       foreignRoleIds,
     );
+    const removedGenericLinkCount = countGenericLinks(contentWithoutForeignRoles);
+    const contentWithoutGenericLinks = stripGenericLinks(contentWithoutForeignRoles);
     return {
-      content: contentWithoutForeignRoles,
+      content: contentWithoutGenericLinks,
       removedEventGuildIds: foreignEventGuildIds,
       removedRoleIds: foreignRoleIds,
+      removedGenericLinkCount,
+      removedUnityAcademyMentions,
     };
   }
 
@@ -605,9 +634,32 @@ function stripMissingRoleMentions(content: string, roleIdsToRemove: string[]): s
 
 function normalizeStrippedContent(content: string): string {
   return content
+    .replace(/\r\n/g, "\n")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n[ \t]+/g, "\n");
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function stripUnityAcademyMentions(content: string): string {
+  return normalizeStrippedContent(content.replace(/\bunity\s+academy\b/gi, ""));
+}
+
+function countUnityAcademyMentions(content: string): number {
+  const matches = content.match(/\bunity\s+academy\b/gi);
+  return matches?.length ?? 0;
+}
+
+const GENERIC_LINK_PATTERN = /(?:https?:\/\/|www\.)[^\s<>()]+/gi;
+
+function stripGenericLinks(content: string): string {
+  return normalizeStrippedContent(content.replace(GENERIC_LINK_PATTERN, ""));
+}
+
+function countGenericLinks(content: string): number {
+  const matches = content.match(GENERIC_LINK_PATTERN);
+  return matches?.length ?? 0;
 }
 
 function buildMirroredPayload(
@@ -615,12 +667,18 @@ function buildMirroredPayload(
   attachments: Array<{
     attachmentId?: string;
     url: string;
+    storageId?: string;
+    mirrorUrl?: string;
     name?: string;
     contentType?: string;
   }>,
 ): {
   embed: APIEmbed;
   extraImageUrls: string[];
+  totalImageCount: number;
+  convexBackedImageCount: number;
+  pendingConvexSyncImageCount: number;
+  removedAttachmentLinkCount: number;
 } {
   const normalizedContent = content.trim();
   const safeContent = normalizedContent || "(empty signal)";
@@ -628,16 +686,28 @@ function buildMirroredPayload(
     safeContent.length > 4096 ? `${safeContent.slice(0, 4093)}...` : safeContent;
 
   const imageUrls: string[] = [];
+  let convexBackedImageCount = 0;
+  let pendingConvexSyncImageCount = 0;
   const nonImageLines: string[] = [];
+  let attachmentCounter = 0;
   for (const attachment of attachments) {
+    attachmentCounter += 1;
     const url = attachment.url?.trim();
     if (!url) continue;
+    const mirrorUrl = attachment.mirrorUrl?.trim() ?? "";
     if (isLikelyImage(url, attachment.contentType)) {
-      imageUrls.push(url);
+      if (!mirrorUrl) {
+        pendingConvexSyncImageCount += 1;
+        continue;
+      }
+      imageUrls.push(mirrorUrl);
+      if (mirrorUrl) {
+        convexBackedImageCount += 1;
+      }
       continue;
     }
-    const name = attachment.name?.trim();
-    nonImageLines.push(name ? `[${name}](${url})` : url);
+    const name = attachment.name?.trim() || `Attachment ${attachmentCounter}`;
+    nonImageLines.push(name);
   }
 
   const embed: APIEmbed = {
@@ -655,17 +725,63 @@ function buildMirroredPayload(
       },
     ];
   }
+  if (pendingConvexSyncImageCount > 0) {
+    const pendingText =
+      pendingConvexSyncImageCount === 1
+        ? "1 image omitted until Convex media sync completes."
+        : `${pendingConvexSyncImageCount} images omitted until Convex media sync completes.`;
+    embed.fields = [
+      ...(embed.fields ?? []),
+      {
+        name: "Images",
+        value: pendingText,
+      },
+    ];
+  }
 
   if (imageUrls.length === 1) {
     embed.image = { url: imageUrls[0] };
-    return { embed, extraImageUrls: [] };
+    if (pendingConvexSyncImageCount > 0) {
+      embed.footer = {
+        text:
+          pendingConvexSyncImageCount === 1
+            ? "1 image pending Convex sync"
+            : `${pendingConvexSyncImageCount} images pending Convex sync`,
+      };
+    }
+    return {
+      embed,
+      extraImageUrls: [],
+      totalImageCount: imageUrls.length,
+      convexBackedImageCount,
+      pendingConvexSyncImageCount,
+      removedAttachmentLinkCount: nonImageLines.length,
+    };
   }
 
   if (imageUrls.length > 1) {
-    embed.footer = { text: `${imageUrls.length} images posted below` };
+    const pendingSuffix =
+      pendingConvexSyncImageCount > 0
+        ? ` \u00b7 ${pendingConvexSyncImageCount} pending sync`
+        : "";
+    embed.footer = { text: `${imageUrls.length} images posted below${pendingSuffix}` };
+  } else if (pendingConvexSyncImageCount > 0) {
+    embed.footer = {
+      text:
+        pendingConvexSyncImageCount === 1
+          ? "1 image pending Convex sync"
+          : `${pendingConvexSyncImageCount} images pending Convex sync`,
+    };
   }
 
-  return { embed, extraImageUrls: imageUrls };
+  return {
+    embed,
+    extraImageUrls: imageUrls,
+    totalImageCount: imageUrls.length,
+    convexBackedImageCount,
+    pendingConvexSyncImageCount,
+    removedAttachmentLinkCount: nonImageLines.length,
+  };
 }
 
 function isLikelyImage(url: string, contentType?: string): boolean {

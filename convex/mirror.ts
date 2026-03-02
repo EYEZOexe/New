@@ -118,6 +118,8 @@ export const claimPendingSignalMirrorJobs = mutation({
       attachments: Array<{
         attachmentId?: string;
         url: string;
+        storageId?: string;
+        mirrorUrl?: string;
         name?: string;
         contentType?: string;
         size?: number;

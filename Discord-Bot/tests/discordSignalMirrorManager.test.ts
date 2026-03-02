@@ -40,6 +40,190 @@ function unknownRoleError(): Error & { code: number } {
 }
 
 describe("discord signal mirror manager", () => {
+  it("strips generic links and Unity Academy mentions from mirrored message text", async () => {
+    const sentPayloads: Array<{
+      content?: string;
+      embeds?: APIEmbed[];
+      allowedMentions?: { parse: string[]; roles: string[] };
+    }> = [];
+    const channel = {
+      guildId: "target_guild_1",
+      send: async (payload: {
+        content?: string;
+        embeds?: APIEmbed[];
+        allowedMentions?: { parse: string[]; roles: string[] };
+      }) => {
+        sentPayloads.push(payload);
+        return { id: `mirrored_${sentPayloads.length}` } as unknown as Message;
+      },
+      messages: {
+        fetch: async () => {
+          throw new Error("unexpected_message_fetch");
+        },
+      },
+    };
+    const client = {
+      channels: {
+        fetch: async () => channel,
+      },
+      guilds: {
+        cache: new Map([
+          [
+            "1087843967573438504",
+            {
+              roles: {
+                cache: new Map<string, { id: string }>(),
+              },
+            },
+          ],
+        ]),
+      },
+    } as unknown as Client;
+
+    const manager = new DiscordSignalMirrorManager(client);
+    const result = await manager.executeJob(
+      buildJob("Unity Academy alpha https://example.com/charts keep this live"),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe("message_created");
+    expect(sentPayloads).toHaveLength(1);
+    expect(sentPayloads[0].embeds?.[0]?.description).toBe("alpha keep this live");
+  });
+
+  it("posts extra images as embeds without raw link-only messages", async () => {
+    const sentPayloads: Array<{
+      content?: string;
+      embeds?: APIEmbed[];
+      allowedMentions?: { parse: string[]; roles: string[] };
+    }> = [];
+    const channel = {
+      guildId: "target_guild_1",
+      send: async (payload: {
+        content?: string;
+        embeds?: APIEmbed[];
+        allowedMentions?: { parse: string[]; roles: string[] };
+      }) => {
+        sentPayloads.push(payload);
+        return { id: `mirrored_${sentPayloads.length}` } as unknown as Message;
+      },
+      messages: {
+        fetch: async () => {
+          throw new Error("unexpected_message_fetch");
+        },
+      },
+    };
+
+    const client = {
+      channels: {
+        fetch: async () => channel,
+      },
+      guilds: {
+        cache: new Map([
+          [
+            "1087843967573438504",
+            {
+              roles: {
+                cache: new Map<string, { id: string }>(),
+              },
+            },
+          ],
+        ]),
+      },
+    } as unknown as Client;
+
+    const manager = new DiscordSignalMirrorManager(client);
+    const result = await manager.executeJob({
+      ...buildJob("Signal with image set"),
+      attachments: [
+        {
+          attachmentId: "att-1",
+          url: "https://cdn.discordapp.com/image-a.png",
+          mirrorUrl: "https://convex.example/storage/image-a",
+          contentType: "image/png",
+        },
+        {
+          attachmentId: "att-2",
+          url: "https://cdn.discordapp.com/image-b.png",
+          mirrorUrl: "https://convex.example/storage/image-b",
+          contentType: "image/png",
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe("message_created");
+    expect(sentPayloads).toHaveLength(3);
+    expect(sentPayloads[0].embeds?.[0]?.footer?.text).toBe("2 images posted below");
+    expect(sentPayloads[1].content).toBeUndefined();
+    expect(sentPayloads[1].embeds?.[0]?.image?.url).toBe("https://convex.example/storage/image-a");
+    expect(sentPayloads[2].content).toBeUndefined();
+    expect(sentPayloads[2].embeds?.[0]?.image?.url).toBe("https://convex.example/storage/image-b");
+  });
+
+  it("omits image attachments that are not hydrated to Convex URLs", async () => {
+    const sentPayloads: Array<{
+      content?: string;
+      embeds?: APIEmbed[];
+      allowedMentions?: { parse: string[]; roles: string[] };
+    }> = [];
+    const channel = {
+      guildId: "target_guild_1",
+      send: async (payload: {
+        content?: string;
+        embeds?: APIEmbed[];
+        allowedMentions?: { parse: string[]; roles: string[] };
+      }) => {
+        sentPayloads.push(payload);
+        return { id: `mirrored_${sentPayloads.length}` } as unknown as Message;
+      },
+      messages: {
+        fetch: async () => {
+          throw new Error("unexpected_message_fetch");
+        },
+      },
+    };
+
+    const client = {
+      channels: {
+        fetch: async () => channel,
+      },
+      guilds: {
+        cache: new Map([
+          [
+            "1087843967573438504",
+            {
+              roles: {
+                cache: new Map<string, { id: string }>(),
+              },
+            },
+          ],
+        ]),
+      },
+    } as unknown as Client;
+
+    const manager = new DiscordSignalMirrorManager(client);
+    const result = await manager.executeJob({
+      ...buildJob("Signal image pending sync"),
+      attachments: [
+        {
+          attachmentId: "att-1",
+          url: "https://cdn.discordapp.com/image-a.png",
+          contentType: "image/png",
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe("message_created");
+    expect(sentPayloads).toHaveLength(1);
+    expect(sentPayloads[0].embeds?.[0]?.image?.url).toBeUndefined();
+    expect(sentPayloads[0].embeds?.[0]?.fields?.[0]?.name).toBe("Images");
+    expect(sentPayloads[0].embeds?.[0]?.fields?.[0]?.value).toBe(
+      "1 image omitted until Convex media sync completes.",
+    );
+  });
+
   it("strips foreign Discord event links and mirrors the remaining message text", async () => {
     const sentPayloads: Array<{
       content?: string;

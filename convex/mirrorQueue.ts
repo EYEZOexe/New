@@ -7,6 +7,8 @@ export type SignalMirrorEventType = "create" | "update" | "delete";
 type SignalAttachment = {
   attachmentId?: string;
   url: string;
+  storageId?: string;
+  mirrorUrl?: string;
   name?: string;
   contentType?: string;
   size?: number;

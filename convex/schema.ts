@@ -458,6 +458,8 @@ export default defineSchema({
         v.object({
           attachmentId: v.optional(v.string()),
           url: v.string(),
+          storageId: v.optional(v.id("_storage")),
+          mirrorUrl: v.optional(v.string()),
           name: v.optional(v.string()),
           contentType: v.optional(v.string()),
           size: v.optional(v.number()),
@@ -514,6 +516,25 @@ export default defineSchema({
       "targetChannelId",
     ]),
 
+  signalMirrorMedia: defineTable({
+    tenantKey: v.string(),
+    connectorId: v.string(),
+    sourceMessageId: v.string(),
+    attachmentKey: v.string(),
+    sourceUrl: v.string(),
+    contentType: v.optional(v.string()),
+    storageId: v.optional(v.id("_storage")),
+    mirrorUrl: v.optional(v.string()),
+    status: v.union(v.literal("pending"), v.literal("ready"), v.literal("failed")),
+    attemptCount: v.number(),
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_tenant_connector_sourceMessageId", ["tenantKey", "connectorId", "sourceMessageId"])
+    .index("by_attachment", ["tenantKey", "connectorId", "sourceMessageId", "attachmentKey"])
+    .index("by_status_updatedAt", ["status", "updatedAt"]),
+
   signals: defineTable({
     tenantKey: v.string(),
     connectorId: v.string(),
@@ -526,6 +547,8 @@ export default defineSchema({
         v.object({
           attachmentId: v.optional(v.string()),
           url: v.string(),
+          storageId: v.optional(v.id("_storage")),
+          mirrorUrl: v.optional(v.string()),
           name: v.optional(v.string()),
           contentType: v.optional(v.string()),
           size: v.optional(v.number()),

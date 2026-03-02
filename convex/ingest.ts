@@ -1,10 +1,37 @@
 import { v } from "convex/values";
+import { makeFunctionReference } from "convex/server";
 
 import { internalMutation } from "./_generated/server";
 import { resolveAttachmentsForExistingSignalPatch } from "./ingestAttachmentMerge";
 import { resolveContentForExistingSignalPatch } from "./ingestContentMerge";
 import { messageEventToSignalFields } from "./ingestUtils";
 import { enqueueMirrorJobsForSignal } from "./mirrorQueue";
+
+const hydrateSignalMediaForMessageRef = makeFunctionReference<
+  "action",
+  {
+    tenantKey: string;
+    connectorId: string;
+    sourceMessageId: string;
+    sourceChannelId: string;
+    receivedAt: number;
+    attachments: Array<{
+      attachmentId?: string;
+      url: string;
+      storageId?: string;
+      mirrorUrl?: string;
+      name?: string;
+      contentType?: string;
+      size?: number;
+    }>;
+  },
+  {
+    ok: boolean;
+    hydrated: number;
+    failed: number;
+    skipped: number;
+  }
+>("mirrorMedia:hydrateSignalMediaForMessage");
 
 const IngestAttachment = v.object({
   discord_attachment_id: v.string(),
@@ -140,6 +167,7 @@ export const ingestMessageBatch = internalMutation({
     let mirrorEnqueued = 0;
     let mirrorDeduped = 0;
     let mirrorSkipped = 0;
+    let mediaHydrationScheduled = 0;
 
     for (const message of args.messages) {
       const existing = await ctx.db
@@ -160,7 +188,15 @@ export const ingestMessageBatch = internalMutation({
       });
 
       let mirrorContent = fields.content;
-      let mirrorAttachments = fields.attachments;
+      let mirrorAttachments: Array<{
+        attachmentId?: string;
+        url: string;
+        storageId?: string;
+        mirrorUrl?: string;
+        name?: string;
+        contentType?: string;
+        size?: number;
+      }> = fields.attachments;
 
       if (!existing) {
         await ctx.db.insert("signals", fields as any);
@@ -233,6 +269,8 @@ export const ingestMessageBatch = internalMutation({
           ? (patch.attachments as Array<{
               attachmentId?: string;
               url: string;
+              storageId?: string;
+              mirrorUrl?: string;
               name?: string;
               contentType?: string;
               size?: number;
@@ -269,10 +307,30 @@ export const ingestMessageBatch = internalMutation({
       mirrorEnqueued += mirrorResult.enqueued;
       mirrorDeduped += mirrorResult.deduped;
       mirrorSkipped += mirrorResult.skipped;
+
+      const needsMediaHydration =
+        message.event_type !== "delete" &&
+        mirrorAttachments.some(
+          (attachment) =>
+            isLikelyImageAttachment(attachment) &&
+            !attachment.storageId &&
+            !(attachment.mirrorUrl?.trim() ?? ""),
+        );
+      if (needsMediaHydration) {
+        await ctx.scheduler.runAfter(0, hydrateSignalMediaForMessageRef, {
+          tenantKey: args.tenantKey,
+          connectorId: args.connectorId,
+          sourceMessageId: fields.sourceMessageId,
+          sourceChannelId: fields.sourceChannelId,
+          receivedAt: args.receivedAt,
+          attachments: mirrorAttachments,
+        });
+        mediaHydrationScheduled += 1;
+      }
     }
 
     console.info(
-      `[ingest] signal batch processed tenant=${args.tenantKey} connector=${args.connectorId} accepted=${accepted} deduped=${deduped} ignored=${ignored} attachment_refs=${attachmentRefsPersisted} mirror_enqueued=${mirrorEnqueued} mirror_deduped=${mirrorDeduped} mirror_skipped=${mirrorSkipped} total=${args.messages.length}`,
+      `[ingest] signal batch processed tenant=${args.tenantKey} connector=${args.connectorId} accepted=${accepted} deduped=${deduped} ignored=${ignored} attachment_refs=${attachmentRefsPersisted} mirror_enqueued=${mirrorEnqueued} mirror_deduped=${mirrorDeduped} mirror_skipped=${mirrorSkipped} media_hydration_scheduled=${mediaHydrationScheduled} total=${args.messages.length}`,
     );
 
     return {
@@ -283,6 +341,7 @@ export const ingestMessageBatch = internalMutation({
       mirrorEnqueued,
       mirrorDeduped,
       mirrorSkipped,
+      mediaHydrationScheduled,
     };
   },
 });
@@ -413,3 +472,22 @@ export const ingestThread = internalMutation({
     return { ok: true };
   },
 });
+
+function isLikelyImageAttachment(attachment: {
+  url: string;
+  contentType?: string;
+}): boolean {
+  const contentType = attachment.contentType?.trim().toLowerCase() ?? "";
+  if (contentType.startsWith("image/")) {
+    return true;
+  }
+  const lower = attachment.url.toLowerCase();
+  return (
+    lower.endsWith(".png") ||
+    lower.endsWith(".jpg") ||
+    lower.endsWith(".jpeg") ||
+    lower.endsWith(".webp") ||
+    lower.endsWith(".gif") ||
+    lower.endsWith(".bmp")
+  );
+}
