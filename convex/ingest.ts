@@ -112,6 +112,7 @@ export const ingestMessageBatch = internalMutation({
     connectorId: v.string(),
     messages: v.array(IngestMessageEvent),
     receivedAt: v.number(),
+    scheduleMediaHydration: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const connector = await ctx.db
@@ -121,6 +122,7 @@ export const ingestMessageBatch = internalMutation({
       )
       .first();
     const forwardingEnabled = connector?.forwardEnabled === true;
+    const scheduleMediaHydration = args.scheduleMediaHydration !== false;
 
     const mirrorTargetsBySourceChannel = new Map<
       string,
@@ -317,15 +319,17 @@ export const ingestMessageBatch = internalMutation({
             !(attachment.mirrorUrl?.trim() ?? ""),
         );
       if (needsMediaHydration) {
-        await ctx.scheduler.runAfter(0, hydrateSignalMediaForMessageRef, {
-          tenantKey: args.tenantKey,
-          connectorId: args.connectorId,
-          sourceMessageId: fields.sourceMessageId,
-          sourceChannelId: fields.sourceChannelId,
-          receivedAt: args.receivedAt,
-          attachments: mirrorAttachments,
-        });
-        mediaHydrationScheduled += 1;
+        if (scheduleMediaHydration) {
+          await ctx.scheduler.runAfter(0, hydrateSignalMediaForMessageRef, {
+            tenantKey: args.tenantKey,
+            connectorId: args.connectorId,
+            sourceMessageId: fields.sourceMessageId,
+            sourceChannelId: fields.sourceChannelId,
+            receivedAt: args.receivedAt,
+            attachments: mirrorAttachments,
+          });
+          mediaHydrationScheduled += 1;
+        }
       }
     }
 

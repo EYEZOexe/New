@@ -27,6 +27,14 @@ type HydrationResult = {
   error?: string;
 };
 
+type HydrationPerf = {
+  fetchMs: number;
+  blobMs: number;
+  storeMs: number;
+  getUrlMs: number;
+  totalMs: number;
+};
+
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 8_000;
 
@@ -37,6 +45,9 @@ const applyHydratedSignalMediaRef = makeFunctionReference<
     connectorId: string;
     sourceMessageId: string;
     results: HydrationResult[];
+    receivedAt: number;
+    hydrationStartedAt: number;
+    hydrationCompletedAt: number;
     now: number;
   },
   {
@@ -82,6 +93,7 @@ export const hydrateSignalMediaForMessage = internalAction({
     }
 
     const results: HydrationResult[] = [];
+    const perfByAttachment: Array<{ attachmentKey: string; perf: HydrationPerf }> = [];
     for (const attachment of candidates) {
       const attachmentKey = buildAttachmentKey(attachment);
       if (!attachmentKey) continue;
@@ -93,6 +105,7 @@ export const hydrateSignalMediaForMessage = internalAction({
           sourceUrl,
           contentType: attachment.contentType,
         });
+        perfByAttachment.push({ attachmentKey, perf: hydrated.perf });
         results.push({
           attachmentKey,
           sourceUrl,
@@ -112,20 +125,48 @@ export const hydrateSignalMediaForMessage = internalAction({
     }
 
     if (results.length > 0) {
+      const applyStartedAt = Date.now();
       await ctx.runMutation(applyHydratedSignalMediaRef, {
         tenantKey: args.tenantKey,
         connectorId: args.connectorId,
         sourceMessageId: args.sourceMessageId,
         results,
+        receivedAt: args.receivedAt,
+        hydrationStartedAt: startedAt,
+        hydrationCompletedAt: Date.now(),
         now: Date.now(),
       });
+      const applyElapsedMs = Date.now() - applyStartedAt;
+      console.info(
+        `[mirror-media] apply mutation timing source_message=${args.sourceMessageId} apply_elapsed_ms=${applyElapsedMs}`,
+      );
     }
 
     const hydrated = results.filter((result) => result.status === "ready").length;
     const failed = results.filter((result) => result.status === "failed").length;
     const elapsedMs = Date.now() - startedAt;
+    const schedulerDelayMs = Math.max(0, startedAt - args.receivedAt);
+    const perfTotals = perfByAttachment.reduce(
+      (acc, row) => {
+        acc.fetchMs += row.perf.fetchMs;
+        acc.blobMs += row.perf.blobMs;
+        acc.storeMs += row.perf.storeMs;
+        acc.getUrlMs += row.perf.getUrlMs;
+        acc.totalMs += row.perf.totalMs;
+        return acc;
+      },
+      { fetchMs: 0, blobMs: 0, storeMs: 0, getUrlMs: 0, totalMs: 0 },
+    );
+    const avgAttachmentMs =
+      perfByAttachment.length > 0
+        ? Math.round(perfTotals.totalMs / perfByAttachment.length)
+        : 0;
+    const maxAttachmentMs = perfByAttachment.reduce(
+      (max, row) => Math.max(max, row.perf.totalMs),
+      0,
+    );
     console.info(
-      `[mirror-media] hydrated source_message=${args.sourceMessageId} source_channel=${args.sourceChannelId} candidates=${candidates.length} hydrated=${hydrated} failed=${failed} elapsed_ms=${elapsedMs}`,
+      `[mirror-media] hydrated source_message=${args.sourceMessageId} source_channel=${args.sourceChannelId} candidates=${candidates.length} hydrated=${hydrated} failed=${failed} scheduler_delay_ms=${schedulerDelayMs} elapsed_ms=${elapsedMs} fetch_ms_total=${perfTotals.fetchMs} blob_ms_total=${perfTotals.blobMs} store_ms_total=${perfTotals.storeMs} get_url_ms_total=${perfTotals.getUrlMs} avg_attachment_ms=${avgAttachmentMs} max_attachment_ms=${maxAttachmentMs}`,
     );
 
     return {
@@ -153,6 +194,9 @@ export const applyHydratedSignalMedia = internalMutation({
         error: v.optional(v.string()),
       }),
     ),
+    receivedAt: v.number(),
+    hydrationStartedAt: v.number(),
+    hydrationCompletedAt: v.number(),
     now: v.number(),
   },
   handler: async (ctx, args) => {
@@ -314,7 +358,7 @@ export const applyHydratedSignalMedia = internalMutation({
             content: signal.content,
             attachments: nextSignalAttachments,
             sourceCreatedAt: signal.createdAt,
-            sourceEditedAt: args.now,
+            sourceEditedAt: args.hydrationCompletedAt,
             sourceDeletedAt: undefined,
             now: args.now,
           });
@@ -328,7 +372,7 @@ export const applyHydratedSignalMedia = internalMutation({
     }
 
     console.info(
-      `[mirror-media] applied hydration source_message=${args.sourceMessageId} results=${args.results.length} rows_updated=${applied} signal_attachments_changed=${signalAttachmentsChanged} mirror_update_enqueued=${mirrorUpdateEnqueued} mirror_update_deduped=${mirrorUpdateDeduped} mirror_update_skipped=${mirrorUpdateSkipped}`,
+      `[mirror-media] applied hydration source_message=${args.sourceMessageId} results=${args.results.length} rows_updated=${applied} signal_attachments_changed=${signalAttachmentsChanged} mirror_update_enqueued=${mirrorUpdateEnqueued} mirror_update_deduped=${mirrorUpdateDeduped} mirror_update_skipped=${mirrorUpdateSkipped} ingest_to_hydration_start_ms=${Math.max(0, args.hydrationStartedAt - args.receivedAt)} hydration_duration_ms=${Math.max(0, args.hydrationCompletedAt - args.hydrationStartedAt)} ingest_to_hydration_complete_ms=${Math.max(0, args.hydrationCompletedAt - args.receivedAt)}`,
     );
     return { applied };
   },
@@ -374,7 +418,14 @@ function applyResultsToAttachments(
 async function hydrateSingleImage(
   ctx: Parameters<typeof hydrateSignalMediaForMessage["_handler"]>[0],
   args: { sourceUrl: string; contentType?: string },
-): Promise<{ storageId: Id<"_storage">; mirrorUrl: string | null; contentType: string | null }> {
+): Promise<{
+  storageId: Id<"_storage">;
+  mirrorUrl: string | null;
+  contentType: string | null;
+  perf: HydrationPerf;
+}> {
+  const totalStartedAt = Date.now();
+  const fetchStartedAt = Date.now();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   let response: Response;
@@ -383,6 +434,7 @@ async function hydrateSingleImage(
   } finally {
     clearTimeout(timeout);
   }
+  const fetchMs = Date.now() - fetchStartedAt;
 
   if (!response.ok) {
     throw new Error(`http_${response.status}`);
@@ -403,18 +455,32 @@ async function hydrateSingleImage(
     throw new Error("non_image_content");
   }
 
+  const blobStartedAt = Date.now();
   const blob = await response.blob();
+  const blobMs = Date.now() - blobStartedAt;
   if (blob.size > MAX_IMAGE_BYTES) {
     throw new Error("image_too_large");
   }
 
   const uploadBlob = blob.type ? blob : new Blob([blob], { type: finalType });
+  const storeStartedAt = Date.now();
   const storageId = await ctx.storage.store(uploadBlob);
+  const storeMs = Date.now() - storeStartedAt;
+  const getUrlStartedAt = Date.now();
   const mirrorUrl = await ctx.storage.getUrl(storageId);
+  const getUrlMs = Date.now() - getUrlStartedAt;
+  const totalMs = Date.now() - totalStartedAt;
   return {
     storageId,
     mirrorUrl,
     contentType: finalType,
+    perf: {
+      fetchMs,
+      blobMs,
+      storeMs,
+      getUrlMs,
+      totalMs,
+    },
   };
 }
 

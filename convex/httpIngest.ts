@@ -59,6 +59,115 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+type InlineHydrationCandidate = {
+  tenantKey: string;
+  connectorId: string;
+  sourceMessageId: string;
+  sourceChannelId: string;
+  receivedAt: number;
+  attachments: Array<{
+    attachmentId?: string;
+    url: string;
+    name?: string;
+    contentType?: string;
+    size?: number;
+  }>;
+};
+
+const INLINE_HYDRATION_CONCURRENCY = 4;
+
+function normalizeString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function toFiniteNumber(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return value;
+}
+
+function isLikelyImageAttachment(url: string, contentType?: string): boolean {
+  const normalizedType = contentType?.trim().toLowerCase() ?? "";
+  if (normalizedType.startsWith("image/")) {
+    return true;
+  }
+  const lower = url.toLowerCase();
+  return (
+    lower.endsWith(".png") ||
+    lower.endsWith(".jpg") ||
+    lower.endsWith(".jpeg") ||
+    lower.endsWith(".webp") ||
+    lower.endsWith(".gif") ||
+    lower.endsWith(".bmp")
+  );
+}
+
+function isHttpUrl(value: string): boolean {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function buildInlineHydrationCandidates(args: {
+  tenantKey: string;
+  connectorId: string;
+  messages: unknown[];
+  receivedAt: number;
+}): InlineHydrationCandidate[] {
+  const candidates: InlineHydrationCandidate[] = [];
+
+  for (const message of args.messages) {
+    if (!isObject(message)) continue;
+    const eventType = normalizeString(message.event_type);
+    if (eventType === "delete") continue;
+
+    const sourceMessageId = normalizeString(message.discord_message_id);
+    const sourceChannelId = normalizeString(message.discord_channel_id);
+    if (!sourceMessageId || !sourceChannelId) continue;
+
+    const rawAttachments = Array.isArray(message.attachments)
+      ? message.attachments
+      : [];
+    const attachments: InlineHydrationCandidate["attachments"] = [];
+    for (const rawAttachment of rawAttachments) {
+      if (!isObject(rawAttachment)) continue;
+      const url = normalizeString(rawAttachment.source_url);
+      if (!isHttpUrl(url)) continue;
+
+      const contentType = normalizeString(rawAttachment.content_type).toLowerCase();
+      if (!isLikelyImageAttachment(url, contentType || undefined)) continue;
+
+      const attachmentId = normalizeString(rawAttachment.discord_attachment_id);
+      const name = normalizeString(rawAttachment.filename);
+      const size = toFiniteNumber(rawAttachment.size);
+
+      attachments.push({
+        ...(attachmentId ? { attachmentId } : {}),
+        url,
+        ...(name ? { name } : {}),
+        ...(contentType ? { contentType } : {}),
+        ...(typeof size === "number" ? { size } : {}),
+      });
+    }
+
+    if (attachments.length === 0) continue;
+
+    candidates.push({
+      tenantKey: args.tenantKey,
+      connectorId: args.connectorId,
+      sourceMessageId,
+      sourceChannelId,
+      receivedAt: args.receivedAt,
+      attachments,
+    });
+  }
+
+  return candidates;
+}
+
 export function mountIngestRoutes(http: HttpRouter) {
   http.route({
     path: "/ingest/message-batch",
@@ -111,6 +220,7 @@ export function mountIngestRoutes(http: HttpRouter) {
       }
 
       const internal = anyApi as any;
+      const receivedAt = Date.now();
       let result: { accepted: number; deduped: number; ignored?: number };
       try {
         result = await ctx.runMutation(internal.ingest.ingestMessageBatch, {
@@ -118,7 +228,8 @@ export function mountIngestRoutes(http: HttpRouter) {
           connectorId,
           // Untrusted boundary (HTTP); internal mutation enforces runtime validation.
           messages: messages as any,
-          receivedAt: Date.now(),
+          receivedAt,
+          scheduleMediaHydration: false,
         });
       } catch (error) {
         console.error("[ingest/message-batch] Validation or mutation error:", String(error));
@@ -130,10 +241,66 @@ export function mountIngestRoutes(http: HttpRouter) {
         });
       }
 
+      let inlineHydrationRequested = 0;
+      let inlineHydrationCompleted = 0;
+      let inlineHydrationFailed = 0;
+      let inlineHydrationFallbackScheduled = 0;
+      if (auth.connector.forwardEnabled === true) {
+        const hydrationCandidates = buildInlineHydrationCandidates({
+          tenantKey,
+          connectorId,
+          messages,
+          receivedAt,
+        });
+        inlineHydrationRequested = hydrationCandidates.length;
+        if (hydrationCandidates.length > 0) {
+          const startedAt = Date.now();
+          for (
+            let index = 0;
+            index < hydrationCandidates.length;
+            index += INLINE_HYDRATION_CONCURRENCY
+          ) {
+            const batch = hydrationCandidates.slice(
+              index,
+              index + INLINE_HYDRATION_CONCURRENCY,
+            );
+            const settled = await Promise.allSettled(
+              batch.map((candidate) =>
+                ctx.runAction(internal.mirrorMedia.hydrateSignalMediaForMessage, candidate),
+              ),
+            );
+
+            for (let offset = 0; offset < settled.length; offset += 1) {
+              const outcome = settled[offset];
+              const candidate = batch[offset];
+              if (outcome.status === "fulfilled") {
+                inlineHydrationCompleted += 1;
+                continue;
+              }
+
+              inlineHydrationFailed += 1;
+              console.warn(
+                `[ingest/message-batch] inline hydration failed message=${candidate.sourceMessageId} channel=${candidate.sourceChannelId} reason=${String(outcome.reason)}`,
+              );
+              await ctx.scheduler.runAfter(
+                0,
+                internal.mirrorMedia.hydrateSignalMediaForMessage,
+                candidate,
+              );
+              inlineHydrationFallbackScheduled += 1;
+            }
+          }
+          const elapsedMs = Date.now() - startedAt;
+          console.info(
+            `[ingest/message-batch] inline hydration tenant=${tenantKey} connector=${connectorId} requested=${inlineHydrationRequested} completed=${inlineHydrationCompleted} failed=${inlineHydrationFailed} fallback_scheduled=${inlineHydrationFallbackScheduled} elapsed_ms=${elapsedMs}`,
+          );
+        }
+      }
+
       await ctx.runMutation(internal.connectorsInternal.touchConnectorLastSeen, {
         tenantKey,
         connectorId,
-        now: Date.now(),
+        now: receivedAt,
       });
 
       return jsonResponse({

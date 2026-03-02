@@ -278,6 +278,19 @@ export const claimPendingSignalMirrorJobs = mutation({
         existingMirroredGuildId: existingMirror?.mirroredGuildId ?? null,
         rolePingId,
       });
+
+      const baseEventAt =
+        job.eventType === "delete" && typeof job.sourceDeletedAt === "number"
+          ? job.sourceDeletedAt
+          : job.eventType === "update" && typeof job.sourceEditedAt === "number"
+            ? job.sourceEditedAt
+            : job.sourceCreatedAt;
+      const eventAgeMs = Math.max(0, now - baseEventAt);
+      const queueWaitMs = Math.max(0, now - job.runAfter);
+      const queuedForMs = Math.max(0, now - job.createdAt);
+      console.info(
+        `[mirror] claim timing job=${job._id} event=${job.eventType} source_message=${job.sourceMessageId} queue_wait_ms=${queueWaitMs} queued_for_ms=${queuedForMs} event_age_ms=${eventAgeMs}`,
+      );
     }
 
     if (claimed.length > 0) {
