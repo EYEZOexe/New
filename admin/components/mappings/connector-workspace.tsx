@@ -573,18 +573,24 @@ export function ConnectorWorkspace({
     () => new Map(seatSnapshots.map((row) => [row.guildId, row])),
     [seatSnapshots],
   );
-  const seatGuildRows = useMemo(() => {
-    const guildIds = new Set<string>();
-    for (const snapshot of seatSnapshots) guildIds.add(snapshot.guildId);
-    for (const config of serverConfigs) guildIds.add(config.guildId);
-    return Array.from(guildIds)
-      .map((guildId) => ({
-        guildId,
-        snapshot: seatSnapshotByGuildId.get(guildId) ?? null,
-        config: serverConfigByGuildId.get(guildId) ?? null,
-      }))
-      .sort((a, b) => a.guildId.localeCompare(b.guildId));
-  }, [seatSnapshots, serverConfigs, seatSnapshotByGuildId, serverConfigByGuildId]);
+  const configuredSeatRows = useMemo(
+    () =>
+      [...serverConfigs]
+        .sort((a, b) => a.guildId.localeCompare(b.guildId))
+        .map((config) => ({
+          guildId: config.guildId,
+          config,
+          snapshot: seatSnapshotByGuildId.get(config.guildId) ?? null,
+        })),
+    [serverConfigs, seatSnapshotByGuildId],
+  );
+  const unconfiguredSeatSnapshots = useMemo(
+    () =>
+      seatSnapshots
+        .filter((snapshot) => !serverConfigByGuildId.has(snapshot.guildId))
+        .sort((a, b) => a.guildId.localeCompare(b.guildId)),
+    [seatSnapshots, serverConfigByGuildId],
+  );
 
   const availableChannels = useMemo(() => {
     const byChannelId = new Map<
@@ -677,15 +683,13 @@ export function ConnectorWorkspace({
   }, [mirrorLatencyStats, hasRouteParams, tenantKey, connectorId]);
 
   useEffect(() => {
-    if (!hasRouteParams || seatGuildRows.length === 0) return;
+    if (!hasRouteParams || (seatSnapshots.length === 0 && serverConfigs.length === 0)) return;
     const overLimitCount = seatSnapshots.filter((snapshot) => snapshot.isOverLimit).length;
-    const configuredCount = serverConfigs.length;
     console.info(
-      `[admin/connectors] seat snapshot tenant=${tenantKey} connector=${connectorId} servers=${seatGuildRows.length} configured=${configuredCount} over_limit=${overLimitCount}`,
+      `[admin/connectors] seat snapshot tenant=${tenantKey} connector=${connectorId} snapshots=${seatSnapshots.length} configured=${serverConfigs.length} over_limit=${overLimitCount}`,
     );
   }, [
-    seatGuildRows.length,
-    seatSnapshots,
+    seatSnapshots.length,
     serverConfigs.length,
     hasRouteParams,
     tenantKey,
@@ -1223,14 +1227,14 @@ export function ConnectorWorkspace({
         </div>
       </AdminSectionCard>
 
-      <AdminSectionCard title="Seat enforcement status by guild">
-        {seatGuildRows.length === 0 ? (
+      <AdminSectionCard title="Seat configs by guild">
+        {configuredSeatRows.length === 0 ? (
           <p className="text-xs text-slate-400">
-            No seat snapshots or configs yet. Configure seat enforcement in{" "}
+            No saved seat configs for this connector yet. Configure seat enforcement in{" "}
             <Link href="/discord-bot" className="admin-link">
               Discord Bot
-            </Link>{" "}
-            and request a refresh.
+            </Link>
+            .
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -1240,121 +1244,162 @@ export function ConnectorWorkspace({
                   <th className="px-3 py-2">Guild</th>
                   <th className="px-3 py-2">Status</th>
                   <th className="px-3 py-2">Seats</th>
-                  <th className="px-3 py-2">Configured seat policy</th>
+                  <th className="px-3 py-2">Seat policy</th>
                   <th className="px-3 py-2">Checked</th>
                   <th className="px-3 py-2">Error</th>
                   <th className="px-3 py-2">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800 bg-slate-950/40 text-slate-200">
-                {seatGuildRows.map((row) => {
+                {configuredSeatRows.map((row) => {
                   const snapshot = row.snapshot;
-                  const config = row.config;
                   const isEditing = editingSeatGuildId === row.guildId;
                   return (
-                  <tr key={`${tenantKey}:${connectorId}:${row.guildId}`}>
-                    <td className="px-3 py-2">{renderGuildLabel(row.guildId)}</td>
-                    <td className="px-3 py-2">
-                      {snapshot ? (
-                        snapshot.isOverLimit ? (
-                        <span className="rounded-full border border-rose-400/30 bg-rose-500/15 px-2 py-0.5 text-xs font-semibold text-rose-300">
-                          over-limit ({snapshot.status})
-                        </span>
-                      ) : (
-                        <span className="rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-300">
-                          ok ({snapshot.status})
-                        </span>
-                        )
-                      ) : (
-                        <span className="rounded-full border border-slate-500/30 bg-slate-500/20 px-2 py-0.5 text-xs font-semibold text-slate-200">
-                          no snapshot
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      {snapshot ? `${snapshot.seatsUsed} / ${snapshot.seatLimit}` : "-"}
-                    </td>
-                    <td className="px-3 py-2">
-                      {config ? (
+                    <tr key={`${tenantKey}:${connectorId}:${row.guildId}`}>
+                      <td className="px-3 py-2">{renderGuildLabel(row.guildId)}</td>
+                      <td className="px-3 py-2">
+                        {snapshot ? (
+                          snapshot.isOverLimit ? (
+                            <span className="rounded-full border border-rose-400/30 bg-rose-500/15 px-2 py-0.5 text-xs font-semibold text-rose-300">
+                              over-limit ({snapshot.status})
+                            </span>
+                          ) : (
+                            <span className="rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-300">
+                              ok ({snapshot.status})
+                            </span>
+                          )
+                        ) : (
+                          <span className="rounded-full border border-slate-500/30 bg-slate-500/20 px-2 py-0.5 text-xs font-semibold text-slate-200">
+                            no snapshot
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {snapshot ? `${snapshot.seatsUsed} / ${snapshot.seatLimit}` : "-"}
+                      </td>
+                      <td className="px-3 py-2">
                         <div className="space-y-1">
-                          <p className="text-xs text-slate-200">limit: {config.seatLimit}</p>
+                          <p className="text-xs text-slate-200">limit: {row.config.seatLimit}</p>
                           <p className="text-xs text-slate-400">
-                            enforcement: {config.seatEnforcementEnabled ? "enabled" : "disabled"}
+                            enforcement: {row.config.seatEnforcementEnabled ? "enabled" : "disabled"}
                           </p>
                         </div>
-                      ) : (
-                        <span className="text-xs text-slate-500">not configured</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">{formatDateTime(snapshot?.checkedAt)}</td>
-                    <td className="px-3 py-2">{snapshot?.lastError ?? "-"}</td>
-                    <td className="px-3 py-2 align-top">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => startEditSeatConfig(row.guildId)}
-                          className="text-sm font-medium text-cyan-300 underline"
-                          disabled={seatConfigSaving}
-                        >
-                          {config ? "Edit" : "Set config"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void onDeleteSeatConfig(row.guildId)}
-                          className="text-sm font-medium text-rose-300 underline"
-                          disabled={seatConfigSaving}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                      {isEditing ? (
-                        <div className="mt-3 space-y-2 rounded-md border border-slate-800 bg-slate-950/50 p-2">
-                          <label className="admin-label text-[11px]">
-                            Seat limit
-                            <input
-                              type="number"
-                              min={0}
-                              value={seatLimitDraft}
-                              onChange={(event) => setSeatLimitDraft(event.target.value)}
-                              className="admin-input mt-1 w-28"
-                            />
-                          </label>
-                          <label className="flex items-center gap-2 text-xs font-medium text-slate-300">
-                            <input
-                              type="checkbox"
-                              checked={seatEnforcementDraft}
-                              onChange={(event) => setSeatEnforcementDraft(event.target.checked)}
-                            />
-                            Enable enforcement
-                          </label>
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() => void onSaveSeatConfig()}
-                              className="admin-btn-secondary"
-                              disabled={seatConfigSaving}
-                            >
-                              {seatConfigSaving ? "Saving..." : "Save"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={cancelEditSeatConfig}
-                              className="admin-btn-secondary"
-                              disabled={seatConfigSaving}
-                            >
-                              Cancel
-                            </button>
-                          </div>
+                      </td>
+                      <td className="px-3 py-2">{formatDateTime(snapshot?.checkedAt)}</td>
+                      <td className="px-3 py-2">{snapshot?.lastError ?? "-"}</td>
+                      <td className="px-3 py-2 align-top">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => startEditSeatConfig(row.guildId)}
+                            className="text-sm font-medium text-cyan-300 underline"
+                            disabled={seatConfigSaving}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void onDeleteSeatConfig(row.guildId)}
+                            className="text-sm font-medium text-rose-300 underline"
+                            disabled={seatConfigSaving}
+                          >
+                            Delete
+                          </button>
                         </div>
-                      ) : null}
-                    </td>
-                  </tr>
+                        {isEditing ? (
+                          <div className="mt-3 space-y-2 rounded-md border border-slate-800 bg-slate-950/50 p-2">
+                            <label className="admin-label text-[11px]">
+                              Seat limit
+                              <input
+                                type="number"
+                                min={0}
+                                value={seatLimitDraft}
+                                onChange={(event) => setSeatLimitDraft(event.target.value)}
+                                className="admin-input mt-1 w-28"
+                              />
+                            </label>
+                            <label className="flex items-center gap-2 text-xs font-medium text-slate-300">
+                              <input
+                                type="checkbox"
+                                checked={seatEnforcementDraft}
+                                onChange={(event) => setSeatEnforcementDraft(event.target.checked)}
+                              />
+                              Enable enforcement
+                            </label>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void onSaveSeatConfig()}
+                                className="admin-btn-secondary"
+                                disabled={seatConfigSaving}
+                              >
+                                {seatConfigSaving ? "Saving..." : "Save"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={cancelEditSeatConfig}
+                                className="admin-btn-secondary"
+                                disabled={seatConfigSaving}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </td>
+                    </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
         )}
+        {unconfiguredSeatSnapshots.length > 0 ? (
+          <details className="mt-3 rounded-md border border-slate-800 bg-slate-950/40 p-3">
+            <summary className="cursor-pointer text-xs font-semibold text-slate-300">
+              Unconfigured seat snapshots ({unconfiguredSeatSnapshots.length})
+            </summary>
+            <p className="mt-2 text-xs text-slate-400">
+              These are audit snapshots without saved seat configs. They are read-only here.
+            </p>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-900 text-xs font-semibold text-slate-300">
+                  <tr>
+                    <th className="px-3 py-2">Guild</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Seats</th>
+                    <th className="px-3 py-2">Checked</th>
+                    <th className="px-3 py-2">Error</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800 bg-slate-950/40 text-slate-200">
+                  {unconfiguredSeatSnapshots.map((snapshot) => (
+                    <tr key={`${snapshot.tenantKey}:${snapshot.connectorId}:${snapshot.guildId}`}>
+                      <td className="px-3 py-2">{renderGuildLabel(snapshot.guildId)}</td>
+                      <td className="px-3 py-2">
+                        {snapshot.isOverLimit ? (
+                          <span className="rounded-full border border-rose-400/30 bg-rose-500/15 px-2 py-0.5 text-xs font-semibold text-rose-300">
+                            over-limit ({snapshot.status})
+                          </span>
+                        ) : (
+                          <span className="rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-300">
+                            ok ({snapshot.status})
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {snapshot.seatsUsed} / {snapshot.seatLimit}
+                      </td>
+                      <td className="px-3 py-2">{formatDateTime(snapshot.checkedAt)}</td>
+                      <td className="px-3 py-2">{snapshot.lastError ?? "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        ) : null}
         {seatConfigMessage ? <p className="mt-3 text-sm text-emerald-400">{seatConfigMessage}</p> : null}
         {seatConfigError ? <p className="mt-3 text-sm text-rose-400">{seatConfigError}</p> : null}
       </AdminSectionCard>
