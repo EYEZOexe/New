@@ -4,7 +4,7 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
 
-const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const RETENTION_BATCH_LIMIT = 120;
 const CONTINUATION_DELAY_MS = 1_000;
 
@@ -23,14 +23,14 @@ type RetentionSummary = {
   storageDeleteErrors: number;
 };
 
-const runFourteenDayRetentionRef = makeFunctionReference<
+const runThirtyDayRetentionRef = makeFunctionReference<
   "mutation",
   {
     cutoffMs?: number;
     continuation?: boolean;
   },
   RetentionSummary
->("retention:runFourteenDayRetention");
+>("retention:runThirtyDayRetention");
 
 function collectStorageIdsFromAttachments(
   attachments: Array<{ storageId?: Id<"_storage"> }> | undefined,
@@ -43,7 +43,7 @@ function collectStorageIdsFromAttachments(
   }
 }
 
-export const runFourteenDayRetention = internalMutation({
+export const runThirtyDayRetention = internalMutation({
   args: {
     cutoffMs: v.optional(v.number()),
     continuation: v.optional(v.boolean()),
@@ -53,7 +53,7 @@ export const runFourteenDayRetention = internalMutation({
     const cutoffMs =
       typeof args.cutoffMs === "number"
         ? args.cutoffMs
-        : now - FOURTEEN_DAYS_MS;
+        : now - THIRTY_DAYS_MS;
 
     const summary: RetentionSummary = {
       cutoffMs,
@@ -201,7 +201,7 @@ export const runFourteenDayRetention = internalMutation({
     }
 
     if (hasMore) {
-      await ctx.scheduler.runAfter(CONTINUATION_DELAY_MS, runFourteenDayRetentionRef, {
+      await ctx.scheduler.runAfter(CONTINUATION_DELAY_MS, runThirtyDayRetentionRef, {
         cutoffMs,
         continuation: true,
       });
@@ -209,7 +209,7 @@ export const runFourteenDayRetention = internalMutation({
     }
 
     console.info(
-      `[retention] 14d cleanup cutoff=${cutoffMs} continuation=${summary.continuation} scheduled_continuation=${summary.scheduledContinuation} signals_deleted=${summary.signalsDeleted} media_deleted=${summary.signalMirrorMediaDeleted} mirror_jobs_deleted=${summary.signalMirrorJobsDeleted} mirrored_deleted=${summary.mirroredSignalsDeleted} webhook_events_deleted=${summary.webhookEventsDeleted} role_sync_jobs_deleted=${summary.roleSyncJobsDeleted} seat_audit_jobs_deleted=${summary.seatAuditJobsDeleted} storage_deleted=${summary.storageDeleted} storage_delete_errors=${summary.storageDeleteErrors}`,
+      `[retention] 30d cleanup cutoff=${cutoffMs} continuation=${summary.continuation} scheduled_continuation=${summary.scheduledContinuation} signals_deleted=${summary.signalsDeleted} media_deleted=${summary.signalMirrorMediaDeleted} mirror_jobs_deleted=${summary.signalMirrorJobsDeleted} mirrored_deleted=${summary.mirroredSignalsDeleted} webhook_events_deleted=${summary.webhookEventsDeleted} role_sync_jobs_deleted=${summary.roleSyncJobsDeleted} seat_audit_jobs_deleted=${summary.seatAuditJobsDeleted} storage_deleted=${summary.storageDeleted} storage_delete_errors=${summary.storageDeleteErrors}`,
     );
 
     return summary;

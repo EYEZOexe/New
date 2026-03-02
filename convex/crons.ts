@@ -18,9 +18,9 @@ crons.interval(
 );
 
 crons.interval(
-  "purge non-critical data (14d retention)",
-  { hours: 24 * 14 },
-  internal.retention.runFourteenDayRetention,
+  "purge non-critical data (30d retention)",
+  { hours: 24 * 30 },
+  internal.retention.runThirtyDayRetention,
   {},
 );
 
