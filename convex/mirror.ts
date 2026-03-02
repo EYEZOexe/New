@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { makeFunctionReference } from "convex/server";
 
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
@@ -7,6 +8,31 @@ import { getMirrorBotTokenFromEnv, nextMirrorRetryAt } from "./mirrorQueue";
 import { evaluateSeatGate } from "./seatEnforcement";
 
 const SEAT_GATE_REQUEUE_MS = 15_000;
+const hydrateSignalMediaForMessageRef = makeFunctionReference<
+  "action",
+  {
+    tenantKey: string;
+    connectorId: string;
+    sourceMessageId: string;
+    sourceChannelId: string;
+    receivedAt: number;
+    attachments: Array<{
+      attachmentId?: string;
+      url: string;
+      storageId?: string;
+      mirrorUrl?: string;
+      name?: string;
+      contentType?: string;
+      size?: number;
+    }>;
+  },
+  {
+    ok: boolean;
+    hydrated: number;
+    failed: number;
+    skipped: number;
+  }
+>("mirrorMedia:hydrateSignalMediaForMessage");
 
 function assertBotTokenOrThrow(token: string) {
   const expected = getMirrorBotTokenFromEnv();
@@ -53,6 +79,43 @@ function normalizeRolePingId(value: unknown): string | null {
 function extractRolePingIdFromTransformJson(transformJson: unknown): string | null {
   if (!isRecord(transformJson)) return null;
   return normalizeRolePingId(transformJson.rolePingId);
+}
+
+function normalizeContentType(value: string | undefined): string {
+  if (!value) return "";
+  return value.split(";")[0]?.trim().toLowerCase() ?? "";
+}
+
+function isLikelyImageAttachment(attachment: {
+  url?: string;
+  contentType?: string;
+}): boolean {
+  const contentType = normalizeContentType(attachment.contentType);
+  if (contentType.startsWith("image/")) return true;
+  const url = attachment.url?.toLowerCase() ?? "";
+  return (
+    url.includes(".png") ||
+    url.includes(".jpg") ||
+    url.includes(".jpeg") ||
+    url.includes(".webp") ||
+    url.includes(".gif") ||
+    url.includes(".bmp")
+  );
+}
+
+function hasPendingImageHydration(
+  attachments: Array<{
+    url: string;
+    storageId?: string;
+    mirrorUrl?: string;
+    contentType?: string;
+  }>,
+): boolean {
+  return attachments.some((attachment) => {
+    if (!isLikelyImageAttachment(attachment)) return false;
+    const hasMirrorUrl = (attachment.mirrorUrl?.trim() ?? "").length > 0;
+    return !hasMirrorUrl;
+  });
 }
 
 async function resolveTargetGuildId(ctx: MutationCtx, args: {
@@ -275,6 +338,44 @@ export const claimPendingSignalMirrorJobs = mutation({
             lastError: "waiting_for_create",
           });
           continue;
+        }
+      }
+
+      const attachments = Array.isArray(job.attachments) ? job.attachments : [];
+      if (
+        job.eventType !== "delete" &&
+        attachments.length > 0 &&
+        hasPendingImageHydration(attachments)
+      ) {
+        const hasAnyMediaRow = await ctx.db
+          .query("signalMirrorMedia")
+          .withIndex("by_tenant_connector_sourceMessageId", (q) =>
+            q
+              .eq("tenantKey", job.tenantKey)
+              .eq("connectorId", job.connectorId)
+              .eq("sourceMessageId", job.sourceMessageId),
+          )
+          .first();
+        if (!hasAnyMediaRow) {
+          await ctx.scheduler.runAfter(0, hydrateSignalMediaForMessageRef, {
+            tenantKey: job.tenantKey,
+            connectorId: job.connectorId,
+            sourceMessageId: job.sourceMessageId,
+            sourceChannelId: job.sourceChannelId,
+            receivedAt: now,
+            attachments: attachments.map((attachment) => ({
+              attachmentId: attachment.attachmentId,
+              url: attachment.url,
+              storageId: attachment.storageId,
+              mirrorUrl: attachment.mirrorUrl,
+              name: attachment.name,
+              contentType: attachment.contentType,
+              size: attachment.size,
+            })),
+          });
+          console.info(
+            `[mirror] scheduled hydration fallback source_message=${job.sourceMessageId} target_channel=${job.targetChannelId} attachment_count=${attachments.length}`,
+          );
         }
       }
 
