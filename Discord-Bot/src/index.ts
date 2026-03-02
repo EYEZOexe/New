@@ -54,8 +54,10 @@ async function main() {
   let scheduledDrain: ReturnType<typeof setTimeout> | null = null;
   let seatAuditTimer: ReturnType<typeof setInterval> | null = null;
   let guildSyncTimer: ReturnType<typeof setInterval> | null = null;
+  let mirrorFastPollTimer: ReturnType<typeof setInterval> | null = null;
   let seatAuditInFlight = false;
   let guildSyncInFlight = false;
+  let mirrorFastPollInFlight = false;
 
   const clearScheduledDrain = () => {
     if (scheduledDrain) {
@@ -124,7 +126,9 @@ async function main() {
     try {
       const mirrorJobs = await mirrorQueueClient.claimJobs();
       processed = mirrorJobs.length;
-      logInfo(`wake=${wakeSource} queue=mirror claim_count=${mirrorJobs.length}`);
+      if (mirrorJobs.length > 0) {
+        logInfo(`wake=${wakeSource} queue=mirror claim_count=${mirrorJobs.length}`);
+      }
       for (const job of mirrorJobs) {
         if (shuttingDown) break;
         try {
@@ -212,6 +216,20 @@ async function main() {
     } finally {
       drainInFlight = false;
       scheduleNextWake();
+    }
+  };
+
+  const runMirrorFastPollTick = async () => {
+    if (shuttingDown || mirrorFastPollInFlight || drainInFlight) return;
+    mirrorFastPollInFlight = true;
+    try {
+      for (;;) {
+        if (shuttingDown || drainInFlight) break;
+        const processed = await processMirrorTick("fallback_tick");
+        if (processed === 0) break;
+      }
+    } finally {
+      mirrorFastPollInFlight = false;
     }
   };
 
@@ -437,6 +455,10 @@ async function main() {
       clearInterval(guildSyncTimer);
       guildSyncTimer = null;
     }
+    if (mirrorFastPollTimer) {
+      clearInterval(mirrorFastPollTimer);
+      mirrorFastPollTimer = null;
+    }
     logInfo(`received ${signal}; shutting down`);
     await wakeClient.stop();
     await roleManager.destroy();
@@ -475,7 +497,7 @@ async function main() {
 
   await roleManager.login(config.discordBotToken);
   logInfo(
-    `worker started wake_fallback_min_ms=${config.queueWakeFallbackMinMs} wake_fallback_max_ms=${config.queueWakeFallbackMaxMs} role_claim_limit=${config.roleSyncClaimLimit} mirror_claim_limit=${config.mirrorClaimLimit} seat_audit_claim_limit=${config.seatAuditClaimLimit} seat_audit_poll_ms=${config.seatAuditPollIntervalMs} guild_sync_poll_ms=${config.botGuildSyncIntervalMs}`,
+    `worker started wake_fallback_min_ms=${config.queueWakeFallbackMinMs} wake_fallback_max_ms=${config.queueWakeFallbackMaxMs} role_claim_limit=${config.roleSyncClaimLimit} mirror_claim_limit=${config.mirrorClaimLimit} mirror_fast_poll_ms=${config.mirrorFastPollMs} seat_audit_claim_limit=${config.seatAuditClaimLimit} seat_audit_poll_ms=${config.seatAuditPollIntervalMs} guild_sync_poll_ms=${config.botGuildSyncIntervalMs}`,
   );
 
   wakeClient.start({
@@ -502,6 +524,10 @@ async function main() {
   guildSyncTimer = setInterval(() => {
     void runGuildSyncTick();
   }, config.botGuildSyncIntervalMs);
+  mirrorFastPollTimer = setInterval(() => {
+    void runMirrorFastPollTick();
+  }, config.mirrorFastPollMs);
+  void runMirrorFastPollTick();
 
   await runDrainLoop("startup");
 }

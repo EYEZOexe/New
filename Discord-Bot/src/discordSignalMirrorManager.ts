@@ -21,6 +21,8 @@ type MessageCapableChannel = Channel & {
   send: (payload: MirrorMessagePayload) => Promise<Message>;
   messages: {
     fetch: (messageId: string) => Promise<Message>;
+    edit: (messageId: string, payload: MirrorMessagePayload) => Promise<Message>;
+    delete: (messageId: string) => Promise<void>;
   };
   guildId?: string | null;
 };
@@ -63,6 +65,11 @@ export class DiscordSignalMirrorManager {
   }
 
   async executeJob(job: ClaimedSignalMirrorJob): Promise<SignalMirrorExecutionResult> {
+    const startedAt = Date.now();
+    let channelFetchMs = 0;
+    let upsertMs = 0;
+    let cleanupMs = 0;
+    let extraImageSendMs = 0;
     const sanitizedForeignReferences =
       job.eventType === "delete"
         ? {
@@ -84,15 +91,18 @@ export class DiscordSignalMirrorManager {
       );
     }
 
-    const channel = await this.client.channels
-      .fetch(job.targetChannelId)
-      .catch((error: unknown) => {
-        const parsed = parseDiscordError(error);
-        if (parsed.code === RESTJSONErrorCodes.UnknownChannel) {
-          return null;
-        }
-        throw new MirrorOperationError(classifyDiscordError(parsed, "channel_fetch_failed"));
-      });
+    const channelFetchStartedAt = Date.now();
+    const cachedChannel = this.client.channels.cache.get(job.targetChannelId) ?? null;
+    const channel = cachedChannel
+      ? cachedChannel
+      : await this.client.channels.fetch(job.targetChannelId).catch((error: unknown) => {
+          const parsed = parseDiscordError(error);
+          if (parsed.code === RESTJSONErrorCodes.UnknownChannel) {
+            return null;
+          }
+          throw new MirrorOperationError(classifyDiscordError(parsed, "channel_fetch_failed"));
+        });
+    channelFetchMs = Date.now() - channelFetchStartedAt;
 
     if (!channel) {
       return {
@@ -115,6 +125,7 @@ export class DiscordSignalMirrorManager {
       .filter((value) => value.length > 0);
 
     if (job.eventType === "delete") {
+      const deleteStartedAt = Date.now();
       const idsToDelete = [
         ...(existingMessageId ? [existingMessageId] : []),
         ...existingExtraMessageIds,
@@ -128,21 +139,20 @@ export class DiscordSignalMirrorManager {
         };
       }
       for (const messageId of idsToDelete) {
-        const existingMessage = await channel.messages
-          .fetch(messageId)
+        await channel.messages
+          .delete(messageId)
           .catch((error: unknown) => {
             const parsed = parseDiscordError(error);
             if (parsed.code === RESTJSONErrorCodes.UnknownMessage) {
-              return null;
+              return;
             }
-            throw new MirrorOperationError(classifyDiscordError(parsed, "message_fetch_failed"));
+            throw new MirrorOperationError(classifyDiscordError(parsed, "message_delete_failed"));
           });
-        if (!existingMessage) continue;
-        await existingMessage.delete().catch((error: unknown) => {
-          const parsed = parseDiscordError(error);
-          throw new MirrorOperationError(classifyDiscordError(parsed, "message_delete_failed"));
-        });
       }
+      cleanupMs = Date.now() - deleteStartedAt;
+      console.info(
+        `[mirror] discord timing source_message=${job.sourceMessageId} event=${job.eventType} target_channel=${job.targetChannelId} channel_fetch_ms=${channelFetchMs} upsert_ms=${upsertMs} cleanup_ms=${cleanupMs} extra_image_send_ms=${extraImageSendMs} total_ms=${Date.now() - startedAt}`,
+      );
       return {
         ok: true,
         message: "messages_deleted",
@@ -187,23 +197,17 @@ export class DiscordSignalMirrorManager {
         };
 
     let upsertedMessage: Message | null = null;
+    const upsertStartedAt = Date.now();
     if (existingMessageId) {
-      const existingMessage = await channel.messages
-        .fetch(existingMessageId)
+      upsertedMessage = await channel.messages
+        .edit(existingMessageId, editPayload)
         .catch((error: unknown) => {
           const parsed = parseDiscordError(error);
           if (parsed.code === RESTJSONErrorCodes.UnknownMessage) {
             return null;
           }
-          throw new MirrorOperationError(classifyDiscordError(parsed, "message_fetch_failed"));
-        });
-
-      if (existingMessage) {
-        upsertedMessage = await existingMessage.edit(editPayload).catch((error: unknown) => {
-          const parsed = parseDiscordError(error);
           throw new MirrorOperationError(classifyDiscordError(parsed, "message_edit_failed"));
         });
-      }
     }
 
     if (!upsertedMessage) {
@@ -212,25 +216,24 @@ export class DiscordSignalMirrorManager {
         throw new MirrorOperationError(classifyDiscordError(parsed, "message_send_failed"));
       });
     }
+    upsertMs = Date.now() - upsertStartedAt;
 
+    const cleanupStartedAt = Date.now();
     for (const messageId of existingExtraMessageIds) {
-      const oldMessage = await channel.messages
-        .fetch(messageId)
+      await channel.messages
+        .delete(messageId)
         .catch((error: unknown) => {
           const parsed = parseDiscordError(error);
           if (parsed.code === RESTJSONErrorCodes.UnknownMessage) {
-            return null;
+            return;
           }
-          throw new MirrorOperationError(classifyDiscordError(parsed, "message_fetch_failed"));
+          throw new MirrorOperationError(classifyDiscordError(parsed, "message_delete_failed"));
         });
-      if (!oldMessage) continue;
-      await oldMessage.delete().catch((error: unknown) => {
-        const parsed = parseDiscordError(error);
-        throw new MirrorOperationError(classifyDiscordError(parsed, "message_delete_failed"));
-      });
     }
+    cleanupMs = Date.now() - cleanupStartedAt;
 
     const mirroredExtraMessageIds: string[] = [];
+    const extraSendStartedAt = Date.now();
     for (const imageUrl of payload.extraImageUrls) {
       const imageMessage = await channel
         .send({
@@ -247,6 +250,11 @@ export class DiscordSignalMirrorManager {
         });
       mirroredExtraMessageIds.push(imageMessage.id);
     }
+    extraImageSendMs = Date.now() - extraSendStartedAt;
+
+    console.info(
+      `[mirror] discord timing source_message=${job.sourceMessageId} event=${job.eventType} target_channel=${job.targetChannelId} channel_fetch_ms=${channelFetchMs} upsert_ms=${upsertMs} cleanup_ms=${cleanupMs} extra_image_send_ms=${extraImageSendMs} total_ms=${Date.now() - startedAt}`,
+    );
 
     return {
       ok: true,

@@ -9,6 +9,7 @@ export type BotConfig = {
   queueWakeFallbackMaxMs: number;
   roleSyncClaimLimit: number;
   mirrorClaimLimit: number;
+  mirrorFastPollMs: number;
   seatAuditClaimLimit: number;
   seatAuditPollIntervalMs: number;
   botGuildSyncIntervalMs: number;
@@ -69,6 +70,10 @@ export function loadBotConfig(): BotConfig {
     mirrorClaimLimit: parseIntEnv("MIRROR_CLAIM_LIMIT", 10, {
       min: 1,
       max: 20,
+    }),
+    mirrorFastPollMs: parseIntEnv("MIRROR_FAST_POLL_MS", 100, {
+      min: 25,
+      max: 2000,
     }),
     seatAuditClaimLimit: parseIntEnv("SEAT_AUDIT_CLAIM_LIMIT", 3, {
       min: 1,
