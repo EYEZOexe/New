@@ -400,6 +400,7 @@ export default defineSchema({
     lastError: v.optional(v.string()),
   })
     .index("by_status_runAfter", ["status", "runAfter"])
+    .index("by_status_updatedAt", ["status", "updatedAt"])
     .index("by_tenant_connector", ["tenantKey", "connectorId"])
     .index("by_dedupe", ["tenantKey", "connectorId", "guildId", "status"]),
 
@@ -428,6 +429,7 @@ export default defineSchema({
     lastError: v.optional(v.string()),
   })
     .index("by_status_runAfter", ["status", "runAfter"])
+    .index("by_status_updatedAt", ["status", "updatedAt"])
     .index("by_userId_createdAt", ["userId", "createdAt"])
     .index("by_discordUserId_status", ["discordUserId", "status"])
     .index("by_dedupe", [
@@ -487,6 +489,7 @@ export default defineSchema({
     lastError: v.optional(v.string()),
   })
     .index("by_status_runAfter", ["status", "runAfter"])
+    .index("by_status_updatedAt", ["status", "updatedAt"])
     .index("by_tenant_connector", ["tenantKey", "connectorId"])
     .index("by_tenant_connector_sourceMessageId", [
       "tenantKey",
@@ -514,6 +517,7 @@ export default defineSchema({
     deletedAt: v.optional(v.number()),
   })
     .index("by_tenant_connector", ["tenantKey", "connectorId"])
+    .index("by_lastMirroredAt", ["lastMirroredAt"])
     .index("by_source_target", [
       "tenantKey",
       "connectorId",
@@ -565,6 +569,7 @@ export default defineSchema({
     deletedAt: v.optional(v.number()),
   })
     .index("by_sourceMessageId", ["tenantKey", "connectorId", "sourceMessageId"])
+    .index("by_createdAt_global", ["createdAt"])
     .index("by_createdAt", ["tenantKey", "connectorId", "createdAt"]),
 
   webhookEvents: defineTable({
@@ -591,5 +596,6 @@ export default defineSchema({
   })
     .index("by_provider_eventId", ["provider", "eventId"])
     .index("by_provider_status", ["provider", "status"])
+    .index("by_receivedAt", ["receivedAt"])
     .index("by_status", ["status"]),
 });

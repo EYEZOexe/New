@@ -17,4 +17,11 @@ crons.interval(
   {},
 );
 
+crons.interval(
+  "purge non-critical data (14d retention)",
+  { hours: 24 * 14 },
+  internal.retention.runFourteenDayRetention,
+  {},
+);
+
 export default crons;
