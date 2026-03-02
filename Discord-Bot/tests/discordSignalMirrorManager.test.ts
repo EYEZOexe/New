@@ -91,6 +91,56 @@ describe("discord signal mirror manager", () => {
     expect(sentPayloads[0].embeds?.[0]?.description).toBe("alpha keep this live");
   });
 
+  it("skips mirroring when filtered content leaves an empty signal body", async () => {
+    const sentPayloads: Array<{
+      content?: string;
+      embeds?: APIEmbed[];
+      allowedMentions?: { parse: string[]; roles: string[] };
+    }> = [];
+    const channel = {
+      guildId: "target_guild_1",
+      send: async (payload: {
+        content?: string;
+        embeds?: APIEmbed[];
+        allowedMentions?: { parse: string[]; roles: string[] };
+      }) => {
+        sentPayloads.push(payload);
+        return { id: `mirrored_${sentPayloads.length}` } as unknown as Message;
+      },
+      messages: {
+        fetch: async () => {
+          throw new Error("unexpected_message_fetch");
+        },
+      },
+    };
+    const client = {
+      channels: {
+        fetch: async () => channel,
+      },
+      guilds: {
+        cache: new Map([
+          [
+            "1087843967573438504",
+            {
+              roles: {
+                cache: new Map<string, { id: string }>(),
+              },
+            },
+          ],
+        ]),
+      },
+    } as unknown as Client;
+
+    const manager = new DiscordSignalMirrorManager(client);
+    const result = await manager.executeJob(
+      buildJob("Unity Academy https://example.com/charts"),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe("message_skipped_empty_body");
+    expect(sentPayloads).toHaveLength(0);
+  });
+
   it("posts extra images as embeds without raw link-only messages", async () => {
     const sentPayloads: Array<{
       content?: string;

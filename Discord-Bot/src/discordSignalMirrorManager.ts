@@ -92,7 +92,12 @@ export class DiscordSignalMirrorManager {
     }
 
     const channelFetchStartedAt = Date.now();
-    const cachedChannel = this.client.channels.cache.get(job.targetChannelId) ?? null;
+    const cachedChannel =
+      (
+        this.client.channels as
+          | { cache?: { get: (channelId: string) => Channel | undefined } }
+          | undefined
+      )?.cache?.get(job.targetChannelId) ?? null;
     const channel = cachedChannel
       ? cachedChannel
       : await this.client.channels.fetch(job.targetChannelId).catch((error: unknown) => {
@@ -168,6 +173,18 @@ export class DiscordSignalMirrorManager {
       sourceMessageId: job.sourceMessageId,
       targetChannelId: job.targetChannelId,
     });
+    if (!sanitizedContent.content.trim()) {
+      console.info(
+        `[mirror] skipped empty signal body source_message=${job.sourceMessageId} event=${job.eventType} target_channel=${job.targetChannelId}`,
+      );
+      return {
+        ok: true,
+        message: "message_skipped_empty_body",
+        mirroredMessageId: existingMessageId || undefined,
+        mirroredExtraMessageIds: existingExtraMessageIds,
+        mirroredGuildId: guildId,
+      };
+    }
     const payload = buildMirroredPayload(sanitizedContent.content, job.attachments);
     if (payload.totalImageCount > 0 || payload.removedAttachmentLinkCount > 0) {
       console.info(
