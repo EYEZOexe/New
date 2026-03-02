@@ -24,6 +24,7 @@ import type * as httpConnectors from "../httpConnectors.js";
 import type * as httpHelpers from "../httpHelpers.js";
 import type * as httpIngest from "../httpIngest.js";
 import type * as httpPayments from "../httpPayments.js";
+import type * as imageDetection from "../imageDetection.js";
 import type * as ingest from "../ingest.js";
 import type * as ingestAttachmentMerge from "../ingestAttachmentMerge.js";
 import type * as ingestContentMerge from "../ingestContentMerge.js";
@@ -73,6 +74,7 @@ declare const fullApi: ApiFromModules<{
   httpHelpers: typeof httpHelpers;
   httpIngest: typeof httpIngest;
   httpPayments: typeof httpPayments;
+  imageDetection: typeof imageDetection;
   ingest: typeof ingest;
   ingestAttachmentMerge: typeof ingestAttachmentMerge;
   ingestContentMerge: typeof ingestContentMerge;

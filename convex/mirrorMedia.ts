@@ -554,6 +554,128 @@ export const debugSourceMirrorState = internalQuery({
   },
 });
 
+export const debugMirroredMessageState = internalQuery({
+  args: {
+    tenantKey: v.string(),
+    connectorId: v.string(),
+    mirroredMessageId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const needle = args.mirroredMessageId.trim();
+    if (!needle) {
+      return [];
+    }
+
+    const mirrors = await ctx.db
+      .query("mirroredSignals")
+      .withIndex("by_tenant_connector", (q) =>
+        q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+      )
+      .collect();
+
+    const matches = mirrors.filter((row) => {
+      const primary = row.mirroredMessageId?.trim() ?? "";
+      if (primary === needle) return true;
+      return (row.mirroredExtraMessageIds ?? []).some(
+        (value) => value.trim() === needle,
+      );
+    });
+
+    const results = await Promise.all(
+      matches.map(async (match) => {
+        const [signal, mediaRows, jobs] = await Promise.all([
+          ctx.db
+            .query("signals")
+            .withIndex("by_sourceMessageId", (q) =>
+              q
+                .eq("tenantKey", args.tenantKey)
+                .eq("connectorId", args.connectorId)
+                .eq("sourceMessageId", match.sourceMessageId),
+            )
+            .first(),
+          ctx.db
+            .query("signalMirrorMedia")
+            .withIndex("by_tenant_connector_sourceMessageId", (q) =>
+              q
+                .eq("tenantKey", args.tenantKey)
+                .eq("connectorId", args.connectorId)
+                .eq("sourceMessageId", match.sourceMessageId),
+            )
+            .collect(),
+          ctx.db
+            .query("signalMirrorJobs")
+            .withIndex("by_tenant_connector_sourceMessageId", (q) =>
+              q
+                .eq("tenantKey", args.tenantKey)
+                .eq("connectorId", args.connectorId)
+                .eq("sourceMessageId", match.sourceMessageId),
+            )
+            .collect(),
+        ]);
+
+        return {
+          sourceMessageId: match.sourceMessageId,
+          targetChannelId: match.targetChannelId,
+          mirroredMessageId: match.mirroredMessageId,
+          mirroredExtraMessageIds: match.mirroredExtraMessageIds ?? [],
+          mirroredGuildId: match.mirroredGuildId ?? null,
+          lastMirroredAt: match.lastMirroredAt,
+          deletedAt: match.deletedAt ?? null,
+          signal: signal
+            ? {
+                sourceChannelId: signal.sourceChannelId,
+                sourceGuildId: signal.sourceGuildId,
+                createdAt: signal.createdAt,
+                editedAt: signal.editedAt ?? null,
+                deletedAt: signal.deletedAt ?? null,
+                attachmentCount: signal.attachments?.length ?? 0,
+                unresolvedImageCount:
+                  signal.attachments?.filter((attachment) => {
+                    if (!isLikelyImageAttachment(attachment)) return false;
+                    return (attachment.mirrorUrl?.trim() ?? "").length === 0;
+                  }).length ?? 0,
+                attachments: (signal.attachments ?? []).map((attachment) => ({
+                  attachmentId: attachment.attachmentId ?? null,
+                  url: attachment.url,
+                  contentType: attachment.contentType ?? null,
+                  storageId: attachment.storageId ?? null,
+                  mirrorUrl: attachment.mirrorUrl ?? null,
+                })),
+              }
+            : null,
+          mediaRows: mediaRows.map((row) => ({
+            attachmentKey: row.attachmentKey,
+            status: row.status,
+            storageId: row.storageId ?? null,
+            mirrorUrl: row.mirrorUrl ?? null,
+            attemptCount: row.attemptCount,
+            lastError: row.lastError ?? null,
+            updatedAt: row.updatedAt,
+          })),
+          jobs: jobs
+            .slice()
+            .sort((a, b) => b.createdAt - a.createdAt)
+            .map((job) => ({
+              eventType: job.eventType,
+              status: job.status,
+              attemptCount: job.attemptCount,
+              createdAt: job.createdAt,
+              updatedAt: job.updatedAt,
+              lastError: job.lastError ?? null,
+              mirrorAttachmentCount:
+                job.attachments?.filter((attachment) => {
+                  const mirrorUrl = attachment.mirrorUrl?.trim() ?? "";
+                  return mirrorUrl.length > 0;
+                }).length ?? 0,
+            })),
+        };
+      }),
+    );
+
+    return results;
+  },
+});
+
 export const listUnresolvedImageSignals = internalQuery({
   args: {
     tenantKey: v.string(),
