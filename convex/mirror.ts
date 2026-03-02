@@ -527,6 +527,44 @@ export const completeSignalMirrorJob = mutation({
         });
       }
 
+      const completedAttachments = Array.isArray(job.attachments) ? job.attachments : [];
+      if (
+        job.eventType !== "delete" &&
+        completedAttachments.length > 0 &&
+        hasPendingImageHydration(completedAttachments)
+      ) {
+        const hasAnyMediaRow = await ctx.db
+          .query("signalMirrorMedia")
+          .withIndex("by_tenant_connector_sourceMessageId", (q) =>
+            q
+              .eq("tenantKey", job.tenantKey)
+              .eq("connectorId", job.connectorId)
+              .eq("sourceMessageId", job.sourceMessageId),
+          )
+          .first();
+        if (!hasAnyMediaRow) {
+          await ctx.scheduler.runAfter(0, hydrateSignalMediaForMessageRef, {
+            tenantKey: job.tenantKey,
+            connectorId: job.connectorId,
+            sourceMessageId: job.sourceMessageId,
+            sourceChannelId: job.sourceChannelId,
+            receivedAt: now,
+            attachments: completedAttachments.map((attachment) => ({
+              attachmentId: attachment.attachmentId,
+              url: attachment.url,
+              storageId: attachment.storageId,
+              mirrorUrl: attachment.mirrorUrl,
+              name: attachment.name,
+              contentType: attachment.contentType,
+              size: attachment.size,
+            })),
+          });
+          console.info(
+            `[mirror] scheduled hydration fallback on complete source_message=${job.sourceMessageId} target_channel=${job.targetChannelId} attachment_count=${completedAttachments.length}`,
+          );
+        }
+      }
+
       console.info(
         `[mirror] completed job=${job._id} event=${job.eventType} source_message=${job.sourceMessageId} target_channel=${job.targetChannelId}`,
       );
