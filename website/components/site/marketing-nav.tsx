@@ -28,6 +28,7 @@ export function MarketingNav(props: MarketingNavProps) {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const shouldShowLogin = !isLoading && !isAuthenticated;
   const shouldShowDashboard = !isLoading && isAuthenticated;
+  const pricingHref = shouldShowLogin ? "/login?redirectTo=%2Fshop" : "/shop";
 
   return (
     <header className="site-panel sticky top-4 z-40 px-4 py-3 md:px-5 md:py-4">
@@ -45,21 +46,24 @@ export function MarketingNav(props: MarketingNavProps) {
         </Link>
 
         <nav className="flex flex-wrap items-center gap-2">
-          {links.map((link) => (
-            <Button
-              asChild
-              key={link.href}
-              size="sm"
-              variant={isActive(pathname, link.href) ? "secondary" : "ghost"}
-              className={
-                isActive(pathname, link.href)
-                  ? "rounded-full border border-cyan-300/35 bg-cyan-400/20 px-4 text-cyan-100 hover:bg-cyan-400/26"
-                  : "rounded-full px-4"
-              }
-            >
-              <Link href={link.href}>{link.label}</Link>
-            </Button>
-          ))}
+          {links.map((link) => {
+            const href = link.href === "/shop" ? pricingHref : link.href;
+            return (
+              <Button
+                asChild
+                key={link.href}
+                size="sm"
+                variant={isActive(pathname, link.href) ? "secondary" : "ghost"}
+                className={
+                  isActive(pathname, link.href)
+                    ? "rounded-full border border-cyan-300/35 bg-cyan-400/20 px-4 text-cyan-100 hover:bg-cyan-400/26"
+                    : "rounded-full px-4"
+                }
+              >
+                <Link href={href}>{link.label}</Link>
+              </Button>
+            );
+          })}
           {shouldShowDashboard ? (
             <Button
               asChild

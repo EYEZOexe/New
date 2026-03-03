@@ -123,7 +123,7 @@ export default function Home() {
 
           <div className="flex flex-wrap gap-3">
             <Button asChild className="h-11 rounded-full px-6 text-sm">
-              <Link href="/shop">
+              <Link href={isAuthenticated ? "/shop" : "/login?redirectTo=%2Fshop"}>
                 View pricing
                 <ArrowRight className="size-4" />
               </Link>

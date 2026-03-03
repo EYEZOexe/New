@@ -92,14 +92,22 @@ const SELL_ORDER_TOTAL_PATHS = [
   "payment.full_price.base",
 ] as const;
 
+function hasZeroTotalSellOrder(payload: unknown): boolean {
+  const total = readFirstNumber(payload, SELL_ORDER_TOTAL_PATHS);
+  return total !== null && Math.abs(total) < 0.0000001;
+}
+
 function isFreeSellOrderCreatedEvent(args: {
   eventType: string;
   payload: unknown;
 }): boolean {
   const eventType = args.eventType.trim().toLowerCase();
   if (eventType !== "order.created") return false;
-  const total = readFirstNumber(args.payload, SELL_ORDER_TOTAL_PATHS);
-  return total !== null && Math.abs(total) < 0.0000001;
+  return hasZeroTotalSellOrder(args.payload);
+}
+
+function isFreeSellOrderEvent(payload: unknown): boolean {
+  return hasZeroTotalSellOrder(payload);
 }
 
 function getSellWebhookIgnoreReason(args: {
@@ -123,6 +131,128 @@ function getSellWebhookIgnoreReason(args: {
   }
 
   return null;
+}
+
+type TrialLockCandidate = {
+  lockKey: string;
+  source: "user" | "email" | "customer" | "ip_hash";
+};
+
+function normalizeTrialLockValue(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  return normalized ? normalized : null;
+}
+
+function buildTrialLockCandidates(args: {
+  userId: Id<"users">;
+  customerEmail: string | null;
+  externalCustomerId: string | null;
+  clientIpHash: string | null;
+}): TrialLockCandidate[] {
+  const seen = new Set<string>();
+  const candidates: TrialLockCandidate[] = [];
+
+  const push = (source: TrialLockCandidate["source"], value: string | null) => {
+    if (!value) return;
+    const lockKey = `${source}:${value}`;
+    if (seen.has(lockKey)) return;
+    seen.add(lockKey);
+    candidates.push({ lockKey, source });
+  };
+
+  push("user", String(args.userId));
+  push("email", normalizeTrialLockValue(args.customerEmail));
+  push("customer", normalizeTrialLockValue(args.externalCustomerId));
+  push("ip_hash", normalizeTrialLockValue(args.clientIpHash));
+
+  return candidates;
+}
+
+async function findMatchingTrialLock(
+  ctx: MutationCtx,
+  args: {
+    provider: string;
+    candidates: TrialLockCandidate[];
+  },
+): Promise<Doc<"trialLocks"> | null> {
+  for (const candidate of args.candidates) {
+    const existing = await ctx.db
+      .query("trialLocks")
+      .withIndex("by_provider_lockKey", (q) =>
+        q.eq("provider", args.provider).eq("lockKey", candidate.lockKey),
+      )
+      .first();
+    if (existing) {
+      return existing;
+    }
+  }
+  return null;
+}
+
+async function persistTrialLocks(
+  ctx: MutationCtx,
+  args: {
+    provider: string;
+    eventId: string;
+    userId: Id<"users">;
+    customerEmail: string | null;
+    externalCustomerId: string | null;
+    externalSubscriptionId: string | null;
+    clientIpHash: string | null;
+    now: number;
+    candidates: TrialLockCandidate[];
+  },
+): Promise<void> {
+  for (const candidate of args.candidates) {
+    const existing = await ctx.db
+      .query("trialLocks")
+      .withIndex("by_provider_lockKey", (q) =>
+        q.eq("provider", args.provider).eq("lockKey", candidate.lockKey),
+      )
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        updatedAt: args.now,
+      });
+      continue;
+    }
+
+    await ctx.db.insert("trialLocks", {
+      provider: args.provider,
+      lockKey: candidate.lockKey,
+      firstEventId: args.eventId,
+      firstUserId: args.userId,
+      firstCustomerEmail: args.customerEmail ?? undefined,
+      firstExternalCustomerId: args.externalCustomerId ?? undefined,
+      firstExternalSubscriptionId: args.externalSubscriptionId ?? undefined,
+      firstClientIpHash: args.clientIpHash ?? undefined,
+      createdAt: args.now,
+      updatedAt: args.now,
+    });
+  }
+}
+
+async function hasPriorProcessedFreeTrialEventForUser(
+  ctx: MutationCtx,
+  args: {
+    provider: string;
+    userId: Id<"users">;
+    currentEventId: string;
+  },
+): Promise<boolean> {
+  const processedEvents = await ctx.db
+    .query("webhookEvents")
+    .withIndex("by_provider_status", (q) =>
+      q.eq("provider", args.provider).eq("status", "processed"),
+    )
+    .collect();
+
+  return processedEvents.some((row) => {
+    if (row.eventId === args.currentEventId) return false;
+    if (row.resolvedUserId !== args.userId) return false;
+    return isFreeSellOrderEvent(row.payload);
+  });
 }
 
 function getErrorMessage(error: unknown): string {
@@ -440,6 +570,7 @@ export const upsertSellWebhookEvent = internalMutation({
     eventType: v.string(),
     payload: v.any(),
     payloadHash: v.optional(v.string()),
+    clientIpHash: v.optional(v.string()),
     receivedAt: v.number(),
   },
   handler: async (ctx, args) => {
@@ -450,6 +581,11 @@ export const upsertSellWebhookEvent = internalMutation({
         console.warn(
           `[payments] webhook payload hash mismatch provider=${args.provider} event=${args.eventId}`,
         );
+      }
+      if (args.clientIpHash && !existing.clientIpHash) {
+        await ctx.db.patch(existing._id, {
+          clientIpHash: args.clientIpHash,
+        });
       }
 
       return {
@@ -466,6 +602,7 @@ export const upsertSellWebhookEvent = internalMutation({
       payload: args.payload,
       payloadHash: args.payloadHash,
       customerEmail: projected.customerEmail ?? undefined,
+      clientIpHash: args.clientIpHash,
       externalCustomerId: projected.externalCustomerId ?? undefined,
       externalSubscriptionId: projected.externalSubscriptionId ?? undefined,
       receivedAt: args.receivedAt,
@@ -521,6 +658,7 @@ export const processSellWebhookEvent = internalMutation({
     const projected = projectSellWebhookPayload(event.payload, event.eventId);
 
     try {
+      const isFreeOrderEvent = isFreeSellOrderEvent(event.payload);
       const isFreeOrderCreated = isFreeSellOrderCreatedEvent({
         eventType: projected.eventType,
         payload: event.payload,
@@ -588,6 +726,79 @@ export const processSellWebhookEvent = internalMutation({
         );
       }
 
+      const trialLockCandidates = buildTrialLockCandidates({
+        userId: resolvedUser.id,
+        customerEmail: projected.customerEmail,
+        externalCustomerId: projected.externalCustomerId,
+        clientIpHash: event.clientIpHash ?? null,
+      });
+
+      if (isFreeOrderEvent && effectiveSubscriptionStatus === "active") {
+        const existingTrialLock = await findMatchingTrialLock(ctx, {
+          provider: args.provider,
+          candidates: trialLockCandidates,
+        });
+        const hasHistoricalTrial =
+          !existingTrialLock &&
+          (await hasPriorProcessedFreeTrialEventForUser(ctx, {
+            provider: args.provider,
+            userId: resolvedUser.id,
+            currentEventId: args.eventId,
+          }));
+        const repeatTrialDetected =
+          (existingTrialLock && existingTrialLock.firstEventId !== args.eventId) ||
+          hasHistoricalTrial;
+
+        if (repeatTrialDetected) {
+          if (!existingTrialLock) {
+            await persistTrialLocks(ctx, {
+              provider: args.provider,
+              eventId: args.eventId,
+              userId: resolvedUser.id,
+              customerEmail: projected.customerEmail,
+              externalCustomerId: projected.externalCustomerId,
+              externalSubscriptionId: projected.externalSubscriptionId,
+              clientIpHash: event.clientIpHash ?? null,
+              now: args.attemptedAt,
+              candidates: trialLockCandidates,
+            });
+          }
+
+          await upsertPaymentCustomerTracking(ctx, {
+            userId: resolvedUser.id,
+            eventId: args.eventId,
+            externalCustomerId: projected.externalCustomerId,
+            externalSubscriptionId: projected.externalSubscriptionId,
+            customerEmail: projected.customerEmail,
+            now: args.attemptedAt,
+          });
+
+          await ctx.db.patch(event._id, {
+            eventType: projected.eventType,
+            customerEmail: projected.customerEmail ?? undefined,
+            externalCustomerId: projected.externalCustomerId ?? undefined,
+            externalSubscriptionId: projected.externalSubscriptionId ?? undefined,
+            resolvedUserId: resolvedUser.id,
+            resolvedVia: "trial_already_claimed",
+            status: "processed",
+            processedAt: args.attemptedAt,
+            lastAttemptAt: args.attemptedAt,
+            error: undefined,
+          });
+
+          console.warn(
+            `[payments] blocked repeat trial provider=${args.provider} event=${args.eventId} user=${resolvedUser.id} lock_key=${existingTrialLock?.lockKey ?? "historical_user_trial"} first_event=${existingTrialLock?.firstEventId ?? "unknown"}`,
+          );
+
+          return {
+            ok: true as const,
+            deduped: false,
+            subscriptionStatus: "inactive" as SubscriptionStatus,
+            userId: resolvedUser.id,
+          };
+        }
+      }
+
       const subscription = await upsertSubscriptionForUser(ctx, {
         userId: resolvedUser.id,
         status: effectiveSubscriptionStatus,
@@ -631,6 +842,23 @@ export const processSellWebhookEvent = internalMutation({
         customerEmail: projected.customerEmail,
         now: args.attemptedAt,
       });
+
+      if (isFreeOrderEvent && effectiveSubscriptionStatus === "active") {
+        await persistTrialLocks(ctx, {
+          provider: args.provider,
+          eventId: args.eventId,
+          userId: resolvedUser.id,
+          customerEmail: projected.customerEmail,
+          externalCustomerId: projected.externalCustomerId,
+          externalSubscriptionId: projected.externalSubscriptionId,
+          clientIpHash: event.clientIpHash ?? null,
+          now: args.attemptedAt,
+          candidates: trialLockCandidates,
+        });
+        console.info(
+          `[payments] trial lock persisted provider=${args.provider} event=${args.eventId} user=${resolvedUser.id} keys=${trialLockCandidates.length}`,
+        );
+      }
 
       await ctx.db.patch(event._id, {
         eventType: projected.eventType,

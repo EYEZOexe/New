@@ -6,6 +6,7 @@ import { sha256Hex } from "./connectorsAuth";
 import { getCorrelationId, jsonError, jsonResponse } from "./httpHelpers";
 import {
   extractSellWebhookEventMeta,
+  readClientIpFromHeaders,
   readSellWebhookSignature,
   verifySellWebhookSignature,
 } from "./paymentsUtils";
@@ -109,6 +110,8 @@ export function mountPaymentRoutes(http: HttpRouter) {
 
       const internal = anyApi as any;
       const payloadHash = await sha256Hex(parsed.rawBody || JSON.stringify(parsed.body));
+      const clientIp = readClientIpFromHeaders(request.headers);
+      const clientIpHash = clientIp ? await sha256Hex(`trial-ip:${clientIp}`) : undefined;
 
       const upsert = await ctx.runMutation(internal.payments.upsertSellWebhookEvent, {
         provider: PROVIDER,
@@ -116,6 +119,7 @@ export function mountPaymentRoutes(http: HttpRouter) {
         eventType: eventMeta.eventType,
         payload: parsed.body,
         payloadHash,
+        clientIpHash,
         receivedAt: Date.now(),
       });
 

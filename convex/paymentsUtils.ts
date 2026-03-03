@@ -268,6 +268,21 @@ function normalizeBase64(value: string): string | null {
   return normalized ? normalized : null;
 }
 
+function normalizeClientIp(raw: string): string | null {
+  const value = raw.trim();
+  if (!value) return null;
+
+  if (value.includes(",")) {
+    const first = value
+      .split(",")
+      .map((part) => part.trim())
+      .find(Boolean);
+    return first ?? null;
+  }
+
+  return value;
+}
+
 function constantTimeEquals(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let result = 0;
@@ -303,6 +318,25 @@ export function readSellWebhookSignature(headers: Headers): string | null {
     if (!candidate) continue;
     const trimmed = candidate.trim();
     if (trimmed) return trimmed;
+  }
+
+  return null;
+}
+
+export function readClientIpFromHeaders(headers: Headers): string | null {
+  const candidates = [
+    headers.get("cf-connecting-ip"),
+    headers.get("x-real-ip"),
+    headers.get("x-forwarded-for"),
+    headers.get("x-client-ip"),
+    headers.get("true-client-ip"),
+    headers.get("fly-client-ip"),
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const normalized = normalizeClientIp(candidate);
+    if (normalized) return normalized;
   }
 
   return null;

@@ -4,6 +4,8 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth } from "convex/react";
 import { CheckCircle2, Headset, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 import { MarketingFrame } from "@/components/site/marketing-frame";
 import { MarketingNav } from "@/components/site/marketing-nav";
@@ -16,9 +18,27 @@ import { ShopTierCard } from "./components/ShopTierCard";
 import { useShopCatalog } from "./useShopCatalog";
 
 export default function ShopPage() {
-  const shop = useShopCatalog();
+  const router = useRouter();
   const { signOut } = useAuthActions();
-  const { isAuthenticated } = useConvexAuth();
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  const shop = useShopCatalog(isAuthenticated);
+
+  useEffect(() => {
+    if (isLoading || isAuthenticated) return;
+    console.info("[shop] blocked anonymous pricing access redirect=/login?redirectTo=/shop");
+    router.replace("/login?redirectTo=%2Fshop");
+  }, [isAuthenticated, isLoading, router]);
+
+  if (isLoading || !isAuthenticated) {
+    return (
+      <MarketingFrame>
+        <MarketingNav />
+        <div className="rounded-2xl border border-border/70 bg-card/85 p-6 text-sm text-muted-foreground">
+          Redirecting to login...
+        </div>
+      </MarketingFrame>
+    );
+  }
 
   return (
     <MarketingFrame>

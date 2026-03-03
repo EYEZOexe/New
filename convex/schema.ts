@@ -325,6 +325,21 @@ export default defineSchema({
     .index("by_provider_externalCustomerId", ["provider", "externalCustomerId"])
     .index("by_provider_externalSubscriptionId", ["provider", "externalSubscriptionId"]),
 
+  trialLocks: defineTable({
+    provider: v.string(),
+    lockKey: v.string(),
+    firstEventId: v.string(),
+    firstUserId: v.id("users"),
+    firstCustomerEmail: v.optional(v.string()),
+    firstExternalCustomerId: v.optional(v.string()),
+    firstExternalSubscriptionId: v.optional(v.string()),
+    firstClientIpHash: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_provider_lockKey", ["provider", "lockKey"])
+    .index("by_provider_firstUserId", ["provider", "firstUserId"]),
+
   discordLinks: defineTable({
     userId: v.id("users"),
     discordUserId: v.string(),
@@ -579,6 +594,7 @@ export default defineSchema({
     payload: v.any(),
     payloadHash: v.optional(v.string()),
     customerEmail: v.optional(v.string()),
+    clientIpHash: v.optional(v.string()),
     externalCustomerId: v.optional(v.string()),
     externalSubscriptionId: v.optional(v.string()),
     resolvedUserId: v.optional(v.id("users")),

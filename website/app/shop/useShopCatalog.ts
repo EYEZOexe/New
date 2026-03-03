@@ -18,9 +18,9 @@ const viewerRef = makeFunctionReference<
   ViewerRow | null
 >("users:viewer");
 
-export function useShopCatalog() {
-  const catalog = useQuery(listCatalogRef, {});
-  const viewer = useQuery(viewerRef, {});
+export function useShopCatalog(enabled = true) {
+  const catalog = useQuery(listCatalogRef, enabled ? {} : "skip");
+  const viewer = useQuery(viewerRef, enabled ? {} : "skip");
 
   const [selectedDurationByTier, setSelectedDurationByTier] = useState<
     Partial<Record<SubscriptionTier, number>>

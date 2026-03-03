@@ -4,6 +4,7 @@ import {
   extractSellWebhookEventMeta,
   mapSellLifecycleToSubscriptionStatus,
   projectSellWebhookPayload,
+  readClientIpFromHeaders,
   readSellWebhookSignature,
   verifySellWebhookSignature,
 } from "../../convex/paymentsUtils";
@@ -122,5 +123,24 @@ describe("paymentsUtils", () => {
 
     const signature = readSellWebhookSignature(headers);
     expect(signature).toBe("abc123");
+  });
+
+  it("extracts client ip from proxy headers", () => {
+    const headers = new Headers({
+      "x-forwarded-for": "203.0.113.20, 10.0.0.1",
+    });
+
+    const ip = readClientIpFromHeaders(headers);
+    expect(ip).toBe("203.0.113.20");
+  });
+
+  it("prefers cf-connecting-ip when present", () => {
+    const headers = new Headers({
+      "x-forwarded-for": "203.0.113.20, 10.0.0.1",
+      "cf-connecting-ip": "198.51.100.42",
+    });
+
+    const ip = readClientIpFromHeaders(headers);
+    expect(ip).toBe("198.51.100.42");
   });
 });
