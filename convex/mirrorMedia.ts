@@ -915,16 +915,22 @@ async function hydrateSingleImage(
 
   const responseType = normalizeContentType(response.headers.get("content-type") ?? undefined);
   const fallbackType = normalizeContentType(args.contentType);
-  const finalType = responseType ?? fallbackType;
-  if (!finalType?.startsWith("image/")) {
-    throw new Error("non_image_content");
-  }
-
   const blobStartedAt = Date.now();
   const blob = await response.blob();
   const blobMs = Date.now() - blobStartedAt;
   if (blob.size > MAX_IMAGE_BYTES) {
     throw new Error("image_too_large");
+  }
+
+  const signatureType = await detectImageContentTypeFromBlob(blob);
+  const finalType = resolveHydrationContentType({
+    sourceUrl: args.sourceUrl,
+    responseType,
+    fallbackType,
+    signatureType,
+  });
+  if (!finalType) {
+    throw new Error("non_image_content");
   }
 
   const uploadBlob = blob.type ? blob : new Blob([blob], { type: finalType });
@@ -1005,6 +1011,149 @@ function normalizeContentType(value?: string): string | null {
   if (!value) return null;
   const normalized = value.split(";")[0]?.trim().toLowerCase() ?? "";
   return normalized || null;
+}
+
+function resolveHydrationContentType(args: {
+  sourceUrl: string;
+  responseType: string | null;
+  fallbackType: string | null;
+  signatureType: string | null;
+}): string | null {
+  const responseImageType = args.responseType?.startsWith("image/")
+    ? args.responseType
+    : null;
+  const fallbackImageType = args.fallbackType?.startsWith("image/")
+    ? args.fallbackType
+    : null;
+  const inferredFromUrl = shouldInferFromUrl(args.responseType)
+    ? inferImageContentTypeFromUrl(args.sourceUrl)
+    : null;
+  return args.signatureType ?? responseImageType ?? fallbackImageType ?? inferredFromUrl;
+}
+
+function shouldInferFromUrl(responseType: string | null): boolean {
+  if (!responseType) return true;
+  return responseType === "application/octet-stream" || responseType === "binary/octet-stream";
+}
+
+function inferImageContentTypeFromUrl(url: string): string | null {
+  const normalized = url.trim();
+  if (!normalized) return null;
+
+  try {
+    const parsed = new URL(normalized);
+    const fromPath = inferImageContentTypeFromName(parsed.pathname);
+    if (fromPath) return fromPath;
+
+    const format =
+      parsed.searchParams.get("format") ??
+      parsed.searchParams.get("fm") ??
+      parsed.searchParams.get("ext");
+    return inferImageContentTypeFromName(format ?? "");
+  } catch {
+    return inferImageContentTypeFromName(normalized);
+  }
+}
+
+function inferImageContentTypeFromName(value: string): string | null {
+  const lower = value.trim().toLowerCase();
+  if (!lower) return null;
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower === "jpg" || lower === "jpeg") {
+    return "image/jpeg";
+  }
+  if (lower.endsWith(".png") || lower === "png") return "image/png";
+  if (lower.endsWith(".gif") || lower === "gif") return "image/gif";
+  if (lower.endsWith(".webp") || lower === "webp") return "image/webp";
+  if (lower.endsWith(".bmp") || lower === "bmp") return "image/bmp";
+  if (lower.endsWith(".svg") || lower === "svg") return "image/svg+xml";
+  if (lower.endsWith(".tif") || lower.endsWith(".tiff") || lower === "tif" || lower === "tiff") {
+    return "image/tiff";
+  }
+  if (lower.endsWith(".avif") || lower === "avif") return "image/avif";
+  if (lower.endsWith(".heic") || lower === "heic") return "image/heic";
+  if (lower.endsWith(".heif") || lower === "heif") return "image/heif";
+  return null;
+}
+
+async function detectImageContentTypeFromBlob(blob: Blob): Promise<string | null> {
+  try {
+    const sampleSize = Math.min(1024, blob.size);
+    if (sampleSize <= 0) return null;
+    const sample = new Uint8Array(await blob.slice(0, sampleSize).arrayBuffer());
+    return detectImageContentTypeFromBytes(sample);
+  } catch {
+    return null;
+  }
+}
+
+function detectImageContentTypeFromBytes(bytes: Uint8Array): string | null {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "image/jpeg";
+  }
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    return "image/png";
+  }
+  if (
+    bytes.length >= 4 &&
+    bytes[0] === 0x47 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x38
+  ) {
+    return "image/gif";
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return "image/webp";
+  }
+  if (bytes.length >= 2 && bytes[0] === 0x42 && bytes[1] === 0x4d) {
+    return "image/bmp";
+  }
+  if (
+    bytes.length >= 4 &&
+    ((bytes[0] === 0x49 && bytes[1] === 0x49 && bytes[2] === 0x2a && bytes[3] === 0x00) ||
+      (bytes[0] === 0x4d && bytes[1] === 0x4d && bytes[2] === 0x00 && bytes[3] === 0x2a))
+  ) {
+    return "image/tiff";
+  }
+  if (bytes.length >= 12) {
+    const boxType = String.fromCharCode(bytes[4], bytes[5], bytes[6], bytes[7]);
+    const brand = String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]);
+    if (boxType === "ftyp") {
+      if (brand.startsWith("avif") || brand.startsWith("avis")) return "image/avif";
+      if (brand.startsWith("heic") || brand.startsWith("heix")) return "image/heic";
+      if (brand.startsWith("hevc") || brand.startsWith("hevx")) return "image/heif";
+    }
+  }
+
+  const probe = new TextDecoder("utf-8", { fatal: false })
+    .decode(bytes.slice(0, Math.min(bytes.length, 256)))
+    .trim()
+    .toLowerCase();
+  if (probe.startsWith("<svg") || probe.includes("<svg ")) {
+    return "image/svg+xml";
+  }
+
+  return null;
 }
 
 function buildAttachmentKey(attachment: { attachmentId?: string; url: string }): string {
