@@ -77,9 +77,16 @@ export default function ShopPage() {
               <p className="site-kicker">Plans</p>
               <h2 className="mt-1 text-3xl font-semibold tracking-tight">Choose your tier</h2>
             </div>
-            <Badge variant="outline" className="rounded-full px-3 py-1 text-xs">
-              Select duration inside each plan
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="rounded-full px-3 py-1 text-xs">
+                Select duration inside each plan
+              </Badge>
+              {shop.viewer?.hasConsumedTrial ? (
+                <Badge variant="outline" className="rounded-full px-3 py-1 text-xs">
+                  Trial already used
+                </Badge>
+              ) : null}
+            </div>
           </div>
 
           <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">

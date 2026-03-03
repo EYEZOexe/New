@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 import type { CatalogTier, CatalogVariant } from "../types";
-import { buildCheckoutStatusUrl, buildCheckoutUrl } from "../utils";
+import { buildCheckoutStatusUrl, buildCheckoutUrl, isFreeVariantByDisplayPrice } from "../utils";
 
 type ShopTierCardProps = {
   tier: CatalogTier;
@@ -57,16 +57,8 @@ function getTierPalette(tier: CatalogTier["tier"]) {
   };
 }
 
-function parseDisplayPriceValue(displayPrice: string): number | null {
-  const normalized = displayPrice.replace(/[^0-9.]/g, "").trim();
-  if (!normalized) return null;
-  const value = Number.parseFloat(normalized);
-  if (!Number.isFinite(value)) return null;
-  return value;
-}
-
 function isFreeVariant(variant: CatalogVariant): boolean {
-  return parseDisplayPriceValue(variant.displayPrice) === 0;
+  return isFreeVariantByDisplayPrice(variant.displayPrice);
 }
 
 export function ShopTierCard(props: ShopTierCardProps) {

@@ -2,6 +2,8 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { queryGeneric } from "convex/server";
 import { hasActiveSubscriptionAccess } from "./subscriptionAccess";
 
+const PAYMENT_PROVIDER = "sellapp";
+
 export const viewer = queryGeneric({
   args: {},
   handler: async (ctx) => {
@@ -19,6 +21,12 @@ export const viewer = queryGeneric({
       .query("subscriptions")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .first();
+    const trialLock = await ctx.db
+      .query("trialLocks")
+      .withIndex("by_provider_firstUserId", (q) =>
+        q.eq("provider", PAYMENT_PROVIDER).eq("firstUserId", userId),
+      )
+      .first();
     const now = Date.now();
 
     return {
@@ -29,6 +37,7 @@ export const viewer = queryGeneric({
       subscriptionStatus: subscription?.status ?? null,
       subscriptionEndsAt: subscription?.endsAt ?? null,
       hasSignalAccess: hasActiveSubscriptionAccess(subscription, now),
+      hasConsumedTrial: Boolean(trialLock),
     };
   },
 });

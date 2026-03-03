@@ -5,6 +5,7 @@ import { useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { CatalogQueryResult, CatalogTier, SubscriptionTier, ViewerRow } from "./types";
+import { isFreeVariantByDisplayPrice } from "./utils";
 
 const listCatalogRef = makeFunctionReference<
   "query",
@@ -19,8 +20,39 @@ const viewerRef = makeFunctionReference<
 >("users:viewer");
 
 export function useShopCatalog(enabled = true) {
-  const catalog = useQuery(listCatalogRef, enabled ? {} : "skip");
+  const rawCatalog = useQuery(listCatalogRef, enabled ? {} : "skip");
   const viewer = useQuery(viewerRef, enabled ? {} : "skip");
+
+  const { catalog, hiddenTrialVariantCount } = useMemo(() => {
+    if (!rawCatalog) {
+      return { catalog: rawCatalog, hiddenTrialVariantCount: 0 };
+    }
+    if (!viewer?.hasConsumedTrial) {
+      return { catalog: rawCatalog, hiddenTrialVariantCount: 0 };
+    }
+
+    let hiddenCount = 0;
+    const tiers = rawCatalog.tiers
+      .map((tier) => {
+        const variants = tier.variants.filter((variant) => {
+          const shouldHide = isFreeVariantByDisplayPrice(variant.displayPrice);
+          if (shouldHide) hiddenCount += 1;
+          return !shouldHide;
+        });
+        return {
+          ...tier,
+          variants,
+        };
+      })
+      .filter((tier) => tier.variants.length > 0);
+
+    return {
+      catalog: {
+        tiers,
+      } as CatalogQueryResult,
+      hiddenTrialVariantCount: hiddenCount,
+    };
+  }, [rawCatalog, viewer?.hasConsumedTrial]);
 
   const [selectedDurationByTier, setSelectedDurationByTier] = useState<
     Partial<Record<SubscriptionTier, number>>
@@ -56,6 +88,13 @@ export function useShopCatalog(enabled = true) {
       `[shop] catalog update tiers=${catalog.tiers.length} variants=${variantCount}`,
     );
   }, [catalog]);
+
+  useEffect(() => {
+    if (!viewer?.hasConsumedTrial || hiddenTrialVariantCount <= 0) return;
+    console.info(
+      `[shop] trial variants hidden consumed_trial=yes hidden_variants=${hiddenTrialVariantCount}`,
+    );
+  }, [hiddenTrialVariantCount, viewer?.hasConsumedTrial]);
 
   const onSelectDuration = useCallback(
     (tier: SubscriptionTier, durationDays: number) => {

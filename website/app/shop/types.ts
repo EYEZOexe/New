@@ -33,4 +33,5 @@ export type ViewerRow = {
   subscriptionStatus: "active" | "inactive" | "canceled" | "past_due" | null;
   subscriptionEndsAt: number | null;
   hasSignalAccess: boolean;
+  hasConsumedTrial: boolean;
 };

@@ -63,3 +63,15 @@ export function buildCheckoutStatusUrl(args: BuildCheckoutStatusUrlArgs): string
   }
   return `${CHECKOUT_RETURN_PATH}?${params.toString()}`;
 }
+
+export function parseDisplayPriceValue(displayPrice: string): number | null {
+  const normalized = displayPrice.replace(/[^0-9.]/g, "").trim();
+  if (!normalized) return null;
+  const value = Number.parseFloat(normalized);
+  if (!Number.isFinite(value)) return null;
+  return value;
+}
+
+export function isFreeVariantByDisplayPrice(displayPrice: string): boolean {
+  return parseDisplayPriceValue(displayPrice) === 0;
+}
