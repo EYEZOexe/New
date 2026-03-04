@@ -34,6 +34,8 @@ type IngestNormalizationOptions = {
   receivedAt?: number;
 };
 
+const MAX_SYNTHETIC_EMBED_TEXT_LENGTH = 3900;
+
 export function parseIsoToMs(value: string): number {
   const ms = Date.parse(value);
   if (!Number.isFinite(ms)) {
@@ -107,6 +109,8 @@ export function messageEventToSignalFields(
   });
   const embedMediaAttachments = extractEmbedMediaAttachments(event.embeds, attachmentUrls);
   const attachments = [...directAttachments, ...embedMediaAttachments];
+  const normalizedContent = typeof event.content_clean === "string" ? event.content_clean.trim() : "";
+  const embedDerivedContent = extractEmbedTextContent(event.embeds);
 
   const editedAtFromPayload = parseOptionalIsoToMs(event.edited_at);
   const deletedAtFromPayload = parseOptionalIsoToMs(event.deleted_at);
@@ -128,7 +132,7 @@ export function messageEventToSignalFields(
     sourceMessageId: event.discord_message_id,
     sourceChannelId: event.discord_channel_id,
     sourceGuildId: event.discord_guild_id,
-    content: event.content_clean ?? "",
+    content: normalizedContent || embedDerivedContent,
     attachments,
     createdAt: parseIsoToMs(event.created_at),
     ...(editedAt ? { editedAt } : {}),
@@ -234,4 +238,77 @@ function extractEmbedMediaAttachments(
   }
 
   return extracted;
+}
+
+function getNestedRecord(
+  object: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> | null {
+  const value = object[key];
+  return isRecord(value) ? value : null;
+}
+
+function pushEmbedTextSegment(
+  segments: string[],
+  seen: Set<string>,
+  value: unknown,
+) {
+  if (typeof value !== "string") return;
+  const normalized = value.trim();
+  if (!normalized || seen.has(normalized)) return;
+  seen.add(normalized);
+  segments.push(normalized);
+}
+
+function extractEmbedTextContent(embeds: IngestEmbed[] | undefined): string {
+  if (!Array.isArray(embeds) || embeds.length === 0) {
+    return "";
+  }
+
+  const segments: string[] = [];
+  const seenSegments = new Set<string>();
+
+  for (const embed of embeds) {
+    if (!embed || typeof embed !== "object") continue;
+    const raw = isRecord(embed.raw_json) ? embed.raw_json : null;
+
+    pushEmbedTextSegment(segments, seenSegments, embed.title);
+    pushEmbedTextSegment(segments, seenSegments, embed.description);
+
+    if (raw) {
+      pushEmbedTextSegment(segments, seenSegments, raw.title);
+      pushEmbedTextSegment(segments, seenSegments, raw.description);
+      pushEmbedTextSegment(segments, seenSegments, raw.url);
+
+      const author = getNestedRecord(raw, "author");
+      if (author) {
+        pushEmbedTextSegment(segments, seenSegments, author.name);
+      }
+
+      const fields = raw.fields;
+      if (Array.isArray(fields)) {
+        for (const field of fields) {
+          if (!isRecord(field)) continue;
+          const name = typeof field.name === "string" ? field.name.trim() : "";
+          const value = typeof field.value === "string" ? field.value.trim() : "";
+          const combined = name && value ? `${name}: ${value}` : name || value;
+          pushEmbedTextSegment(segments, seenSegments, combined);
+        }
+      }
+
+      const footer = getNestedRecord(raw, "footer");
+      if (footer) {
+        pushEmbedTextSegment(segments, seenSegments, footer.text);
+      }
+    }
+  }
+
+  if (segments.length === 0) {
+    return "";
+  }
+
+  const combined = segments.join("\n");
+  return combined.length > MAX_SYNTHETIC_EMBED_TEXT_LENGTH
+    ? combined.slice(0, MAX_SYNTHETIC_EMBED_TEXT_LENGTH)
+    : combined;
 }

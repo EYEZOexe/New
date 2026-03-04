@@ -156,23 +156,57 @@ function normalizeContent(input: string) {
         .trim();
 }
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function readEmbedJsonCandidate(embed: FluxEmbed): Record<string, unknown> | null {
+    const toJson = (embed as { toJSON?: () => unknown }).toJSON;
+    if (typeof toJson === "function") {
+        try {
+            const candidate = toJson.call(embed);
+            if (isObjectRecord(candidate)) return candidate;
+        } catch {
+            // Ignore embed serialization failures and continue with best-effort extraction.
+        }
+    }
+
+    const dataCandidate = (embed as { data?: unknown }).data;
+    return isObjectRecord(dataCandidate) ? dataCandidate : null;
+}
+
+function pickTrimmedString(...values: unknown[]): string {
+    for (const value of values) {
+        if (typeof value !== "string") continue;
+        const trimmed = value.trim();
+        if (trimmed) return trimmed;
+    }
+    return "";
+}
+
 function toIngestEmbeds(embeds: FluxEmbed[] | undefined): IngestMessageEvent["embeds"] {
     if (!Array.isArray(embeds) || embeds.length === 0) return [];
 
     return embeds.flatMap((embed, index) => {
         if (!embed || typeof embed !== "object") return [];
         const source = embed as Record<string, unknown>;
+        const serialized = readEmbedJsonCandidate(embed);
         const raw_json: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(serialized ?? {})) {
+            if (value !== undefined) {
+                raw_json[key] = value;
+            }
+        }
         for (const [key, value] of Object.entries(source)) {
             if (value !== undefined) {
                 raw_json[key] = value;
             }
         }
 
-        const embed_type = typeof embed.type === "string" ? embed.type.trim() : "";
-        const title = typeof embed.title === "string" ? embed.title.trim() : "";
-        const description = typeof embed.description === "string" ? embed.description.trim() : "";
-        const url = typeof embed.url === "string" ? embed.url.trim() : "";
+        const embed_type = pickTrimmedString(embed.type, raw_json.type);
+        const title = pickTrimmedString(embed.title, raw_json.title);
+        const description = pickTrimmedString(embed.description, raw_json.description);
+        const url = pickTrimmedString(embed.url, raw_json.url);
 
         return [{
             embed_index: index,
@@ -1113,6 +1147,17 @@ async function handleMessage(message: FluxMessage, isUpdate: boolean) {
         embeds: toIngestEmbeds(message.embeds),
         mentioned_role_ids: Array.isArray(message.mention_roles) ? message.mention_roles.map((r) => String(r)) : [],
     };
+
+    if (!event.content_clean && event.embeds.length > 0) {
+        const embedTextCount = event.embeds.reduce((count, embed) => {
+            const hasTitle = typeof embed.title === "string" && embed.title.trim().length > 0;
+            const hasDescription = typeof embed.description === "string" && embed.description.trim().length > 0;
+            return hasTitle || hasDescription ? count + 1 : count;
+        }, 0);
+        console.debug(
+            `[ChannelScraper] Captured embed payload for content-empty message id=${event.discord_message_id} embeds=${event.embeds.length} text_embeds=${embedTextCount} event=${event.event_type}`
+        );
+    }
 
     await Native.enqueueMessageEvent(event);
 }

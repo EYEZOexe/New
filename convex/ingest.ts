@@ -189,6 +189,15 @@ export const ingestMessageBatch = internalMutation({
       }, {
         receivedAt: args.receivedAt,
       });
+      const incomingContent =
+        typeof message.content_clean === "string"
+          ? message.content_clean.trim()
+          : "";
+      if (!incomingContent && fields.content.length > 0) {
+        console.info(
+          `[ingest] synthesized signal content from embeds tenant=${args.tenantKey} connector=${args.connectorId} message=${fields.sourceMessageId} event=${message.event_type} content_length=${fields.content.length}`,
+        );
+      }
 
       let mirrorContent = fields.content;
       let mirrorAttachments: Array<{

@@ -164,4 +164,66 @@ describe("ingestUtils", () => {
       },
     ]);
   });
+
+  it("uses embed text as fallback content when message content is empty", () => {
+    const fields = messageEventToSignalFields(
+      {
+        event_type: "create",
+        discord_message_id: "m6",
+        discord_channel_id: "c1",
+        discord_guild_id: "g1",
+        content_clean: "",
+        created_at: "2026-02-16T00:00:00.000Z",
+        edited_at: null,
+        deleted_at: null,
+        attachments: [],
+        embeds: [
+          {
+            embed_index: 0,
+            title: "Signal",
+            description: "We can chill for rest of the week.",
+            raw_json: {
+              author: { name: "Scient Alerts" },
+              fields: [
+                { name: "Pair", value: "BTCUSDT" },
+                { name: "ROI", value: "+60.49%" },
+              ],
+              footer: { text: "Bybit" },
+            },
+          },
+        ],
+      },
+      { tenantKey: "t1", connectorId: "conn_01" },
+    );
+
+    expect(fields.content).toBe(
+      "Signal\nWe can chill for rest of the week.\nScient Alerts\nPair: BTCUSDT\nROI: +60.49%\nBybit",
+    );
+  });
+
+  it("prefers message content over embed fallback content", () => {
+    const fields = messageEventToSignalFields(
+      {
+        event_type: "create",
+        discord_message_id: "m7",
+        discord_channel_id: "c1",
+        discord_guild_id: "g1",
+        content_clean: "Direct signal content",
+        created_at: "2026-02-16T00:00:00.000Z",
+        edited_at: null,
+        deleted_at: null,
+        attachments: [],
+        embeds: [
+          {
+            embed_index: 0,
+            description: "Embedded description",
+            raw_json: {},
+          },
+        ],
+      },
+      { tenantKey: "t1", connectorId: "conn_01" },
+    );
+
+    expect(fields.content).toBe("Direct signal content");
+  });
 });
