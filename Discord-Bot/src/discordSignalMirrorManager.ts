@@ -442,13 +442,11 @@ export class DiscordSignalMirrorManager {
       contentWithoutForeignEvents,
       foreignRoleIds,
     );
-    const removedGenericLinkCount = countGenericLinks(contentWithoutForeignRoles);
-    const contentWithoutGenericLinks = stripGenericLinks(contentWithoutForeignRoles);
     return {
-      content: contentWithoutGenericLinks,
+      content: contentWithoutForeignRoles,
       removedEventGuildIds: foreignEventGuildIds,
       removedRoleIds: foreignRoleIds,
-      removedGenericLinkCount,
+      removedGenericLinkCount: 0,
       removedUnityAcademyMentions,
     };
   }
@@ -673,17 +671,6 @@ function stripUnityAcademyMentions(content: string): string {
 
 function countUnityAcademyMentions(content: string): number {
   const matches = content.match(/\bunity\s+academy\b/gi);
-  return matches?.length ?? 0;
-}
-
-const GENERIC_LINK_PATTERN = /(?:https?:\/\/|www\.)[^\s<>()]+/gi;
-
-function stripGenericLinks(content: string): string {
-  return normalizeStrippedContent(content.replace(GENERIC_LINK_PATTERN, ""));
-}
-
-function countGenericLinks(content: string): number {
-  const matches = content.match(GENERIC_LINK_PATTERN);
   return matches?.length ?? 0;
 }
 

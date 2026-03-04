@@ -75,6 +75,9 @@ export default function MappingsPage() {
             <Link href="/discord-bot" className="admin-link">
               Discord Bot
             </Link>
+            <Link href="/filtering" className="admin-link">
+              Filtering
+            </Link>
           </>
         }
       />

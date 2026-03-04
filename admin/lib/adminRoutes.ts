@@ -1,4 +1,4 @@
-export type AdminNavItem = "mappings" | "discord-bot";
+export type AdminNavItem = "mappings" | "filtering" | "discord-bot";
 export type AdminNavGroup = "shop";
 export type AdminShopRoute = "catalog" | "policies" | "customers" | "statistics";
 
@@ -25,6 +25,7 @@ export type AdminNavState = {
 
 export const ADMIN_ROUTE_ITEMS: readonly AdminRouteConfig[] = [
   { id: "mappings", href: "/mappings" },
+  { id: "filtering", href: "/filtering" },
   { id: "discord-bot", href: "/discord-bot" },
 ] as const;
 
@@ -101,6 +102,10 @@ export function buildAdminBreadcrumbs(pathname: string): string[] {
 
   if (head === "discord-bot") {
     return ["Discord Bot"];
+  }
+
+  if (head === "filtering") {
+    return ["Filtering"];
   }
 
   if (head === "shop") {

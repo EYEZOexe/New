@@ -40,7 +40,7 @@ function unknownRoleError(): Error & { code: number } {
 }
 
 describe("discord signal mirror manager", () => {
-  it("strips generic links and Unity Academy mentions from mirrored message text", async () => {
+  it("strips Unity Academy mentions while preserving non-filtered links", async () => {
     const sentPayloads: Array<{
       content?: string;
       embeds?: APIEmbed[];
@@ -88,7 +88,9 @@ describe("discord signal mirror manager", () => {
     expect(result.ok).toBe(true);
     expect(result.message).toBe("message_created");
     expect(sentPayloads).toHaveLength(1);
-    expect(sentPayloads[0].embeds?.[0]?.description).toBe("alpha keep this live");
+    expect(sentPayloads[0].embeds?.[0]?.description).toBe(
+      "alpha https://example.com/charts keep this live",
+    );
   });
 
   it("skips mirroring when filtered content leaves an empty signal body", async () => {
@@ -132,9 +134,7 @@ describe("discord signal mirror manager", () => {
     } as unknown as Client;
 
     const manager = new DiscordSignalMirrorManager(client);
-    const result = await manager.executeJob(
-      buildJob("Unity Academy https://example.com/charts"),
-    );
+    const result = await manager.executeJob(buildJob("Unity Academy"));
 
     expect(result.ok).toBe(true);
     expect(result.message).toBe("message_skipped_empty_body");

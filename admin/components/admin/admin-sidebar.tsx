@@ -51,6 +51,12 @@ export function AdminNavigation({ pathname, onNavigate, className }: AdminNaviga
         onNavigate={onNavigate}
       />
       <NavLink
+        href="/filtering"
+        label="Filtering"
+        isActive={state.activeItem === "filtering"}
+        onNavigate={onNavigate}
+      />
+      <NavLink
         href="/discord-bot"
         label="Discord Bot"
         isActive={state.activeItem === "discord-bot"}
@@ -89,7 +95,7 @@ export function AdminSidebar({ pathname }: AdminSidebarProps) {
         <p className="admin-chip">Admin Workspace</p>
         <h2 className="mt-3 text-base font-semibold text-slate-100">Control Plane</h2>
         <p className="mt-2 text-sm text-slate-400">
-          Mappings, bot operations, and shop configuration in one workspace.
+          Mappings, filtering, bot operations, and shop configuration in one workspace.
         </p>
         <AdminNavigation pathname={pathname} className="mt-6" />
       </div>

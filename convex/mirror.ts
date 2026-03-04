@@ -5,6 +5,7 @@ import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { enqueueSeatAuditJobForServer } from "./discordSeatAudit";
 import { isLikelyImageAttachment } from "./imageDetection";
+import { applyMessageFiltering } from "./messageFiltering";
 import { getMirrorBotTokenFromEnv, nextMirrorRetryAt } from "./mirrorQueue";
 import { evaluateSeatGate } from "./seatEnforcement";
 
@@ -367,10 +368,20 @@ export const claimPendingSignalMirrorJobs = mutation({
             .eq("sourceChannelId", job.sourceChannelId),
         )
         .first();
-      const rolePingId =
-        mapping?.targetChannelId.trim() === job.targetChannelId
-          ? extractRolePingIdFromTransformJson(mapping.transformJson)
-          : null;
+      const mappingMatchesTarget =
+        (mapping?.targetChannelId.trim() ?? "") === job.targetChannelId;
+      const rolePingId = mappingMatchesTarget
+        ? extractRolePingIdFromTransformJson(mapping?.transformJson)
+        : null;
+      const filteredContent = mappingMatchesTarget
+        ? applyMessageFiltering(job.content, mapping?.filtersJson)
+        : applyMessageFiltering(job.content, undefined);
+
+      if (filteredContent.content !== job.content) {
+        console.info(
+          `[mirror] applied content filters source_message=${job.sourceMessageId} target_channel=${job.targetChannelId} removed_urls=${filteredContent.removedUrlCount} removed_keywords=${filteredContent.removedKeywordMatches} blocked_domains=${filteredContent.rules.blockedDomains.length} blocked_keywords=${filteredContent.rules.blockedKeywords.length}`,
+        );
+      }
 
       claimed.push({
         jobId: job._id,
@@ -383,7 +394,7 @@ export const claimPendingSignalMirrorJobs = mutation({
         targetChannelId: job.targetChannelId,
         targetGuildId,
         eventType: job.eventType,
-        content: job.content,
+        content: filteredContent.content,
         attachments: job.attachments ?? [],
         sourceCreatedAt: job.sourceCreatedAt,
         sourceEditedAt: job.sourceEditedAt ?? null,

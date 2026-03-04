@@ -16,8 +16,10 @@ describe("admin route navigation", () => {
 describe("workspace shell contracts", () => {
   it("supports mobile drawer and desktop sidebar routes", () => {
     const mappings = getAdminNavState("/mappings");
+    const filtering = getAdminNavState("/filtering");
     const discord = getAdminNavState("/discord-bot");
     expect(mappings.activeItem).toBe("mappings");
+    expect(filtering.activeItem).toBe("filtering");
     expect(discord.activeItem).toBe("discord-bot");
   });
 });
@@ -43,6 +45,13 @@ describe("discord bot route", () => {
   });
 });
 
+describe("filtering route", () => {
+  it("marks filtering active", () => {
+    const state = getAdminNavState("/filtering");
+    expect(state.activeItem).toBe("filtering");
+  });
+});
+
 describe("shop grouping", () => {
   it("marks shop group active for policies route", () => {
     const state = getAdminNavState("/shop/policies");
@@ -65,5 +74,10 @@ describe("breadcrumbs", () => {
   it("builds shop statistics breadcrumb", () => {
     const crumbs = buildAdminBreadcrumbs("/shop/statistics");
     expect(crumbs.join(" / ")).toBe("Shop / Statistics");
+  });
+
+  it("builds filtering breadcrumb", () => {
+    const crumbs = buildAdminBreadcrumbs("/filtering");
+    expect(crumbs.join(" / ")).toBe("Filtering");
   });
 });
