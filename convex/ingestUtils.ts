@@ -173,7 +173,7 @@ function getFirstString(
 function pickMediaUrl(embed: Record<string, unknown>, key: string): string | null {
   const value = embed[key];
   if (!isRecord(value)) return null;
-  return getFirstString(value, ["url", "proxy_url", "proxyUrl"]);
+  return getFirstString(value, ["url", "proxy_url", "proxyUrl", "proxyURL"]);
 }
 
 function extractEmbedMediaAttachments(
@@ -215,7 +215,10 @@ function extractEmbedMediaAttachments(
     for (const candidate of mediaCandidates) {
       const url = candidate.url?.trim() ?? "";
       if (!isSafeAttachmentUrl(url)) continue;
+      const shouldTrustEmbedImageSlot =
+        candidate.slot === "image" || candidate.slot === "thumbnail";
       if (
+        !shouldTrustEmbedImageSlot &&
         !isLikelyImageAttachment({
           url,
           contentType: contentType || undefined,

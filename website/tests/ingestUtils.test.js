@@ -165,6 +165,43 @@ describe("ingestUtils", () => {
     ]);
   });
 
+  it("extracts embed image URLs from image/thumbnail slots even without extension hints", () => {
+    const fields = messageEventToSignalFields(
+      {
+        event_type: "create",
+        discord_message_id: "m5b",
+        discord_channel_id: "c1",
+        discord_guild_id: "g1",
+        content_clean: "signal text",
+        created_at: "2026-02-16T00:00:00.000Z",
+        edited_at: null,
+        deleted_at: null,
+        attachments: [],
+        embeds: [
+          {
+            embed_index: 0,
+            embed_type: "rich",
+            title: "TradingView",
+            raw_json: {
+              image: {
+                proxyURL: "https://media.discordapp.net/attachments/1/2/3",
+              },
+            },
+          },
+        ],
+      },
+      { tenantKey: "t1", connectorId: "conn_01" },
+    );
+
+    expect(fields.attachments).toEqual([
+      {
+        attachmentId: "embed:0:image",
+        url: "https://media.discordapp.net/attachments/1/2/3",
+        name: "TradingView",
+      },
+    ]);
+  });
+
   it("uses embed text as fallback content when message content is empty", () => {
     const fields = messageEventToSignalFields(
       {

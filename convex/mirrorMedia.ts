@@ -106,7 +106,7 @@ export const hydrateSignalMediaForMessage = internalAction({
   handler: async (ctx, args) => {
     const startedAt = Date.now();
     const candidates = args.attachments.filter((attachment) => {
-      if (!isLikelyImageAttachment(attachment)) return false;
+      if (!isHydratableImageAttachment(attachment)) return false;
       if (attachment.mirrorUrl?.trim()) return false;
       return buildAttachmentKey(attachment).length > 0;
     });
@@ -631,7 +631,7 @@ export const debugMirroredMessageState = internalQuery({
                 attachmentCount: signal.attachments?.length ?? 0,
                 unresolvedImageCount:
                   signal.attachments?.filter((attachment) => {
-                    if (!isLikelyImageAttachment(attachment)) return false;
+                    if (!isHydratableImageAttachment(attachment)) return false;
                     return (attachment.mirrorUrl?.trim() ?? "").length === 0;
                   }).length ?? 0,
                 attachments: (signal.attachments ?? []).map((attachment) => ({
@@ -697,7 +697,7 @@ export const listUnresolvedImageSignals = internalQuery({
       .map((row) => {
         const attachments = row.attachments ?? [];
         const unresolvedImageAttachments = attachments.filter((attachment) => {
-          if (!isLikelyImageAttachment(attachment)) return false;
+          if (!isHydratableImageAttachment(attachment)) return false;
           const hasMirror = (attachment.mirrorUrl?.trim() ?? "").length > 0;
           return !hasMirror;
         });
@@ -807,7 +807,7 @@ export const backfillUnresolvedImageHydration = internalMutation({
       .map((row) => {
         const attachments = row.attachments ?? [];
         const unresolvedImageAttachments = attachments.filter((attachment) => {
-          if (!isLikelyImageAttachment(attachment)) return false;
+          if (!isHydratableImageAttachment(attachment)) return false;
           const hasMirror = (attachment.mirrorUrl?.trim() ?? "").length > 0;
           return !hasMirror;
         });
@@ -1161,6 +1161,23 @@ function buildAttachmentKey(attachment: { attachmentId?: string; url: string }):
   if (attachmentId) return `id:${attachmentId}`;
   const url = attachment.url.trim();
   return url ? `url:${url}` : "";
+}
+
+function isHydratableImageAttachment(attachment: {
+  attachmentId?: string;
+  url?: string | null;
+  contentType?: string | null;
+  name?: string | null;
+}): boolean {
+  const attachmentId = attachment.attachmentId?.trim() ?? "";
+  if (attachmentId.startsWith("embed:")) {
+    return true;
+  }
+  return isLikelyImageAttachment({
+    url: attachment.url,
+    contentType: attachment.contentType,
+    name: attachment.name,
+  });
 }
 
 function formatError(error: unknown): string {

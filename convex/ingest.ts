@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { makeFunctionReference } from "convex/server";
 
+import type { Id } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
 import { resolveAttachmentsForExistingSignalPatch } from "./ingestAttachmentMerge";
 import { resolveContentForExistingSignalPatch } from "./ingestContentMerge";
@@ -33,6 +34,23 @@ const hydrateSignalMediaForMessageRef = makeFunctionReference<
     skipped: number;
   }
 >("mirrorMedia:hydrateSignalMediaForMessage");
+
+function shouldHydrateAttachment(attachment: {
+  attachmentId?: string;
+  url: string;
+  contentType?: string;
+  name?: string;
+  mirrorUrl?: string;
+  storageId?: Id<"_storage">;
+}): boolean {
+  if (attachment.storageId) return false;
+  if (attachment.mirrorUrl?.trim()) return false;
+  const attachmentId = attachment.attachmentId?.trim() ?? "";
+  if (attachmentId.startsWith("embed:")) {
+    return true;
+  }
+  return isLikelyImageAttachment(attachment);
+}
 
 const IngestAttachment = v.object({
   discord_attachment_id: v.string(),
@@ -322,12 +340,7 @@ export const ingestMessageBatch = internalMutation({
 
       const needsMediaHydration =
         message.event_type !== "delete" &&
-        mirrorAttachments.some(
-          (attachment) =>
-            isLikelyImageAttachment(attachment) &&
-            !attachment.storageId &&
-            !(attachment.mirrorUrl?.trim() ?? ""),
-        );
+        mirrorAttachments.some((attachment) => shouldHydrateAttachment(attachment));
       if (needsMediaHydration) {
         if (scheduleMediaHydration) {
           await ctx.scheduler.runAfter(0, hydrateSignalMediaForMessageRef, {
