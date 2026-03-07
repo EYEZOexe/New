@@ -85,6 +85,7 @@ function extractRolePingIdFromTransformJson(transformJson: unknown): string | nu
 
 function hasPendingImageHydration(
   attachments: Array<{
+    attachmentId?: string;
     url: string;
     storageId?: string;
     mirrorUrl?: string;
@@ -92,7 +93,13 @@ function hasPendingImageHydration(
   }>,
 ): boolean {
   return attachments.some((attachment) => {
-    if (!isLikelyImageAttachment(attachment)) return false;
+    const attachmentId = attachment.attachmentId?.trim() ?? "";
+    if (
+      !attachmentId.startsWith("embed:") &&
+      !isLikelyImageAttachment(attachment)
+    ) {
+      return false;
+    }
     const hasMirrorUrl = (attachment.mirrorUrl?.trim() ?? "").length > 0;
     return !hasMirrorUrl;
   });

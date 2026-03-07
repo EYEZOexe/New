@@ -706,7 +706,9 @@ function buildMirroredPayload(
     attachmentCounter += 1;
     const url = attachment.url?.trim();
     if (!url) continue;
-    const mirrorUrl = attachment.mirrorUrl?.trim() ?? "";
+    const mirrorUrl = normalizeMirrorDeliveryUrlForDiscord(
+      attachment.mirrorUrl?.trim() ?? "",
+    );
     if (isLikelyImage(url, attachment.contentType, attachment.name)) {
       if (!mirrorUrl) {
         pendingConvexSyncImageCount += 1;
@@ -822,6 +824,26 @@ function isLikelyImage(url: string, contentType?: string, name?: string): boolea
   } catch {
     const lower = normalizedUrl.toLowerCase();
     return /(?:\.png|\.jpe?g|\.webp|\.gif|\.bmp|\.tiff?|\.avif|\.svg)(?:$|[?#])/i.test(lower);
+  }
+}
+
+function normalizeMirrorDeliveryUrlForDiscord(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) return "";
+  try {
+    const parsed = new URL(trimmed);
+    if (
+      parsed.protocol === "http:" &&
+      parsed.hostname !== "localhost" &&
+      parsed.hostname !== "127.0.0.1" &&
+      parsed.hostname !== "::1"
+    ) {
+      parsed.protocol = "https:";
+      return parsed.toString();
+    }
+    return parsed.toString();
+  } catch {
+    return trimmed;
   }
 }
 

@@ -843,6 +843,129 @@ export const backfillUnresolvedImageHydration = internalMutation({
   },
 });
 
+export const requeueMirrorUpdateForSourceMessage = internalMutation({
+  args: {
+    tenantKey: v.string(),
+    connectorId: v.string(),
+    sourceMessageId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const signal = await ctx.db
+      .query("signals")
+      .withIndex("by_sourceMessageId", (q) =>
+        q
+          .eq("tenantKey", args.tenantKey)
+          .eq("connectorId", args.connectorId)
+          .eq("sourceMessageId", args.sourceMessageId),
+      )
+      .first();
+    if (!signal) {
+      return {
+        ok: false,
+        reason: "signal_not_found",
+        enqueued: 0,
+        deduped: 0,
+        skipped: 1,
+      } as const;
+    }
+
+    const normalizedAttachments = (signal.attachments ?? []).map((attachment) => {
+      const mirrorUrl = normalizeMirrorDeliveryUrl(attachment.mirrorUrl);
+      if (!mirrorUrl) return attachment;
+      return {
+        ...attachment,
+        mirrorUrl,
+      };
+    });
+    const signalMirrorUrlChanged =
+      normalizedAttachments.length !== (signal.attachments ?? []).length ||
+      normalizedAttachments.some(
+        (attachment, index) =>
+          (attachment.mirrorUrl ?? "") !==
+          ((signal.attachments ?? [])[index]?.mirrorUrl ?? ""),
+      );
+    if (signalMirrorUrlChanged) {
+      await ctx.db.patch(signal._id, {
+        attachments: normalizedAttachments,
+      });
+    }
+
+    const mediaRows = await ctx.db
+      .query("signalMirrorMedia")
+      .withIndex("by_tenant_connector_sourceMessageId", (q) =>
+        q
+          .eq("tenantKey", args.tenantKey)
+          .eq("connectorId", args.connectorId)
+          .eq("sourceMessageId", args.sourceMessageId),
+      )
+      .collect();
+    let mediaRowsPatched = 0;
+    for (const row of mediaRows) {
+      const normalizedMirrorUrl = normalizeMirrorDeliveryUrl(row.mirrorUrl);
+      const currentMirrorUrl = row.mirrorUrl?.trim() ?? "";
+      if (!normalizedMirrorUrl || normalizedMirrorUrl === currentMirrorUrl) {
+        continue;
+      }
+      await ctx.db.patch(row._id, {
+        mirrorUrl: normalizedMirrorUrl,
+      });
+      mediaRowsPatched += 1;
+    }
+
+    const mirrorRows = (await ctx.db
+      .query("mirroredSignals")
+      .withIndex("by_tenant_connector", (q) =>
+        q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+      )
+      .collect()).filter(
+      (row) => row.sourceMessageId === args.sourceMessageId,
+    );
+    const targets = mirrorRows.map((row) => ({
+      targetChannelId: row.targetChannelId,
+      targetGuildId: row.mirroredGuildId ?? undefined,
+    }));
+    if (targets.length === 0) {
+      return {
+        ok: false,
+        reason: "no_mirror_targets",
+        enqueued: 0,
+        deduped: 0,
+        skipped: 1,
+      } as const;
+    }
+
+    const result = await enqueueMirrorJobsForSignal(ctx, {
+      tenantKey: args.tenantKey,
+      connectorId: args.connectorId,
+      sourceMessageId: signal.sourceMessageId,
+      sourceChannelId: signal.sourceChannelId,
+      sourceGuildId: signal.sourceGuildId,
+      targets,
+      eventType: "update",
+      content: signal.content,
+      attachments: normalizedAttachments,
+      sourceCreatedAt: signal.createdAt,
+      sourceEditedAt: signal.editedAt ?? now,
+      sourceDeletedAt: signal.deletedAt,
+      now,
+    });
+
+    console.info(
+      `[mirror] requeued manual update tenant=${args.tenantKey} connector=${args.connectorId} source_message=${args.sourceMessageId} targets=${targets.length} signal_mirror_url_changed=${signalMirrorUrlChanged} media_rows_patched=${mediaRowsPatched} enqueued=${result.enqueued} deduped=${result.deduped} skipped=${result.skipped}`,
+    );
+
+    return {
+      ok: true,
+      reason: "requeued",
+      targets: targets.length,
+      signalMirrorUrlChanged,
+      mediaRowsPatched,
+      ...result,
+    } as const;
+  },
+});
+
 function applyResultsToAttachments(
   attachments: SignalAttachment[],
   resultByKey: Map<string, HydrationResult>,
@@ -992,7 +1115,7 @@ async function getMirrorUrlWithRetry(
       await wait(delayMs);
     }
     const candidate = await ctx.storage.getUrl(storageId);
-    const normalized = candidate?.trim() ?? "";
+    const normalized = normalizeMirrorDeliveryUrl(candidate);
     if (normalized) {
       return { mirrorUrl: normalized, elapsedMs: Date.now() - startedAt };
     }
@@ -1178,6 +1301,31 @@ function isHydratableImageAttachment(attachment: {
     contentType: attachment.contentType,
     name: attachment.name,
   });
+}
+
+function normalizeMirrorDeliveryUrl(url: string | null | undefined): string {
+  const trimmed = url?.trim() ?? "";
+  if (!trimmed) return "";
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === "http:" && shouldUpgradeMirrorUrlToHttps(parsed.hostname)) {
+      parsed.protocol = "https:";
+      return parsed.toString();
+    }
+    return parsed.toString();
+  } catch {
+    return trimmed;
+  }
+}
+
+function shouldUpgradeMirrorUrlToHttps(hostname: string): boolean {
+  const host = hostname.trim().toLowerCase();
+  if (!host) return false;
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1") {
+    return false;
+  }
+  return true;
 }
 
 function formatError(error: unknown): string {
