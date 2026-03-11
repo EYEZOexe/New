@@ -217,8 +217,9 @@ export default function CheckoutReturnPage() {
               <Clock3 className="size-4 text-amber-300" />
               <AlertTitle className="text-amber-200">Taking longer than expected</AlertTitle>
               <AlertDescription className="text-amber-100/90">
-                Payment was received (order {sellOrderId}) but access hasn&apos;t activated yet.
-                Try refreshing — if the problem persists, contact support with your order ID.
+                {viewer?.subscriptionStatus === null
+                  ? "No payment confirmation received. Your checkout may not have completed — check your email or try again."
+                  : `Order ${sellOrderId ? `(${sellOrderId}) ` : ""}detected but access hasn't activated. Try refreshing — if the problem persists, contact support with your order ID.`}
               </AlertDescription>
             </Alert>
           ) : null}
