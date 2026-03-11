@@ -9,6 +9,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { enqueueRoleSyncJobsForSubscription } from "./roleSyncQueue";
+import { hasActiveSubscriptionAccess } from "./subscriptionAccess";
 
 async function listLinksByUserId(
   ctx: QueryCtx | MutationCtx,
@@ -246,5 +247,151 @@ export const unlinkViewerDiscord = mutation({
     );
 
     return { ok: true, unlinked: true };
+  },
+});
+
+export const adminGetDiscordLinksForUser = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const links = await listLinksByUserId(ctx, args.userId);
+    return links.map((link) => ({
+      discordUserId: link.discordUserId,
+      username: link.username ?? null,
+      linkedAt: link.linkedAt,
+      unlinkedAt: link.unlinkedAt ?? null,
+      active: link.unlinkedAt === undefined,
+    }));
+  },
+});
+
+export const adminReconcileDiscordRoles = mutation({
+  args: {
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const dryRun = args.dryRun === true;
+    const now = Date.now();
+
+    // Collect all active subscriptions
+    const activeSubscriptions = await ctx.db
+      .query("subscriptions")
+      .withIndex("by_status_endsAt", (q) => q.eq("status", "active"))
+      .collect();
+
+    // Also collect inactive/canceled/past_due to revoke roles for expired users
+    const inactiveSubscriptions = await ctx.db
+      .query("subscriptions")
+      .filter((q) => q.neq(q.field("status"), "active"))
+      .collect();
+
+    let usersChecked = 0;
+    let jobsEnqueued = 0;
+    let usersSkipped = 0;
+    const details: Array<{
+      userId: string;
+      discordUserId: string;
+      subscriptionStatus: string;
+      tier: string | null;
+      granted: number;
+      revoked: number;
+      deduped: number;
+    }> = [];
+
+    for (const sub of activeSubscriptions) {
+      // Skip expired fixed-term subscriptions
+      if (!hasActiveSubscriptionAccess(sub, now)) continue;
+
+      const links = await listLinksByUserId(ctx, sub.userId);
+      const activeLinks = links.filter((l) => l.unlinkedAt === undefined);
+      if (activeLinks.length === 0) {
+        usersSkipped += 1;
+        continue;
+      }
+
+      usersChecked += 1;
+      for (const link of activeLinks) {
+        if (dryRun) {
+          details.push({
+            userId: sub.userId,
+            discordUserId: link.discordUserId,
+            subscriptionStatus: sub.status,
+            tier: sub.tier ?? null,
+            granted: 1,
+            revoked: 0,
+            deduped: 0,
+          });
+          jobsEnqueued += 1;
+          continue;
+        }
+
+        const result = await enqueueRoleSyncJobsForSubscription(ctx, {
+          userId: sub.userId,
+          discordUserId: link.discordUserId,
+          subscriptionStatus: sub.status,
+          tier: sub.tier ?? null,
+          source: "admin_reconcile",
+          now,
+        });
+        jobsEnqueued += result.granted + result.revoked + result.deduped;
+        details.push({
+          userId: sub.userId,
+          discordUserId: link.discordUserId,
+          subscriptionStatus: sub.status,
+          tier: sub.tier ?? null,
+          granted: result.granted,
+          revoked: result.revoked,
+          deduped: result.deduped,
+        });
+      }
+    }
+
+    // Revoke roles for users with inactive/expired subscriptions who still have Discord links
+    for (const sub of inactiveSubscriptions) {
+      const links = await listLinksByUserId(ctx, sub.userId);
+      const activeLinks = links.filter((l) => l.unlinkedAt === undefined);
+      if (activeLinks.length === 0) continue;
+
+      usersChecked += 1;
+      for (const link of activeLinks) {
+        if (dryRun) {
+          details.push({
+            userId: sub.userId,
+            discordUserId: link.discordUserId,
+            subscriptionStatus: sub.status,
+            tier: sub.tier ?? null,
+            granted: 0,
+            revoked: 1,
+            deduped: 0,
+          });
+          jobsEnqueued += 1;
+          continue;
+        }
+
+        const result = await enqueueRoleSyncJobsForSubscription(ctx, {
+          userId: sub.userId,
+          discordUserId: link.discordUserId,
+          subscriptionStatus: sub.status,
+          tier: sub.tier ?? null,
+          source: "admin_reconcile",
+          now,
+        });
+        jobsEnqueued += result.granted + result.revoked + result.deduped;
+        details.push({
+          userId: sub.userId,
+          discordUserId: link.discordUserId,
+          subscriptionStatus: sub.status,
+          tier: sub.tier ?? null,
+          granted: result.granted,
+          revoked: result.revoked,
+          deduped: result.deduped,
+        });
+      }
+    }
+
+    console.info(
+      `[discord-link] reconcile dryRun=${dryRun} usersChecked=${usersChecked} usersSkipped=${usersSkipped} jobsEnqueued=${jobsEnqueued}`,
+    );
+
+    return { ok: true, dryRun, usersChecked, usersSkipped, jobsEnqueued, details };
   },
 });

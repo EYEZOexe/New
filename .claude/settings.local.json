@@ -3,7 +3,10 @@
     "allow": [
       "Bash(ls -la \"/f/Github Projects/New/admin/app/\\\\\\(workspace\\\\\\)/\")",
       "Bash(ls -la \"/f/Github Projects/New/admin/app/\\(workspace\\)/\")",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(curl -s \"https://convex-backend.g3netic.com/http/webhooks/sellapp/failures?limit=50\" -H \"Authorization: Bearer k9761h6t53cxxtsgcvsk7z5bs982pp6e\")",
+      "Bash(curl -s -X POST \"https://convex-backend.g3netic.com/api/query\" -H \"Content-Type: application/json\" -H \"Authorization: Convex self-hosted-convex|019b4847dc9667271743205c17951471fc8154d41b6276445681611331ffcfb7b6ad74c182\" -d '{:*)",
+      "Bash(python3 -c \"import json,sys; data=json.load\\(sys.stdin\\); events=data.get\\(\"\"value\"\",[]\\); [print\\(json.dumps\\(e,indent=2\\)\\) for e in events if \"\"licaandrei\"\" in str\\(e\\).lower\\(\\) or \"\"licaandrei\"\" in str\\(e\\).lower\\(\\)]\")"
     ]
   }
 }

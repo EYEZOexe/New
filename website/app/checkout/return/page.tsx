@@ -67,6 +67,7 @@ export default function CheckoutReturnPage() {
   const [loginHref, setLoginHref] = useState("/login?redirectTo=%2Fcheckout%2Freturn");
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
   const [checkoutLaunchWarning, setCheckoutLaunchWarning] = useState<string | null>(null);
+  const [processingTimedOut, setProcessingTimedOut] = useState(false);
 
   const viewerRef = useMemo(
     () =>
@@ -134,6 +135,16 @@ export default function CheckoutReturnPage() {
     };
   }, [redirectSeconds, redirectTarget, router, status]);
 
+  // If we have an order ID and remain pending for 90s, surface a stale-processing warning.
+  useEffect(() => {
+    if (status !== "pending" || !sellOrderId) {
+      setProcessingTimedOut(false);
+      return;
+    }
+    const t = window.setTimeout(() => setProcessingTimedOut(true), 90_000);
+    return () => window.clearTimeout(t);
+  }, [status, sellOrderId]);
+
   useEffect(() => {
     console.info(
       `[checkout/return] status=${status} tier_expected=${expectedTier ?? "none"} tier_current=${viewer?.tier ?? "none"} launch_mode=${launchMode} checkout_url=${checkoutUrl ? "present" : "missing"} order_id=${sellOrderId ?? "none"} customer_email=${sellCustomerEmail ?? "none"}`,
@@ -178,11 +189,22 @@ export default function CheckoutReturnPage() {
             </p>
           </div>
 
-          {status === "pending" ? (
+          {status === "pending" && !processingTimedOut ? (
             <Alert>
               <Clock3 className="size-4" />
               <AlertTitle>Still processing</AlertTitle>
               <AlertDescription>{pendingCopy}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {status === "pending" && processingTimedOut ? (
+            <Alert className="border-amber-400/40 bg-amber-500/10">
+              <Clock3 className="size-4 text-amber-300" />
+              <AlertTitle className="text-amber-200">Taking longer than expected</AlertTitle>
+              <AlertDescription className="text-amber-100/90">
+                Payment was received (order {sellOrderId}) but access hasn&apos;t activated yet.
+                Try refreshing — if the problem persists, contact support with your order ID.
+              </AlertDescription>
             </Alert>
           ) : null}
 

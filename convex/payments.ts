@@ -251,6 +251,14 @@ async function hasPriorProcessedFreeTrialEventForUser(
   return processedEvents.some((row) => {
     if (row.eventId === args.currentEventId) return false;
     if (row.resolvedUserId !== args.userId) return false;
+    // Don't count events that were themselves blocked or skipped — they never
+    // actually granted a trial, so they shouldn't prevent future claims.
+    const resolvedVia = row.resolvedVia ?? "";
+    if (
+      resolvedVia === "trial_already_claimed" ||
+      resolvedVia.startsWith("pre_checkout")
+    )
+      return false;
     return isFreeSellOrderEvent(row.payload);
   });
 }
@@ -1371,3 +1379,4 @@ export const listPaymentCustomers = query({
     return result;
   },
 });
+
