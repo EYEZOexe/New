@@ -797,6 +797,17 @@ export const processSellWebhookEvent = internalMutation({
             error: undefined,
           });
 
+          await upsertSubscriptionForUser(ctx, {
+            userId: resolvedUser.id,
+            status: "inactive",
+            productId: projected.productId,
+            variantId: projected.variantId,
+            tier: null,
+            durationDays: null,
+            now: args.attemptedAt,
+            lastPaymentOutcome: "trial_already_claimed",
+          });
+
           console.warn(
             `[payments] blocked repeat trial provider=${args.provider} event=${args.eventId} user=${resolvedUser.id} lock_key=${existingTrialLock?.lockKey ?? "historical_user_trial"} first_event=${existingTrialLock?.firstEventId ?? "unknown"}`,
           );
