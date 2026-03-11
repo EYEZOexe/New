@@ -164,6 +164,10 @@ export default defineSchema({
     endsAt: v.optional(v.number()),
     source: v.optional(v.string()),
     updatedAt: v.number(),
+    lastPaymentOutcome: v.optional(
+      v.union(v.literal("trial_already_claimed"), v.literal("subscription_inactive")),
+    ),
+    lastPaymentOutcomeAt: v.optional(v.number()),
   })
     .index("by_userId", ["userId"])
     .index("by_status", ["status"])
