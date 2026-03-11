@@ -492,6 +492,7 @@ async function upsertSubscriptionForUser(
     tier: SubscriptionTier | null;
     durationDays: number | null;
     now: number;
+    lastPaymentOutcome?: "trial_already_claimed" | "subscription_inactive" | undefined;
   },
 ): Promise<{
   status: SubscriptionStatus;
@@ -540,6 +541,8 @@ async function upsertSubscriptionForUser(
     endsAt: endsAt ?? undefined,
     source: PROVIDER,
     updatedAt: args.now,
+    lastPaymentOutcome: args.lastPaymentOutcome,
+    lastPaymentOutcomeAt: args.lastPaymentOutcome !== undefined ? args.now : undefined,
   };
 
   if (!existing) {
