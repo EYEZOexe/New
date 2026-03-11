@@ -818,6 +818,8 @@ export const processSellWebhookEvent = internalMutation({
         tier: accessPolicy?.tier ?? null,
         durationDays: accessPolicy?.durationDays ?? null,
         now: args.attemptedAt,
+        lastPaymentOutcome:
+          effectiveSubscriptionStatus === "inactive" ? "subscription_inactive" : undefined,
       });
 
       const activeLinks = await listActiveDiscordLinksForUser(
