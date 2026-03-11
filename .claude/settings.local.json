@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la \"/f/Github Projects/New/admin/app/\\\\\\(workspace\\\\\\)/\")",
+      "Bash(ls -la \"/f/Github Projects/New/admin/app/\\(workspace\\)/\")",
+      "Bash(xargs grep:*)"
+    ]
+  }
+}

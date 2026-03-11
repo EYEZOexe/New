@@ -154,6 +154,13 @@ export function DashboardOverview(props: DashboardOverviewProps) {
             >
               {props.isUnlinkingDiscord ? "Unlinking..." : "Unlink Discord"}
             </Button>
+            {props.isDiscordLinked ? (
+              <Button size="sm" variant="outline" className="rounded-full" asChild>
+                <a href="https://discord.gg/3FeUhdNVDU" target="_blank" rel="noopener noreferrer">
+                  Join Server
+                </a>
+              </Button>
+            ) : null}
           </div>
         </CardContent>
       </Card>
