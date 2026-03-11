@@ -38,6 +38,7 @@ export const viewer = queryGeneric({
       subscriptionEndsAt: subscription?.endsAt ?? null,
       hasSignalAccess: hasActiveSubscriptionAccess(subscription, now),
       hasConsumedTrial: Boolean(trialLock),
+      lastPaymentOutcome: subscription?.lastPaymentOutcome ?? null,
     };
   },
 });
