@@ -23,6 +23,7 @@ type ViewerRow = {
   subscriptionStatus: "active" | "inactive" | "canceled" | "past_due" | null;
   subscriptionEndsAt: number | null;
   hasSignalAccess: boolean;
+  lastPaymentOutcome: "trial_already_claimed" | "subscription_inactive" | null;
 };
 
 type CheckoutLaunchMode = "opened" | "blocked" | "unknown";
@@ -100,6 +101,7 @@ export default function CheckoutReturnPage() {
     if (viewer.subscriptionStatus === "canceled" || viewer.subscriptionStatus === "past_due") {
       return "failure";
     }
+    if (viewer.lastPaymentOutcome) return "failure";
     return "pending";
   })();
 
