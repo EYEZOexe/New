@@ -105,6 +105,19 @@ export default function CheckoutReturnPage() {
     return "pending";
   })();
 
+  const failureReason =
+    status !== "failure"
+      ? null
+      : viewer?.lastPaymentOutcome === "trial_already_claimed"
+        ? "trial_already_claimed"
+        : viewer?.lastPaymentOutcome === "subscription_inactive"
+          ? "subscription_inactive"
+          : viewer?.subscriptionStatus === "canceled"
+            ? "canceled"
+            : viewer?.subscriptionStatus === "past_due"
+              ? "past_due"
+              : null;
+
   const redirectTarget = status === "success" ? "/dashboard" : "/shop";
   const redirectSeconds =
     status === "success" ? SUCCESS_REDIRECT_SECONDS : FAILURE_REDIRECT_SECONDS;
@@ -234,10 +247,27 @@ export default function CheckoutReturnPage() {
           {status === "failure" ? (
             <Alert variant="destructive">
               <XCircle className="size-4" />
-              <AlertTitle>Activation incomplete</AlertTitle>
+              <AlertTitle>
+                {failureReason === "trial_already_claimed"
+                  ? "Free trial already used"
+                  : failureReason === "subscription_inactive"
+                    ? "Purchase not completed"
+                    : failureReason === "canceled"
+                      ? "Payment cancelled"
+                      : failureReason === "past_due"
+                        ? "Payment failed"
+                        : "Activation incomplete"}
+              </AlertTitle>
               <AlertDescription>
-                We could not activate access yet. Redirecting back to pricing in{" "}
-                {redirectCountdown ?? FAILURE_REDIRECT_SECONDS}s.
+                {failureReason === "trial_already_claimed"
+                  ? "A free trial has already been claimed on this account. Purchase a paid plan to get access."
+                  : failureReason === "subscription_inactive"
+                    ? "Your payment wasn't confirmed. If you completed checkout, contact support with your order ID."
+                    : failureReason === "canceled"
+                      ? `Your order didn't go through. Redirecting back to pricing in ${redirectCountdown ?? FAILURE_REDIRECT_SECONDS}s.`
+                      : failureReason === "past_due"
+                        ? `We couldn't process your payment. Try again with a different method. Redirecting in ${redirectCountdown ?? FAILURE_REDIRECT_SECONDS}s.`
+                        : `We could not activate access yet. Redirecting back to pricing in ${redirectCountdown ?? FAILURE_REDIRECT_SECONDS}s.`}
               </AlertDescription>
             </Alert>
           ) : null}
