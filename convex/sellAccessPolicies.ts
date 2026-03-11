@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 
 export const SUBSCRIPTION_TIERS = ["basic", "advanced", "pro"] as const;
 export type SubscriptionTier = (typeof SUBSCRIPTION_TIERS)[number];
@@ -59,6 +59,21 @@ export async function resolveEnabledSellAccessPolicy(
   args: { productId: string | null; variantId: string | null },
 ): Promise<AccessPolicy | null> {
   const variantId = args.variantId?.trim() ?? "";
+  const productId = args.productId?.trim() ?? "";
+
+  // 1. Compound product:variant lookup — required when variant IDs are shared across products
+  if (productId && variantId) {
+    const compoundId = `${productId}:${variantId}`;
+    const byCompound = await ctx.db
+      .query("sellAccessPolicies")
+      .withIndex("by_scope_externalId", (q) =>
+        q.eq("scope", "variant").eq("externalId", compoundId),
+      )
+      .first();
+    if (byCompound?.enabled) return toRow(byCompound);
+  }
+
+  // 2. Plain variant lookup — for products with unique variant IDs
   if (variantId) {
     const byVariant = await ctx.db
       .query("sellAccessPolicies")
@@ -78,7 +93,7 @@ export async function resolveEnabledSellAccessPolicy(
     if (byVariantAlias) return toRow(byVariantAlias);
   }
 
-  const productId = args.productId?.trim() ?? "";
+  // 3. Product-level fallback
   if (productId) {
     const byProduct = await ctx.db
       .query("sellAccessPolicies")
@@ -176,5 +191,72 @@ export const removeSellAccessPolicy = mutation({
     await ctx.db.delete(existing._id);
     console.info(`[sell-policy] removed scope=${args.scope} id=${externalId}`);
     return { ok: true as const, removed: true as const };
+  },
+});
+
+// Variant IDs 377190 / 378499 / 378500 are shared across all three tier products,
+// so policies use compound "productId:variantId" keys to distinguish tier correctly.
+const STANDARD_VARIANT_POLICIES: Array<{
+  externalId: string;
+  tier: SubscriptionTier;
+  durationDays: number;
+}> = [
+  // basic-plan (350191)
+  { externalId: "350191:377190", tier: "basic", durationDays: 30 },
+  { externalId: "350191:378499", tier: "basic", durationDays: 60 },
+  { externalId: "350191:378500", tier: "basic", durationDays: 90 },
+  // advanced-plan (350192)
+  { externalId: "350192:377190", tier: "advanced", durationDays: 30 },
+  { externalId: "350192:378499", tier: "advanced", durationDays: 60 },
+  { externalId: "350192:378500", tier: "advanced", durationDays: 90 },
+  // pro-plan (350193)
+  { externalId: "350193:377190", tier: "pro", durationDays: 30 },
+  { externalId: "350193:378499", tier: "pro", durationDays: 60 },
+  { externalId: "350193:378500", tier: "pro", durationDays: 90 },
+  // trial (350194) — plain variant key since 377193 is unique to this product
+  { externalId: "350194:377193", tier: "basic", durationDays: 7 },
+];
+
+export const seedStandardVariantPolicies = mutation({
+  args: {},
+  handler: async (ctx: MutationCtx) => {
+    const now = Date.now();
+    let upserted = 0;
+
+    for (const policy of STANDARD_VARIANT_POLICIES) {
+      const existing = await ctx.db
+        .query("sellAccessPolicies")
+        .withIndex("by_scope_externalId", (q) =>
+          q.eq("scope", "variant").eq("externalId", policy.externalId),
+        )
+        .first();
+
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          tier: policy.tier,
+          billingMode: "fixed_term",
+          durationDays: policy.durationDays,
+          enabled: true,
+          updatedAt: now,
+        });
+      } else {
+        await ctx.db.insert("sellAccessPolicies", {
+          scope: "variant",
+          externalId: policy.externalId,
+          tier: policy.tier,
+          billingMode: "fixed_term",
+          durationDays: policy.durationDays,
+          enabled: true,
+          updatedAt: now,
+        });
+      }
+
+      console.info(
+        `[sell-policy] seed scope=variant id=${policy.externalId} tier=${policy.tier} duration_days=${policy.durationDays}`,
+      );
+      upserted++;
+    }
+
+    return { ok: true as const, upserted };
   },
 });
