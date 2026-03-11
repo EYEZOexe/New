@@ -166,7 +166,7 @@ Then replace the failure alert with reason-specific copy:
 |---|---|---|
 | `"trial_already_claimed"` | Free trial already used | A free trial has already been claimed on this account. Purchase a paid plan to get access. |
 | `"subscription_inactive"` | Purchase not completed | Your payment wasn't confirmed. If you completed checkout, contact support with your order ID. |
-| `"canceled"` | Payment cancelled | Your order didn't go through. Head back to pricing to try again. |
+| `"canceled"` | Payment cancelled | Your order didn't go through. Redirecting back to pricing in {countdown}s. |
 | `"past_due"` | Payment failed | We couldn't process your payment. Try again with a different method. |
 | `null` (fallback) | Activation incomplete | (existing copy, kept as safety net) |
 
