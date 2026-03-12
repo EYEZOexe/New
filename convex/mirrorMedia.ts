@@ -409,7 +409,7 @@ export const applyHydratedSignalMedia = internalMutation({
             .first();
           targets.push({
             targetChannelId,
-            targetGuildId: existingMirror.mirroredGuildId?.trim() || undefined,
+            targetGuildId: existingMirror?.mirroredGuildId?.trim() || undefined,
           });
         }
 

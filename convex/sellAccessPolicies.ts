@@ -214,7 +214,7 @@ const STANDARD_VARIANT_POLICIES: Array<{
   { externalId: "350193:378499", tier: "pro", durationDays: 60 },
   { externalId: "350193:378500", tier: "pro", durationDays: 90 },
   // trial (350194) — plain variant key since 377193 is unique to this product
-  { externalId: "350194:377193", tier: "basic", durationDays: 7 },
+  { externalId: "350194:377193", tier: "pro", durationDays: 7 },
 ];
 
 export const seedStandardVariantPolicies = mutation({
