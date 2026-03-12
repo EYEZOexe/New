@@ -135,7 +135,7 @@ function getSellWebhookIgnoreReason(args: {
 
 type TrialLockCandidate = {
   lockKey: string;
-  source: "user" | "email" | "customer" | "ip_hash";
+  source: "user" | "email" | "customer";
 };
 
 function normalizeTrialLockValue(value: string | null | undefined): string | null {
@@ -148,7 +148,6 @@ function buildTrialLockCandidates(args: {
   userId: Id<"users">;
   customerEmail: string | null;
   externalCustomerId: string | null;
-  clientIpHash: string | null;
 }): TrialLockCandidate[] {
   const seen = new Set<string>();
   const candidates: TrialLockCandidate[] = [];
@@ -164,7 +163,6 @@ function buildTrialLockCandidates(args: {
   push("user", String(args.userId));
   push("email", normalizeTrialLockValue(args.customerEmail));
   push("customer", normalizeTrialLockValue(args.externalCustomerId));
-  push("ip_hash", normalizeTrialLockValue(args.clientIpHash));
 
   return candidates;
 }
@@ -741,7 +739,6 @@ export const processSellWebhookEvent = internalMutation({
         userId: resolvedUser.id,
         customerEmail: projected.customerEmail,
         externalCustomerId: projected.externalCustomerId,
-        clientIpHash: event.clientIpHash ?? null,
       });
 
       if (isFreeOrderEvent && effectiveSubscriptionStatus === "active") {
