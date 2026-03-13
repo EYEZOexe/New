@@ -6,7 +6,7 @@ import type { MutationCtx } from "./_generated/server";
 import { enqueueSeatAuditJobForServer } from "./discordSeatAudit";
 import { isLikelyImageAttachment } from "./imageDetection";
 import { applyMessageFiltering } from "./messageFiltering";
-import { getMirrorBotTokenFromEnv, nextMirrorRetryAt } from "./mirrorQueue";
+import { enqueueMirrorJobsForSignal, getMirrorBotTokenFromEnv, nextMirrorRetryAt } from "./mirrorQueue";
 import { evaluateSeatGate } from "./seatEnforcement";
 
 const SEAT_GATE_REQUEUE_MS = 15_000;
@@ -808,13 +808,95 @@ export const listSignalMirrorJobs = query({
       .order("desc")
       .take(limit * 4);
 
-    return rows
+    const filtered = rows
       .filter((row) => (args.status ? row.status === args.status : true))
-      .slice(0, limit)
-      .map((row) => ({
+      .slice(0, limit);
+
+    // Collect unique sourceMessageIds for batch lookups
+    const uniqueSourceMessageIds = [...new Set(filtered.map((r) => r.sourceMessageId))];
+
+    // Batch-fetch signals (source truth: what Discord sent us)
+    const signalsByMessageId = new Map<string, { content: string; attachments: Array<{ url: string; name?: string; contentType?: string; storageId?: string; mirrorUrl?: string }> }>();
+    for (const sourceMessageId of uniqueSourceMessageIds) {
+      const signal = await ctx.db
+        .query("signals")
+        .withIndex("by_sourceMessageId", (q) =>
+          q
+            .eq("tenantKey", args.tenantKey)
+            .eq("connectorId", args.connectorId)
+            .eq("sourceMessageId", sourceMessageId),
+        )
+        .first();
+      if (signal) {
+        signalsByMessageId.set(sourceMessageId, {
+          content: signal.content ?? "",
+          attachments: (signal.attachments ?? []).map((a) => ({
+            url: a.url,
+            name: a.name,
+            contentType: a.contentType,
+            storageId: a.storageId ? String(a.storageId) : undefined,
+            mirrorUrl: a.mirrorUrl,
+          })),
+        });
+      }
+    }
+
+    // Batch-fetch signalMirrorMedia rows (hydration status per attachment)
+    const mediaRowsByMessageId = new Map<string, Array<{ attachmentKey: string; status: string; hasStorageId: boolean }>>();
+    for (const sourceMessageId of uniqueSourceMessageIds) {
+      const mediaRows = await ctx.db
+        .query("signalMirrorMedia")
+        .withIndex("by_tenant_connector_sourceMessageId", (q) =>
+          q
+            .eq("tenantKey", args.tenantKey)
+            .eq("connectorId", args.connectorId)
+            .eq("sourceMessageId", sourceMessageId),
+        )
+        .collect();
+      mediaRowsByMessageId.set(
+        sourceMessageId,
+        mediaRows.map((r) => ({
+          attachmentKey: r.attachmentKey,
+          status: r.status,
+          hasStorageId: Boolean(r.storageId),
+        })),
+      );
+    }
+
+    // Fetch mirroredSignals for each job's source+target pair
+    const mirroredMessageIdByKey = new Map<string, string | null>();
+    for (const row of filtered) {
+      const key = `${row.sourceMessageId}::${row.targetChannelId}`;
+      if (mirroredMessageIdByKey.has(key)) continue;
+      const mirrored = await ctx.db
+        .query("mirroredSignals")
+        .withIndex("by_source_target", (q) =>
+          q
+            .eq("tenantKey", args.tenantKey)
+            .eq("connectorId", args.connectorId)
+            .eq("sourceMessageId", row.sourceMessageId)
+            .eq("targetChannelId", row.targetChannelId),
+        )
+        .first();
+      mirroredMessageIdByKey.set(key, mirrored?.mirroredMessageId ?? null);
+    }
+
+    return filtered.map((row) => {
+      const signal = signalsByMessageId.get(row.sourceMessageId) ?? null;
+      const mediaRows = mediaRowsByMessageId.get(row.sourceMessageId) ?? [];
+      const mirroredKey = `${row.sourceMessageId}::${row.targetChannelId}`;
+      const jobAttachments = (row.attachments ?? []).map((a) => ({
+        url: a.url,
+        name: a.name,
+        contentType: a.contentType,
+        hasStorageId: Boolean(a.storageId),
+        hasMirrorUrl: Boolean(a.mirrorUrl),
+      }));
+      return {
         jobId: row._id,
         sourceMessageId: row.sourceMessageId,
         sourceChannelId: row.sourceChannelId,
+        sourceGuildId: row.sourceGuildId,
         targetChannelId: row.targetChannelId,
         eventType: row.eventType,
         status: row.status,
@@ -824,6 +906,77 @@ export const listSignalMirrorJobs = query({
         lastError: row.lastError ?? null,
         updatedAt: row.updatedAt,
         createdAt: row.createdAt,
-      }));
+        // Message content from the job
+        content: row.content ?? "",
+        // Attachments as queued on this job (reflects state at time of queuing)
+        jobAttachments,
+        // Source signal attachments (reflects current hydrated state)
+        sourceAttachments: signal?.attachments ?? null,
+        // Media hydration rows (per-attachment DB status)
+        mediaRows,
+        // Existing mirrored Discord message ID
+        mirroredMessageId: mirroredMessageIdByKey.get(mirroredKey) ?? null,
+      };
+    });
+  },
+});
+
+export const requeueMirrorJobForTarget = mutation({
+  args: {
+    tenantKey: v.string(),
+    connectorId: v.string(),
+    sourceMessageId: v.string(),
+    targetChannelId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    const signal = await ctx.db
+      .query("signals")
+      .withIndex("by_sourceMessageId", (q) =>
+        q
+          .eq("tenantKey", args.tenantKey)
+          .eq("connectorId", args.connectorId)
+          .eq("sourceMessageId", args.sourceMessageId),
+      )
+      .first();
+    if (!signal) {
+      return { ok: false as const, reason: "signal_not_found" };
+    }
+
+    const existingMirror = await ctx.db
+      .query("mirroredSignals")
+      .withIndex("by_source_target", (q) =>
+        q
+          .eq("tenantKey", args.tenantKey)
+          .eq("connectorId", args.connectorId)
+          .eq("sourceMessageId", args.sourceMessageId)
+          .eq("targetChannelId", args.targetChannelId),
+      )
+      .first();
+
+    const result = await enqueueMirrorJobsForSignal(ctx, {
+      tenantKey: args.tenantKey,
+      connectorId: args.connectorId,
+      sourceMessageId: signal.sourceMessageId,
+      sourceChannelId: signal.sourceChannelId,
+      sourceGuildId: signal.sourceGuildId,
+      targets: [
+        {
+          targetChannelId: args.targetChannelId,
+          targetGuildId: existingMirror?.mirroredGuildId?.trim() || undefined,
+        },
+      ],
+      eventType: "update",
+      content: signal.content ?? "",
+      attachments: signal.attachments ?? [],
+      sourceCreatedAt: signal.createdAt,
+      now,
+    });
+
+    console.info(
+      `[mirror] manual requeue tenant=${args.tenantKey} connector=${args.connectorId} source_message=${args.sourceMessageId} target=${args.targetChannelId} enqueued=${result.enqueued} deduped=${result.deduped}`,
+    );
+    return { ok: true as const, enqueued: result.enqueued, deduped: result.deduped };
   },
 });

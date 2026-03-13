@@ -88,10 +88,23 @@ type MirrorLatencyStatsRow = {
   update: MirrorLatencySummaryRow;
   delete: MirrorLatencySummaryRow;
 };
+type MirrorJobAttachment = {
+  url: string;
+  name?: string;
+  contentType?: string;
+  hasStorageId: boolean;
+  hasMirrorUrl: boolean;
+};
+type MirrorJobMediaRow = {
+  attachmentKey: string;
+  status: string;
+  hasStorageId: boolean;
+};
 type MirrorJobRow = {
   jobId: string;
   sourceMessageId: string;
   sourceChannelId: string;
+  sourceGuildId: string;
   targetChannelId: string;
   eventType: "create" | "update" | "delete";
   status: "pending" | "processing" | "completed" | "failed";
@@ -101,6 +114,11 @@ type MirrorJobRow = {
   lastError: string | null;
   updatedAt: number;
   createdAt: number;
+  content: string;
+  jobAttachments: MirrorJobAttachment[];
+  sourceAttachments: MirrorJobAttachment[] | null;
+  mediaRows: MirrorJobMediaRow[];
+  mirroredMessageId: string | null;
 };
 type SeatSnapshotRow = {
   tenantKey: string;
@@ -353,6 +371,15 @@ export function ConnectorWorkspace({
       >("mirror:listSignalMirrorJobs"),
     [],
   );
+  const requeueMirrorJob = useMemo(
+    () =>
+      makeFunctionReference<
+        "mutation",
+        { tenantKey: string; connectorId: string; sourceMessageId: string; targetChannelId: string },
+        { ok: boolean; reason?: string; enqueued?: number; deduped?: number }
+      >("mirror:requeueMirrorJobForTarget"),
+    [],
+  );
   const getMirrorLatencyStats = useMemo(
     () =>
       makeFunctionReference<
@@ -434,6 +461,9 @@ export function ConnectorWorkspace({
     hasRouteParams ? { tenantKey, connectorId } : "skip",
   ) ?? [];
 
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
+  const [requeueingJobId, setRequeuingJobId] = useState<string | null>(null);
+  const [requeueResult, setRequeueResult] = useState<{ jobId: string; message: string; ok: boolean } | null>(null);
   const [sourceGuildFilterId, setSourceGuildFilterId] = useState<string>("");
   const [newSourceGuildId, setNewSourceGuildId] = useState("");
   const [newSourceChannelId, setNewSourceChannelId] = useState("");
@@ -467,6 +497,7 @@ export function ConnectorWorkspace({
   const doRequestChannelDiscovery = useMutation(requestChannelDiscovery);
   const doUpsertServerConfig = useMutation(upsertServerConfig);
   const doRemoveServerConfig = useMutation(removeServerConfig);
+  const doRequeue = useMutation(requeueMirrorJob);
 
   const [lastToken, setLastToken] = useState<string | null>(null);
   const [isRotating, setIsRotating] = useState(false);
@@ -1888,38 +1919,207 @@ export function ConnectorWorkspace({
             <table className="w-full text-left text-sm">
               <thead className="sticky top-0 z-10 bg-slate-900 text-xs font-semibold text-slate-300">
                 <tr>
+                  <th className="w-4 px-2 py-2" />
                   <th className="px-3 py-2">Updated</th>
                   <th className="px-3 py-2">Event</th>
                   <th className="px-3 py-2">Route</th>
                   <th className="px-3 py-2">Status</th>
                   <th className="px-3 py-2">Attempts</th>
-                  <th className="px-3 py-2">Run after</th>
+                  <th className="px-3 py-2">Images</th>
                   <th className="px-3 py-2">Last error</th>
+                  <th className="px-3 py-2">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800 bg-slate-950/40 text-slate-200">
-                {mirrorJobs.map((job) => (
-                  <tr key={job.jobId}>
-                    <td className="px-3 py-2 text-xs text-slate-300">{formatDateTime(job.updatedAt)}</td>
-                    <td className="px-3 py-2 uppercase tracking-wide text-slate-200">{job.eventType}</td>
-                    <td className="px-3 py-2">
-                      <p className="text-xs text-slate-100">{renderChannelLabel(job.sourceChannelId)}</p>
-                      <p className="text-xs text-slate-400">to {renderChannelLabel(job.targetChannelId)}</p>
-                    </td>
-                    <td className="px-3 py-2">{renderJobStatusBadge(job.status)}</td>
-                    <td className="px-3 py-2 text-xs text-slate-300">
-                      {job.attemptCount}/{job.maxAttempts}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-slate-300">{formatDateTime(job.runAfter)}</td>
-                    <td className="px-3 py-2 text-xs">
-                      {job.lastError ? (
-                        <span className="text-rose-300">{job.lastError}</span>
-                      ) : (
-                        <span className="text-slate-500">none</span>
+                {mirrorJobs.map((job) => {
+                  const isExpanded = expandedJobId === job.jobId;
+                  const sourceImgCount = (job.sourceAttachments ?? job.jobAttachments).filter(
+                    (a) => a.contentType?.startsWith("image/") || /\.(png|jpg|jpeg|gif|webp)$/i.test(a.name ?? a.url),
+                  ).length;
+                  const dbReadyCount = job.mediaRows.filter((r) => r.status === "ready").length;
+                  const dbFailedCount = job.mediaRows.filter((r) => r.status === "failed").length;
+                  const signalReadyCount = (job.sourceAttachments ?? job.jobAttachments).filter(
+                    (a) => a.hasMirrorUrl,
+                  ).length;
+                  const isRequeuing = requeueingJobId === job.jobId;
+                  const thisRequeueResult = requeueResult?.jobId === job.jobId ? requeueResult : null;
+                  return (
+                    <>
+                      <tr
+                        key={job.jobId}
+                        className="cursor-pointer hover:bg-slate-800/40"
+                        onClick={() => setExpandedJobId(isExpanded ? null : job.jobId)}
+                      >
+                        <td className="px-2 py-2 text-slate-400">
+                          <span className="text-xs">{isExpanded ? "▾" : "▸"}</span>
+                        </td>
+                        <td className="px-3 py-2 text-xs text-slate-300">{formatDateTime(job.updatedAt)}</td>
+                        <td className="px-3 py-2">
+                          <span className={`rounded px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${
+                            job.eventType === "create" ? "bg-emerald-900/50 text-emerald-300" :
+                            job.eventType === "update" ? "bg-sky-900/50 text-sky-300" :
+                            "bg-rose-900/50 text-rose-300"
+                          }`}>{job.eventType}</span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <p className="text-xs text-slate-100">{renderChannelLabel(job.sourceChannelId)}</p>
+                          <p className="text-xs text-slate-400">→ {renderChannelLabel(job.targetChannelId)}</p>
+                        </td>
+                        <td className="px-3 py-2">{renderJobStatusBadge(job.status)}</td>
+                        <td className="px-3 py-2 text-xs text-slate-300">
+                          {job.attemptCount}/{job.maxAttempts}
+                        </td>
+                        <td className="px-3 py-2 text-xs">
+                          {sourceImgCount === 0 ? (
+                            <span className="text-slate-500">none</span>
+                          ) : (
+                            <span className={`font-mono ${signalReadyCount === sourceImgCount ? "text-emerald-400" : dbFailedCount > 0 ? "text-rose-400" : "text-amber-400"}`}>
+                              {signalReadyCount}/{sourceImgCount} ready
+                              {dbFailedCount > 0 && <span className="ml-1 text-rose-400">({dbFailedCount} failed)</span>}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-xs">
+                          {job.lastError ? (
+                            <span className="text-rose-300">{job.lastError}</span>
+                          ) : (
+                            <span className="text-slate-500">none</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            disabled={isRequeuing}
+                            className="rounded bg-sky-700 px-2 py-1 text-xs font-medium text-white hover:bg-sky-600 disabled:opacity-50"
+                            onClick={async () => {
+                              setRequeuingJobId(job.jobId);
+                              setRequeueResult(null);
+                              try {
+                                const res = await doRequeue({
+                                  tenantKey,
+                                  connectorId,
+                                  sourceMessageId: job.sourceMessageId,
+                                  targetChannelId: job.targetChannelId,
+                                });
+                                setRequeueResult({
+                                  jobId: job.jobId,
+                                  ok: res.ok,
+                                  message: res.ok
+                                    ? res.enqueued
+                                      ? `Enqueued ${res.enqueued} job(s)`
+                                      : "Already queued (deduped)"
+                                    : (res.reason ?? "failed"),
+                                });
+                              } catch (err) {
+                                setRequeueResult({ jobId: job.jobId, ok: false, message: String(err) });
+                              } finally {
+                                setRequeuingJobId(null);
+                              }
+                            }}
+                          >
+                            {isRequeuing ? "…" : "Retry"}
+                          </button>
+                          {thisRequeueResult && (
+                            <p className={`mt-1 text-xs ${thisRequeueResult.ok ? "text-emerald-400" : "text-rose-400"}`}>
+                              {thisRequeueResult.message}
+                            </p>
+                          )}
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr key={`${job.jobId}-expanded`} className="bg-slate-900/60">
+                          <td colSpan={9} className="px-4 py-3">
+                            <div className="space-y-3 text-xs">
+                              {/* Message content */}
+                              <div>
+                                <p className="mb-1 font-semibold text-slate-300">Message content</p>
+                                <p className="rounded border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-slate-200 whitespace-pre-wrap break-all">
+                                  {job.content?.trim() || <span className="italic text-slate-500">(empty — image-only message)</span>}
+                                </p>
+                              </div>
+                              {/* IDs row */}
+                              <div className="flex flex-wrap gap-4 text-slate-400">
+                                <span>Source msg: <span className="font-mono text-slate-200">{job.sourceMessageId}</span></span>
+                                {job.mirroredMessageId && (
+                                  <span>Mirrored msg: <span className="font-mono text-slate-200">{job.mirroredMessageId}</span></span>
+                                )}
+                                <span>Run after: <span className="text-slate-200">{formatDateTime(job.runAfter)}</span></span>
+                              </div>
+                              {/* Attachment breakdown */}
+                              {sourceImgCount > 0 && (
+                                <div>
+                                  <p className="mb-1 font-semibold text-slate-300">Attachment pipeline</p>
+                                  <div className="overflow-x-auto rounded border border-slate-700">
+                                    <table className="w-full text-xs">
+                                      <thead className="bg-slate-800 text-slate-400">
+                                        <tr>
+                                          <th className="px-2 py-1 text-left">File</th>
+                                          <th className="px-2 py-1 text-left">Seen from source</th>
+                                          <th className="px-2 py-1 text-left">DB (Convex storage)</th>
+                                          <th className="px-2 py-1 text-left">On signal (mirrorUrl)</th>
+                                          <th className="px-2 py-1 text-left">On job (queued)</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-800">
+                                        {(job.sourceAttachments ?? job.jobAttachments).map((att, i) => {
+                                          const isImg = att.contentType?.startsWith("image/") || /\.(png|jpg|jpeg|gif|webp)$/i.test(att.name ?? att.url);
+                                          const mediaRow = job.mediaRows.find((r) => {
+                                            const urlKey = `url:${att.url}`;
+                                            return r.attachmentKey === urlKey || r.attachmentKey.endsWith(att.url);
+                                          });
+                                          const jobAtt = job.jobAttachments[i];
+                                          return (
+                                            <tr key={i} className="text-slate-300">
+                                              <td className="px-2 py-1 font-mono">
+                                                <span className="text-slate-400">{att.name ?? `attachment-${i + 1}`}</span>
+                                                {!isImg && <span className="ml-1 text-slate-500 italic">(non-image)</span>}
+                                              </td>
+                                              <td className="px-2 py-1">
+                                                <span className="text-emerald-400">✓ seen</span>
+                                              </td>
+                                              <td className="px-2 py-1">
+                                                {!mediaRow ? (
+                                                  <span className="text-slate-500">no row</span>
+                                                ) : mediaRow.status === "ready" ? (
+                                                  <span className="text-emerald-400">✓ ready</span>
+                                                ) : mediaRow.status === "failed" ? (
+                                                  <span className="text-rose-400">✗ failed</span>
+                                                ) : (
+                                                  <span className="text-amber-400">⏳ {mediaRow.status}</span>
+                                                )}
+                                              </td>
+                                              <td className="px-2 py-1">
+                                                {att.hasMirrorUrl ? (
+                                                  <span className="text-emerald-400">✓ set</span>
+                                                ) : att.hasStorageId ? (
+                                                  <span className="text-amber-400">stored, no url</span>
+                                                ) : (
+                                                  <span className="text-rose-400">✗ missing</span>
+                                                )}
+                                              </td>
+                                              <td className="px-2 py-1">
+                                                {!jobAtt ? (
+                                                  <span className="text-slate-500">—</span>
+                                                ) : jobAtt.hasMirrorUrl ? (
+                                                  <span className="text-emerald-400">✓ set</span>
+                                                ) : (
+                                                  <span className="text-rose-400">✗ missing</span>
+                                                )}
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
                       )}
-                    </td>
-                  </tr>
-                ))}
+                    </>
+                  );
+                })}
               </tbody>
             </table>
           </AdminTableShell>

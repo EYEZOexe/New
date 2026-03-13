@@ -966,6 +966,116 @@ export const requeueMirrorUpdateForSourceMessage = internalMutation({
   },
 });
 
+export const redriveNeverMirroredMessages = internalMutation({
+  args: {
+    tenantKey: v.string(),
+    connectorId: v.string(),
+    sourceMessageIds: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const report: Array<{
+      sourceMessageId: string;
+      mediaReady: number;
+      mediaFailed: number;
+      enqueued: number;
+      reason: string;
+    }> = [];
+
+    for (const sourceMessageId of args.sourceMessageIds) {
+      const signal = await ctx.db
+        .query("signals")
+        .withIndex("by_sourceMessageId", (q) =>
+          q
+            .eq("tenantKey", args.tenantKey)
+            .eq("connectorId", args.connectorId)
+            .eq("sourceMessageId", sourceMessageId),
+        )
+        .first();
+      if (!signal) {
+        report.push({ sourceMessageId, mediaReady: 0, mediaFailed: 0, enqueued: 0, reason: "signal_not_found" });
+        continue;
+      }
+
+      const mediaRows = await ctx.db
+        .query("signalMirrorMedia")
+        .withIndex("by_tenant_connector_sourceMessageId", (q) =>
+          q
+            .eq("tenantKey", args.tenantKey)
+            .eq("connectorId", args.connectorId)
+            .eq("sourceMessageId", sourceMessageId),
+        )
+        .collect();
+      const readyCount = mediaRows.filter((r) => r.status === "ready").length;
+      const failedCount = mediaRows.filter((r) => r.status === "failed").length;
+
+      const connector = await ctx.db
+        .query("connectors")
+        .withIndex("by_tenant_connectorId", (q) =>
+          q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+        )
+        .first();
+      if (!connector?.forwardEnabled) {
+        report.push({ sourceMessageId, mediaReady: readyCount, mediaFailed: failedCount, enqueued: 0, reason: "forwarding_disabled" });
+        continue;
+      }
+
+      const mappings = await ctx.db
+        .query("connectorMappings")
+        .withIndex("by_tenant_connector_sourceChannelId", (q) =>
+          q
+            .eq("tenantKey", args.tenantKey)
+            .eq("connectorId", args.connectorId)
+            .eq("sourceChannelId", signal.sourceChannelId),
+        )
+        .collect();
+
+      const targets: Array<{ targetChannelId: string; targetGuildId?: string }> = [];
+      for (const mapping of mappings) {
+        const targetChannelId = mapping.targetChannelId.trim();
+        if (!targetChannelId) continue;
+        const existingMirror = await ctx.db
+          .query("mirroredSignals")
+          .withIndex("by_source_target", (q) =>
+            q
+              .eq("tenantKey", args.tenantKey)
+              .eq("connectorId", args.connectorId)
+              .eq("sourceMessageId", sourceMessageId)
+              .eq("targetChannelId", targetChannelId),
+          )
+          .first();
+        targets.push({ targetChannelId, targetGuildId: existingMirror?.mirroredGuildId?.trim() || undefined });
+      }
+
+      if (targets.length === 0) {
+        report.push({ sourceMessageId, mediaReady: readyCount, mediaFailed: failedCount, enqueued: 0, reason: "no_targets" });
+        continue;
+      }
+
+      const mirrorResult = await enqueueMirrorJobsForSignal(ctx, {
+        tenantKey: args.tenantKey,
+        connectorId: args.connectorId,
+        sourceMessageId: signal.sourceMessageId,
+        sourceChannelId: signal.sourceChannelId,
+        sourceGuildId: signal.sourceGuildId,
+        targets,
+        eventType: "update",
+        content: signal.content,
+        attachments: signal.attachments ?? [],
+        sourceCreatedAt: signal.createdAt,
+        now,
+      });
+
+      console.info(
+        `[mirror] redrive source_message=${sourceMessageId} media_ready=${readyCount} media_failed=${failedCount} targets=${targets.length} enqueued=${mirrorResult.enqueued} deduped=${mirrorResult.deduped}`,
+      );
+      report.push({ sourceMessageId, mediaReady: readyCount, mediaFailed: failedCount, enqueued: mirrorResult.enqueued, reason: mirrorResult.enqueued > 0 ? "enqueued" : "deduped" });
+    }
+
+    return { report };
+  },
+});
+
 function applyResultsToAttachments(
   attachments: SignalAttachment[],
   resultByKey: Map<string, HydrationResult>,
