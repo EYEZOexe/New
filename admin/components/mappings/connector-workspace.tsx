@@ -94,6 +94,7 @@ type MirrorJobAttachment = {
   contentType?: string;
   hasStorageId: boolean;
   hasMirrorUrl: boolean;
+  attachmentId?: string;
 };
 type MirrorJobMediaRow = {
   attachmentKey: string;
@@ -2063,8 +2064,9 @@ export function ConnectorWorkspace({
                                         {(job.sourceAttachments ?? job.jobAttachments).map((att, i) => {
                                           const isImg = att.contentType?.startsWith("image/") || /\.(png|jpg|jpeg|gif|webp)$/i.test(att.name ?? att.url);
                                           const mediaRow = job.mediaRows.find((r) => {
-                                            const urlKey = `url:${att.url}`;
-                                            return r.attachmentKey === urlKey || r.attachmentKey.endsWith(att.url);
+                                            if (att.attachmentId && r.attachmentKey === `id:${att.attachmentId}`) return true;
+                                            if (r.attachmentKey === `url:${att.url}`) return true;
+                                            return false;
                                           });
                                           const jobAtt = job.jobAttachments[i];
                                           return (

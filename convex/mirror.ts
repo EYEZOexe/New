@@ -834,8 +834,9 @@ export const listSignalMirrorJobs = query({
             url: a.url,
             name: a.name,
             contentType: a.contentType,
-            storageId: a.storageId ? String(a.storageId) : undefined,
-            mirrorUrl: a.mirrorUrl,
+            hasStorageId: Boolean(a.storageId),
+            hasMirrorUrl: Boolean(a.mirrorUrl),
+            attachmentId: a.attachmentId,
           })),
         });
       }
@@ -891,6 +892,7 @@ export const listSignalMirrorJobs = query({
         contentType: a.contentType,
         hasStorageId: Boolean(a.storageId),
         hasMirrorUrl: Boolean(a.mirrorUrl),
+        attachmentId: a.attachmentId,
       }));
       return {
         jobId: row._id,
@@ -911,7 +913,7 @@ export const listSignalMirrorJobs = query({
         // Attachments as queued on this job (reflects state at time of queuing)
         jobAttachments,
         // Source signal attachments (reflects current hydrated state)
-        sourceAttachments: signal?.attachments ?? null,
+        sourceAttachments: signal?.attachments ?? null, // already mapped to boolean shape above
         // Media hydration rows (per-attachment DB status)
         mediaRows,
         // Existing mirrored Discord message ID
