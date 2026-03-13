@@ -174,16 +174,21 @@ export class DiscordSignalMirrorManager {
       targetChannelId: job.targetChannelId,
     });
     if (!sanitizedContent.content.trim()) {
-      console.info(
-        `[mirror] skipped empty signal body source_message=${job.sourceMessageId} event=${job.eventType} target_channel=${job.targetChannelId}`,
+      const hasImageAttachments = (job.attachments ?? []).some((a) =>
+        isLikelyImage(a.url?.trim() ?? "", a.contentType, a.name),
       );
-      return {
-        ok: true,
-        message: "message_skipped_empty_body",
-        mirroredMessageId: existingMessageId || undefined,
-        mirroredExtraMessageIds: existingExtraMessageIds,
-        mirroredGuildId: guildId,
-      };
+      if (!hasImageAttachments) {
+        console.info(
+          `[mirror] skipped empty signal body source_message=${job.sourceMessageId} event=${job.eventType} target_channel=${job.targetChannelId}`,
+        );
+        return {
+          ok: true,
+          message: "message_skipped_empty_body",
+          mirroredMessageId: existingMessageId || undefined,
+          mirroredExtraMessageIds: existingExtraMessageIds,
+          mirroredGuildId: guildId,
+        };
+      }
     }
     const payload = buildMirroredPayload(sanitizedContent.content, job.attachments);
     if (payload.totalImageCount > 0 || payload.removedAttachmentLinkCount > 0) {

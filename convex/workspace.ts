@@ -883,8 +883,26 @@ export const refreshExternalWorkspaceFeeds = internalAction({
       "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=80&page=1&sparkline=true&price_change_percentage=1h,24h";
     const cryptoCompareNewsUrl = "https://min-api.cryptocompare.com/data/v2/news/?lang=EN";
 
-    const marketData = await fetchJson<CoinGeckoMarketRow[]>(coinGeckoUrl);
-    const marketRows = marketData
+    let marketData: CoinGeckoMarketRow[] | null = null;
+    try {
+      marketData = await fetchJson<CoinGeckoMarketRow[]>(coinGeckoUrl);
+    } catch (error) {
+      console.warn(`[workspace/ingest] CoinGecko fetch failed: ${String(error)}`);
+    }
+
+    let newsPayload: CryptoCompareNewsResponse | null = null;
+    try {
+      newsPayload = await fetchJson<CryptoCompareNewsResponse>(cryptoCompareNewsUrl);
+    } catch (error) {
+      console.warn(`[workspace/ingest] CryptoCompare fetch failed: ${String(error)}`);
+    }
+
+    if (!marketData && !newsPayload) {
+      console.warn("[workspace/ingest] both external feeds unavailable, skipping refresh");
+      return { ok: true as const, skipped: true as const };
+    }
+
+    const marketRows = (marketData ?? [])
       .map((row) => {
         const symbol = (row.symbol ?? "").trim().toUpperCase();
         const name = (row.name ?? "").trim();
@@ -963,8 +981,7 @@ export const refreshExternalWorkspaceFeeds = internalAction({
       })),
     ];
 
-    const newsPayload = await fetchJson<CryptoCompareNewsResponse>(cryptoCompareNewsUrl);
-    const newsRows = (newsPayload.Data ?? [])
+    const newsRows = (newsPayload?.Data ?? [])
       .map((item, index) => {
         const title = (item.title ?? "").trim();
         const url = (item.url ?? "").trim();
@@ -986,22 +1003,22 @@ export const refreshExternalWorkspaceFeeds = internalAction({
       .filter((item): item is NonNullable<typeof item> => item !== null)
       .slice(0, DEFAULT_NEWS_LIMIT);
 
-    const marketResult = await ctx.runMutation(internal.workspace.upsertMarketSnapshots, {
-      rows: marketRows,
-    });
-    const liveIntelResult = await ctx.runMutation(internal.workspace.replaceLiveIntelItems, {
-      rows: liveIntelRows,
-    });
-    const indicatorResult = await ctx.runMutation(internal.workspace.replaceIndicatorAlerts, {
-      rows: indicatorRows,
-    });
-    const newsResult = await ctx.runMutation(internal.workspace.replaceNewsArticles, {
-      rows: newsRows,
-    });
+    const marketResult = marketData
+      ? await ctx.runMutation(internal.workspace.upsertMarketSnapshots, { rows: marketRows })
+      : null;
+    const liveIntelResult = marketData
+      ? await ctx.runMutation(internal.workspace.replaceLiveIntelItems, { rows: liveIntelRows })
+      : null;
+    const indicatorResult = marketData
+      ? await ctx.runMutation(internal.workspace.replaceIndicatorAlerts, { rows: indicatorRows })
+      : null;
+    const newsResult = newsPayload
+      ? await ctx.runMutation(internal.workspace.replaceNewsArticles, { rows: newsRows })
+      : null;
     const strategySeedResult = await ctx.runMutation(internal.workspace.seedStrategiesIfMissing, {});
 
     console.info(
-      `[workspace/ingest] refresh complete markets_inserted=${marketResult.inserted} markets_updated=${marketResult.updated} live_intel_inserted=${liveIntelResult.inserted} indicator_inserted=${indicatorResult.inserted} news_inserted=${newsResult.inserted} strategy_seed_inserted=${strategySeedResult.inserted} strategy_seed_updated=${strategySeedResult.updated}`,
+      `[workspace/ingest] refresh complete market_ok=${Boolean(marketData)} news_ok=${Boolean(newsPayload)} markets_inserted=${marketResult?.inserted ?? "skipped"} markets_updated=${marketResult?.updated ?? "skipped"} live_intel_inserted=${liveIntelResult?.inserted ?? "skipped"} indicator_inserted=${indicatorResult?.inserted ?? "skipped"} news_inserted=${newsResult?.inserted ?? "skipped"} strategy_seed_inserted=${strategySeedResult.inserted} strategy_seed_updated=${strategySeedResult.updated}`,
     );
 
     return {
