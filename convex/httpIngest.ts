@@ -222,6 +222,9 @@ export function mountIngestRoutes(http: HttpRouter) {
           // Untrusted boundary (HTTP); internal mutation enforces runtime validation.
           messages: messages as any,
           receivedAt,
+          // Inline hydration runs below; skip the scheduled hydration from ingestMessageBatch
+          // to avoid duplicate concurrent fetches and competing writes to signalMirrorMedia.
+          scheduleMediaHydration: false,
         });
       } catch (error) {
         console.error("[ingest/message-batch] Validation or mutation error:", String(error));

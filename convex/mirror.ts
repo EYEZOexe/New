@@ -10,6 +10,7 @@ import { getMirrorBotTokenFromEnv, nextMirrorRetryAt } from "./mirrorQueue";
 import { evaluateSeatGate } from "./seatEnforcement";
 
 const SEAT_GATE_REQUEUE_MS = 15_000;
+const PROCESSING_RECLAIM_AFTER_MS = 5 * 60_000;
 const hydrateSignalMediaForMessageRef = makeFunctionReference<
   "action",
   {
@@ -144,6 +145,32 @@ export const claimPendingSignalMirrorJobs = mutation({
     const now = Date.now();
     const limit = Math.max(1, Math.min(20, args.limit ?? 5));
     const workerId = args.workerId?.trim() || undefined;
+
+    // Reclaim jobs stuck in "processing" (e.g., bot crash, or UPDATE jobs
+    // that were set to processing then delayed but never moved back to pending).
+    const processingJobs = await ctx.db
+      .query("signalMirrorJobs")
+      .withIndex("by_status_runAfter", (q) => q.eq("status", "processing").lte("runAfter", now))
+      .take(50);
+    let reclaimed = 0;
+    for (const job of processingJobs) {
+      const claimedAt = job.claimedAt ?? 0;
+      if (claimedAt <= 0) continue;
+      if (now - claimedAt < PROCESSING_RECLAIM_AFTER_MS) continue;
+      await ctx.db.patch(job._id, {
+        status: "pending",
+        runAfter: now,
+        updatedAt: now,
+        claimToken: undefined,
+        claimWorkerId: undefined,
+        claimedAt: undefined,
+        lastError: "processing_reclaimed_after_timeout",
+      });
+      reclaimed += 1;
+    }
+    if (reclaimed > 0) {
+      console.warn(`[mirror] reclaimed_stale_processing_jobs=${reclaimed}`);
+    }
 
     const pending = await ctx.db
       .query("signalMirrorJobs")
@@ -320,8 +347,12 @@ export const claimPendingSignalMirrorJobs = mutation({
 
         if (processingCreate) {
           await ctx.db.patch(job._id, {
+            status: "pending",
             runAfter: Math.max(job.runAfter, now + 250),
             updatedAt: now,
+            claimToken: undefined,
+            claimWorkerId: undefined,
+            claimedAt: undefined,
             lastError: "waiting_for_create",
           });
           continue;
@@ -334,7 +365,7 @@ export const claimPendingSignalMirrorJobs = mutation({
         attachments.length > 0 &&
         hasPendingImageHydration(attachments)
       ) {
-        const hasAnyMediaRow = await ctx.db
+        const mediaRows = await ctx.db
           .query("signalMirrorMedia")
           .withIndex("by_tenant_connector_sourceMessageId", (q) =>
             q
@@ -342,8 +373,9 @@ export const claimPendingSignalMirrorJobs = mutation({
               .eq("connectorId", job.connectorId)
               .eq("sourceMessageId", job.sourceMessageId),
           )
-          .first();
-        if (!hasAnyMediaRow) {
+          .collect();
+        const hasReadyMedia = mediaRows.some((row) => row.status === "ready");
+        if (!hasReadyMedia) {
           await ctx.scheduler.runAfter(0, hydrateSignalMediaForMessageRef, {
             tenantKey: job.tenantKey,
             connectorId: job.connectorId,
@@ -530,7 +562,7 @@ export const completeSignalMirrorJob = mutation({
         completedAttachments.length > 0 &&
         hasPendingImageHydration(completedAttachments)
       ) {
-        const hasAnyMediaRow = await ctx.db
+        const completedMediaRows = await ctx.db
           .query("signalMirrorMedia")
           .withIndex("by_tenant_connector_sourceMessageId", (q) =>
             q
@@ -538,8 +570,9 @@ export const completeSignalMirrorJob = mutation({
               .eq("connectorId", job.connectorId)
               .eq("sourceMessageId", job.sourceMessageId),
           )
-          .first();
-        if (!hasAnyMediaRow) {
+          .collect();
+        const hasReadyMediaOnComplete = completedMediaRows.some((row) => row.status === "ready");
+        if (!hasReadyMediaOnComplete) {
           await ctx.scheduler.runAfter(0, hydrateSignalMediaForMessageRef, {
             tenantKey: job.tenantKey,
             connectorId: job.connectorId,
