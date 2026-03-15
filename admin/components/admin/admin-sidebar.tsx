@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { ADMIN_ROUTE_GROUPS, getAdminNavState } from "@/lib/adminRoutes";
+import { ADMIN_ROUTE_GROUPS, CONNECTOR_SUB_NAV_TABS, getAdminNavState } from "@/lib/adminRoutes";
+import { useConnectorStats } from "@/context/connector-stats-context";
 
 type AdminNavigationProps = {
   pathname: string;
@@ -16,12 +18,14 @@ function NavLink({
   isActive,
   onNavigate,
   className,
+  children,
 }: {
   href: string;
   label: string;
   isActive: boolean;
   onNavigate?: () => void;
   className?: string;
+  children?: React.ReactNode;
 }) {
   return (
     <Link
@@ -34,39 +38,117 @@ function NavLink({
       onClick={onNavigate}
     >
       {label}
+      {children}
     </Link>
   );
+}
+
+// Returns { tenantKey, connectorId } if on /mappings/[tenantKey]/[connectorId], else null
+function getConnectorDetailSegments(pathname: string): { tenantKey: string; connectorId: string } | null {
+  const normalized = pathname.split("?")[0].replace(/\/$/, "");
+  const parts = normalized.split("/").filter(Boolean);
+  if (parts[0] === "mappings" && parts.length === 3) {
+    return { tenantKey: parts[1], connectorId: parts[2] };
+  }
+  return null;
 }
 
 export function AdminNavigation({ pathname, onNavigate, className }: AdminNavigationProps) {
   const state = getAdminNavState(pathname);
   const shopGroup = ADMIN_ROUTE_GROUPS.find((group) => group.id === "shop");
+  const searchParams = useSearchParams();
+  const activeTab = searchParams.get("tab");
+
+  const connectorDetail = getConnectorDetailSegments(pathname);
+  const { failedJobsByConnector } = useConnectorStats();
+
+  const failedJobsCount = connectorDetail
+    ? (failedJobsByConnector[`${connectorDetail.tenantKey}::${connectorDetail.connectorId}`] ?? 0)
+    : 0;
 
   return (
-    <nav className={cn("space-y-2", className)} aria-label="Admin workspace navigation">
+    <nav className={cn("space-y-1", className)} aria-label="Admin workspace navigation">
+      {/* Dashboard */}
       <NavLink
-        href="/mappings"
-        label="Mappings"
-        isActive={state.activeItem === "mappings"}
-        onNavigate={onNavigate}
-      />
-      <NavLink
-        href="/filtering"
-        label="Filtering"
-        isActive={state.activeItem === "filtering"}
-        onNavigate={onNavigate}
-      />
-      <NavLink
-        href="/discord-bot"
-        label="Discord Bot"
-        isActive={state.activeItem === "discord-bot"}
+        href="/"
+        label="Dashboard"
+        isActive={state.activeItem === "dashboard"}
         onNavigate={onNavigate}
       />
 
+      {/* CONNECTORS section */}
+      <div className="pt-2">
+        <p className="px-2 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-white/40">
+          Connectors
+        </p>
+        <div className="space-y-1">
+          <NavLink
+            href="/mappings"
+            label="Mappings"
+            isActive={state.activeItem === "mappings"}
+            onNavigate={onNavigate}
+          />
+
+          {/* Contextual sub-nav: only shown when on /mappings/[tenantKey]/[connectorId] */}
+          {connectorDetail && (
+            <div className="ml-3 space-y-1 border-l border-slate-700/60 pl-3">
+              {CONNECTOR_SUB_NAV_TABS.map((tab) => {
+                const isTabActive = activeTab === tab.tabValue;
+                const tabHref = `/mappings/${connectorDetail.tenantKey}/${connectorDetail.connectorId}?tab=${tab.tabValue}`;
+                const isJobsTab = tab.tabValue === "jobs";
+                return (
+                  <Link
+                    key={tab.tabValue}
+                    href={tabHref}
+                    className={cn(
+                      "admin-workspace-nav-link flex items-center",
+                      isTabActive ? "admin-workspace-nav-link-active" : null,
+                    )}
+                    onClick={onNavigate}
+                  >
+                    <span>{tab.label}</span>
+                    {isJobsTab && failedJobsCount > 0 && (
+                      <span className="ml-auto rounded-full bg-red-500 px-1.5 py-0.5 text-xs font-semibold text-white">
+                        {failedJobsCount}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+
+          <NavLink
+            href="/filtering"
+            label="Filtering"
+            isActive={state.activeItem === "filtering"}
+            onNavigate={onNavigate}
+          />
+        </div>
+      </div>
+
+      {/* DISCORD section */}
+      <div className="pt-2">
+        <p className="px-2 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-white/40">
+          Discord
+        </p>
+        <div className="space-y-1">
+          <NavLink
+            href="/discord-bot"
+            label="Bot Config"
+            isActive={state.activeItem === "discord-bot"}
+            onNavigate={onNavigate}
+          />
+        </div>
+      </div>
+
+      {/* SHOP section */}
       {shopGroup ? (
-        <div className="pt-3">
-          <p className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Shop</p>
-          <div className="mt-2 space-y-1">
+        <div className="pt-2">
+          <p className="px-2 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-white/40">
+            Shop
+          </p>
+          <div className="space-y-1">
             {shopGroup.children.map((item) => (
               <NavLink
                 key={item.id}
@@ -74,7 +156,6 @@ export function AdminNavigation({ pathname, onNavigate, className }: AdminNaviga
                 label={item.label}
                 isActive={state.activeShopRoute === item.id}
                 onNavigate={onNavigate}
-                className="pl-4"
               />
             ))}
           </div>
