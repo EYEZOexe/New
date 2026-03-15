@@ -27,12 +27,12 @@ type ConnectorDoc = {
 type RecentJob = {
   _id: string;
   updatedAt: number;
-  eventType: string;
+  eventType: "create" | "update" | "delete";
   tenantKey: string;
   connectorId: string;
   sourceChannelId: string;
   targetChannelId: string;
-  status: string;
+  status: "pending" | "processing" | "completed" | "failed";
   attempts: number;
 };
 
@@ -253,6 +253,7 @@ export default function DashboardPage() {
           <p className="mt-2 text-2xl font-bold text-slate-100">{totalPending}</p>
         </div>
 
+        {/* TODO: route count requires a separate query not yet implemented */}
         {/* Total Routes */}
         <div className="admin-section-card">
           <p className="text-xs font-semibold uppercase tracking-wide text-white/40">
