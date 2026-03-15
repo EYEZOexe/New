@@ -374,26 +374,48 @@ export const claimPendingSignalMirrorJobs = mutation({
               .eq("sourceMessageId", job.sourceMessageId),
           )
           .collect();
-        const hasReadyMedia = mediaRows.some((row) => row.status === "ready");
-        if (!hasReadyMedia) {
-          await ctx.scheduler.runAfter(0, hydrateSignalMediaForMessageRef, {
-            tenantKey: job.tenantKey,
-            connectorId: job.connectorId,
-            sourceMessageId: job.sourceMessageId,
-            sourceChannelId: job.sourceChannelId,
-            receivedAt: now,
-            attachments: attachments.map((attachment) => ({
-              attachmentId: attachment.attachmentId,
-              url: attachment.url,
-              storageId: attachment.storageId,
-              mirrorUrl: attachment.mirrorUrl,
-              name: attachment.name,
-              contentType: attachment.contentType,
-              size: attachment.size,
-            })),
-          });
+        const allImagesReady = mediaRows.length > 0 && mediaRows.every((row) => row.status === "ready" || row.status === "failed");
+        const anyImageReady = mediaRows.some((row) => row.status === "ready");
+
+        if (!allImagesReady) {
+          // Hydration still in-flight. Re-queue with a short delay so the Discord bot
+          // receives the job only once images are ready — prevents silent image loss.
+          const waitedMs = now - job.createdAt;
+          const hydrationTimeout = 20_000; // give up waiting after 20s and proceed without images
+          if (waitedMs < hydrationTimeout) {
+            await ctx.scheduler.runAfter(0, hydrateSignalMediaForMessageRef, {
+              tenantKey: job.tenantKey,
+              connectorId: job.connectorId,
+              sourceMessageId: job.sourceMessageId,
+              sourceChannelId: job.sourceChannelId,
+              receivedAt: now,
+              attachments: attachments.map((attachment) => ({
+                attachmentId: attachment.attachmentId,
+                url: attachment.url,
+                storageId: attachment.storageId,
+                mirrorUrl: attachment.mirrorUrl,
+                name: attachment.name,
+                contentType: attachment.contentType,
+                size: attachment.size,
+              })),
+            });
+            await ctx.db.patch(job._id, {
+              status: "pending",
+              runAfter: now + 750,
+              claimToken: undefined,
+              claimWorkerId: undefined,
+              claimedAt: undefined,
+              updatedAt: now,
+              lastError: "waiting_for_hydration",
+            });
+            console.info(
+              `[mirror] hydration wait job=${job._id} source_message=${job.sourceMessageId} waited_ms=${waitedMs} attachment_count=${attachments.length}`,
+            );
+            continue;
+          }
+          // Timed out waiting — proceed without full images.
           console.info(
-            `[mirror] scheduled hydration fallback source_message=${job.sourceMessageId} target_channel=${job.targetChannelId} attachment_count=${attachments.length}`,
+            `[mirror] hydration timeout job=${job._id} source_message=${job.sourceMessageId} waited_ms=${waitedMs} any_ready=${anyImageReady}`,
           );
         }
       }
@@ -800,7 +822,9 @@ export const listSignalMirrorJobs = query({
   },
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(200, args.limit ?? 50));
-    const rows = await ctx.db
+
+    // Fetch recent jobs (newest first) — broad scan so we catch non-failed jobs.
+    const recentRows = await ctx.db
       .query("signalMirrorJobs")
       .withIndex("by_tenant_connector", (q) =>
         q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
@@ -808,7 +832,27 @@ export const listSignalMirrorJobs = query({
       .order("desc")
       .take(limit * 4);
 
-    const filtered = rows
+    // Always surface ALL failed jobs for this connector regardless of age.
+    // Failed jobs are typically few; cap at 200 to avoid runaway scans.
+    const recentIds = new Set(recentRows.map((r) => r._id));
+    const failedRows = args.status && args.status !== "failed"
+      ? [] // status filter explicitly excludes failed — skip
+      : await ctx.db
+          .query("signalMirrorJobs")
+          .withIndex("by_tenant_connector", (q) =>
+            q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+          )
+          .filter((q) => q.eq(q.field("status"), "failed"))
+          .order("desc")
+          .take(200);
+
+    // Merge: failed jobs first (pinned), then recent rows not already included.
+    const mergedRows = [
+      ...failedRows,
+      ...recentRows.filter((r) => !failedRows.some((f) => f._id === r._id)),
+    ];
+
+    const filtered = mergedRows
       .filter((row) => (args.status ? row.status === args.status : true))
       .slice(0, limit);
 
