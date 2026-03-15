@@ -6,6 +6,7 @@ type MappingsConnectorDetailPageProps = {
     tenantKey: string;
     connectorId: string;
   }>;
+  searchParams: Promise<{ tab?: string }>;
 };
 
 function safeDecode(value: string): string {
@@ -18,13 +19,14 @@ function safeDecode(value: string): string {
 
 export default async function MappingsConnectorDetailPage({
   params,
+  searchParams,
 }: MappingsConnectorDetailPageProps) {
   const { tenantKey, connectorId } = await params;
+  const { tab } = await searchParams;
   const decodedTenantKey = safeDecode(tenantKey);
   const decodedConnectorId = safeDecode(connectorId);
-  const breadcrumbs = buildAdminBreadcrumbs(
-    `/mappings/${encodeURIComponent(decodedTenantKey)}/${encodeURIComponent(decodedConnectorId)}`,
-  );
+  const basePath = `/mappings/${encodeURIComponent(decodedTenantKey)}/${encodeURIComponent(decodedConnectorId)}`;
+  const breadcrumbs = buildAdminBreadcrumbs(tab ? `${basePath}?tab=${encodeURIComponent(tab)}` : basePath);
 
   return (
     <ConnectorWorkspace

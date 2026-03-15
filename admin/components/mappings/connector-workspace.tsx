@@ -1,14 +1,21 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useSearchParams } from "next/navigation";
+import { useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { AdminSectionCard } from "@/components/admin/admin-section-card";
-import { AdminTableShell } from "@/components/admin/admin-table-shell";
+import { CONNECTOR_SUB_NAV_TABS } from "@/lib/adminRoutes";
+import { ConnectorOverviewTab } from "./connector-overview-tab";
+import { ConnectorRoutesTab } from "./connector-routes-tab";
+import { ConnectorJobsTab } from "./connector-jobs-tab";
+import { ConnectorSettingsTab } from "./connector-settings-tab";
 
-type ConnectorRow = {
+// ── Shared types (exported for use by tab components) ──────────────────────
+
+export type ConnectorRow = {
   _id: string;
   tenantKey: string;
   connectorId: string;
@@ -19,7 +26,7 @@ type ConnectorRow = {
   lastSeenAt: number;
 };
 
-type SourceRow = {
+export type SourceRow = {
   _id: string;
   guildId: string;
   channelId: string;
@@ -29,7 +36,7 @@ type SourceRow = {
   isEnabled: boolean;
 };
 
-type MappingRow = {
+export type MappingRow = {
   _id: string;
   sourceChannelId: string;
   targetChannelId: string;
@@ -39,11 +46,11 @@ type MappingRow = {
   transformJson?: unknown;
 };
 
-type SubscriptionTier = "basic" | "advanced" | "pro";
+export type SubscriptionTier = "basic" | "advanced" | "pro";
 
-type SourceGuildRow = { _id: string; guildId: string; name: string };
-type SourceChannelRow = { _id: string; channelId: string; guildId: string; name: string };
-type BotGuildRow = {
+export type SourceGuildRow = { _id: string; guildId: string; name: string };
+export type SourceChannelRow = { _id: string; channelId: string; guildId: string; name: string };
+export type BotGuildRow = {
   guildId: string;
   name: string;
   icon: string | null;
@@ -51,7 +58,7 @@ type BotGuildRow = {
   lastSeenAt: number;
   updatedAt: number;
 };
-type BotChannelRow = {
+export type BotChannelRow = {
   guildId: string;
   channelId: string;
   name: string;
@@ -62,12 +69,12 @@ type BotChannelRow = {
   lastSeenAt: number;
   updatedAt: number;
 };
-type MirrorRuntimeStatusRow = {
+export type MirrorRuntimeStatusRow = {
   hasMirrorBotToken: boolean;
   usesDedicatedMirrorToken: boolean;
   sharedRoleSyncTokenFallback: boolean;
 };
-type MirrorQueueStatsRow = {
+export type MirrorQueueStatsRow = {
   pending: number;
   pendingReady: number;
   processing: number;
@@ -76,19 +83,19 @@ type MirrorQueueStatsRow = {
   total: number;
   updatedAt: number;
 };
-type MirrorLatencySummaryRow = {
+export type MirrorLatencySummaryRow = {
   count: number;
   p50Ms: number | null;
   p95Ms: number | null;
   maxMs: number | null;
 };
-type MirrorLatencyStatsRow = {
+export type MirrorLatencyStatsRow = {
   windowMinutes: number;
   create: MirrorLatencySummaryRow;
   update: MirrorLatencySummaryRow;
   delete: MirrorLatencySummaryRow;
 };
-type MirrorJobAttachment = {
+export type MirrorJobAttachment = {
   url: string;
   name?: string;
   contentType?: string;
@@ -96,12 +103,12 @@ type MirrorJobAttachment = {
   hasMirrorUrl: boolean;
   attachmentId?: string;
 };
-type MirrorJobMediaRow = {
+export type MirrorJobMediaRow = {
   attachmentKey: string;
   status: string;
   hasStorageId: boolean;
 };
-type MirrorJobRow = {
+export type MirrorJobRow = {
   jobId: string;
   sourceMessageId: string;
   sourceChannelId: string;
@@ -121,7 +128,7 @@ type MirrorJobRow = {
   mediaRows: MirrorJobMediaRow[];
   mirroredMessageId: string | null;
 };
-type SeatSnapshotRow = {
+export type SeatSnapshotRow = {
   tenantKey: string;
   connectorId: string;
   guildId: string;
@@ -134,7 +141,7 @@ type SeatSnapshotRow = {
   lastError: string | null;
   updatedAt: number;
 };
-type ServerConfigRow = {
+export type ServerConfigRow = {
   tenantKey: string;
   connectorId: string;
   guildId: string;
@@ -147,1001 +154,144 @@ type ServerConfigRow = {
   createdAt: number;
 };
 
+// ── Module-level Convex query references ──────────────────────────────────
+
+const getConnectorRef = makeFunctionReference<
+  "query",
+  { tenantKey: string; connectorId: string },
+  ConnectorRow | null
+>("connectors:getConnector");
+
+const listSourcesRef = makeFunctionReference<
+  "query",
+  { tenantKey: string; connectorId: string },
+  SourceRow[]
+>("connectors:listSources");
+
+const listMappingsRef = makeFunctionReference<
+  "query",
+  { tenantKey: string; connectorId: string },
+  MappingRow[]
+>("connectors:listMappings");
+
+const listSourceGuildsRef = makeFunctionReference<
+  "query",
+  { tenantKey: string; connectorId: string },
+  SourceGuildRow[]
+>("discovery:listGuilds");
+
+const listSourceChannelsRef = makeFunctionReference<
+  "query",
+  { tenantKey: string; connectorId: string; guildId?: string },
+  SourceChannelRow[]
+>("discovery:listChannels");
+
+const listBotGuildsRef = makeFunctionReference<
+  "query",
+  { includeInactive?: boolean },
+  BotGuildRow[]
+>("discordBotPresence:listBotGuilds");
+
+const listBotGuildChannelsRef = makeFunctionReference<
+  "query",
+  { guildId?: string; includeInactive?: boolean },
+  BotChannelRow[]
+>("discordBotPresence:listBotGuildChannels");
+
+const getMirrorRuntimeStatusRef = makeFunctionReference<
+  "query",
+  Record<string, never>,
+  MirrorRuntimeStatusRow
+>("mirror:getSignalMirrorRuntimeStatus");
+
+const getMirrorQueueStatsRef = makeFunctionReference<
+  "query",
+  { tenantKey: string; connectorId: string },
+  MirrorQueueStatsRow
+>("mirror:getSignalMirrorQueueStats");
+
+const listMirrorJobsRef = makeFunctionReference<
+  "query",
+  { tenantKey: string; connectorId: string; limit?: number },
+  MirrorJobRow[]
+>("mirror:listSignalMirrorJobs");
+
+const getMirrorLatencyStatsRef = makeFunctionReference<
+  "query",
+  { tenantKey: string; connectorId: string; windowMinutes?: number },
+  MirrorLatencyStatsRow
+>("mirror:getSignalMirrorLatencyStats");
+
+const listSeatSnapshotsRef = makeFunctionReference<
+  "query",
+  { tenantKey: string; connectorId: string },
+  SeatSnapshotRow[]
+>("discordSeatAudit:listSeatSnapshotsByConnector");
+
+const listServerConfigsRef = makeFunctionReference<
+  "query",
+  { tenantKey: string; connectorId: string },
+  ServerConfigRow[]
+>("discordServerConfig:listServerConfigsByConnector");
+
+// ── Tab routing ────────────────────────────────────────────────────────────
+
+const VALID_TABS = ["overview", "routes", "jobs", "settings"] as const;
+type TabValue = (typeof VALID_TABS)[number];
+
+function resolveTab(param: string | null): TabValue {
+  return (VALID_TABS as readonly string[]).includes(param ?? "")
+    ? (param as TabValue)
+    : "overview";
+}
+
+// ── Component ──────────────────────────────────────────────────────────────
+
 type ConnectorWorkspaceProps = {
   tenantKey: string;
   connectorId: string;
   breadcrumbs?: readonly string[];
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function normalizeRolePingId(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const normalized = value.trim();
-  if (!normalized) return null;
-  if (!/^\d{5,25}$/.test(normalized)) return null;
-  return normalized;
-}
-
-function extractRolePingId(transformJson: unknown): string {
-  if (!isRecord(transformJson)) return "";
-  return normalizeRolePingId(transformJson.rolePingId) ?? "";
-}
-
-function mergeRolePingIdIntoTransformJson(args: {
-  transformJson: unknown;
-  rolePingIdInput: string;
-}): Record<string, unknown> | undefined {
-  const base = isRecord(args.transformJson) ? { ...args.transformJson } : {};
-  const normalizedRolePingId = normalizeRolePingId(args.rolePingIdInput);
-  if (normalizedRolePingId) {
-    base.rolePingId = normalizedRolePingId;
-  } else {
-    delete base.rolePingId;
-  }
-  return Object.keys(base).length > 0 ? base : undefined;
-}
-
-export function ConnectorWorkspace({
+function ConnectorWorkspaceInner({
   tenantKey,
   connectorId,
   breadcrumbs,
 }: ConnectorWorkspaceProps) {
+  const searchParams = useSearchParams();
+  const activeTab = resolveTab(searchParams.get("tab"));
+
   const hasRouteParams = tenantKey !== "" && connectorId !== "";
+  const connectorArgs = hasRouteParams ? { tenantKey, connectorId } : ("skip" as const);
 
-  const getConnector = useMemo(
-    () =>
-      makeFunctionReference<
-        "query",
-        { tenantKey: string; connectorId: string },
-        ConnectorRow | null
-      >("connectors:getConnector"),
-    [],
-  );
-  const listSources = useMemo(
-    () =>
-      makeFunctionReference<
-        "query",
-        { tenantKey: string; connectorId: string },
-        SourceRow[]
-      >("connectors:listSources"),
-    [],
-  );
-  const listMappings = useMemo(
-    () =>
-      makeFunctionReference<
-        "query",
-        { tenantKey: string; connectorId: string },
-        MappingRow[]
-      >("connectors:listMappings"),
-    [],
-  );
-  const listSourceGuilds = useMemo(
-    () =>
-      makeFunctionReference<
-        "query",
-        { tenantKey: string; connectorId: string },
-        SourceGuildRow[]
-      >("discovery:listGuilds"),
-    [],
-  );
-  const listSourceChannels = useMemo(
-    () =>
-      makeFunctionReference<
-        "query",
-        { tenantKey: string; connectorId: string; guildId?: string },
-        SourceChannelRow[]
-      >("discovery:listChannels"),
-    [],
-  );
-  const listBotGuilds = useMemo(
-    () =>
-      makeFunctionReference<
-        "query",
-        { includeInactive?: boolean },
-        BotGuildRow[]
-      >("discordBotPresence:listBotGuilds"),
-    [],
-  );
-  const listBotGuildChannels = useMemo(
-    () =>
-      makeFunctionReference<
-        "query",
-        { guildId?: string; includeInactive?: boolean },
-        BotChannelRow[]
-      >("discordBotPresence:listBotGuildChannels"),
-    [],
-  );
-
-  const rotateConnectorToken = useMemo(
-    () =>
-      makeFunctionReference<
-        "mutation",
-        { tenantKey: string; connectorId: string },
-        { token: string }
-      >("connectors:rotateConnectorToken"),
-    [],
-  );
-  const setStatus = useMemo(
-    () =>
-      makeFunctionReference<
-        "mutation",
-        { tenantKey: string; connectorId: string; status: "active" | "paused" },
-        { ok: true }
-      >("connectors:setConnectorStatus"),
-    [],
-  );
-  const setForwardingEnabled = useMemo(
-    () =>
-      makeFunctionReference<
-        "mutation",
-        { tenantKey: string; connectorId: string; enabled: boolean },
-        { ok: true }
-      >("connectors:setForwardingEnabled"),
-    [],
-  );
-  const upsertSource = useMemo(
-    () =>
-      makeFunctionReference<
-        "mutation",
-        {
-          tenantKey: string;
-          connectorId: string;
-          guildId: string;
-          channelId: string;
-          isSource: boolean;
-          isTarget: boolean;
-          threadMode?: "include" | "exclude" | "only";
-          isEnabled: boolean;
-        },
-        { ok: true }
-      >("connectors:upsertSource"),
-    [],
-  );
-  const removeSource = useMemo(
-    () =>
-      makeFunctionReference<
-        "mutation",
-        { tenantKey: string; connectorId: string; channelId: string },
-        { ok: true }
-      >("connectors:removeSource"),
-    [],
-  );
-  const upsertMapping = useMemo(
-    () =>
-      makeFunctionReference<
-        "mutation",
-        {
-          tenantKey: string;
-          connectorId: string;
-          sourceChannelId: string;
-          targetChannelId: string;
-          dashboardEnabled?: boolean;
-          minimumTier?: SubscriptionTier;
-          priority?: number;
-          transformJson?: unknown;
-        },
-        { ok: true }
-      >("connectors:upsertMapping"),
-    [],
-  );
-  const removeMapping = useMemo(
-    () =>
-      makeFunctionReference<
-        "mutation",
-        { tenantKey: string; connectorId: string; sourceChannelId: string },
-        { ok: true }
-      >("connectors:removeMapping"),
-    [],
-  );
-  const requestChannelDiscovery = useMemo(
-    () =>
-      makeFunctionReference<
-        "mutation",
-        { tenantKey: string; connectorId: string; guildId?: string },
-        { ok: true; requestVersion: number }
-      >("connectors:requestChannelDiscovery"),
-    [],
-  );
-  const getMirrorRuntimeStatus = useMemo(
-    () =>
-      makeFunctionReference<
-        "query",
-        Record<string, never>,
-        MirrorRuntimeStatusRow
-      >("mirror:getSignalMirrorRuntimeStatus"),
-    [],
-  );
-  const getMirrorQueueStats = useMemo(
-    () =>
-      makeFunctionReference<
-        "query",
-        { tenantKey: string; connectorId: string },
-        MirrorQueueStatsRow
-      >("mirror:getSignalMirrorQueueStats"),
-    [],
-  );
-  const listMirrorJobs = useMemo(
-    () =>
-      makeFunctionReference<
-        "query",
-        { tenantKey: string; connectorId: string; limit?: number },
-        MirrorJobRow[]
-      >("mirror:listSignalMirrorJobs"),
-    [],
-  );
-  const requeueMirrorJob = useMemo(
-    () =>
-      makeFunctionReference<
-        "mutation",
-        { tenantKey: string; connectorId: string; sourceMessageId: string; targetChannelId: string },
-        { ok: boolean; reason?: string; enqueued?: number; deduped?: number }
-      >("mirror:requeueMirrorJobForTarget"),
-    [],
-  );
-  const getMirrorLatencyStats = useMemo(
-    () =>
-      makeFunctionReference<
-        "query",
-        { tenantKey: string; connectorId: string; windowMinutes?: number },
-        MirrorLatencyStatsRow
-      >("mirror:getSignalMirrorLatencyStats"),
-    [],
-  );
-  const listSeatSnapshotsByConnector = useMemo(
-    () =>
-      makeFunctionReference<
-        "query",
-        { tenantKey: string; connectorId: string },
-        SeatSnapshotRow[]
-      >("discordSeatAudit:listSeatSnapshotsByConnector"),
-    [],
-  );
-  const listServerConfigsByConnector = useMemo(
-    () =>
-      makeFunctionReference<
-        "query",
-        { tenantKey: string; connectorId: string },
-        ServerConfigRow[]
-      >("discordServerConfig:listServerConfigsByConnector"),
-    [],
-  );
-  const upsertServerConfig = useMemo(
-    () =>
-      makeFunctionReference<
-        "mutation",
-        {
-          tenantKey: string;
-          connectorId: string;
-          guildId: string;
-          seatLimit: number;
-          seatEnforcementEnabled: boolean;
-        },
-        { ok: true }
-      >("discordServerConfig:upsertServerConfig"),
-    [],
-  );
-  const removeServerConfig = useMemo(
-    () =>
-      makeFunctionReference<
-        "mutation",
-        { tenantKey: string; connectorId: string; guildId: string },
-        { ok: true; removed: boolean }
-      >("discordServerConfig:removeServerConfig"),
-    [],
-  );
-
-  const connectorArgs = hasRouteParams ? { tenantKey, connectorId } : "skip";
-  const connector = useQuery(getConnector, connectorArgs);
-  const sources = useQuery(listSources, connectorArgs) ?? [];
-  const mappings = useQuery(listMappings, connectorArgs) ?? [];
-  const sourceGuilds = useQuery(listSourceGuilds, connectorArgs) ?? [];
-  const botGuilds = useQuery(listBotGuilds, {}) ?? [];
-  const botChannels = useQuery(
-    listBotGuildChannels,
-    hasRouteParams ? { includeInactive: false } : "skip",
-  ) ?? [];
-  const mirrorRuntime = useQuery(getMirrorRuntimeStatus, {});
-  const mirrorQueueStats = useQuery(getMirrorQueueStats, connectorArgs);
+  const connector = useQuery(getConnectorRef, connectorArgs);
+  const sources = useQuery(listSourcesRef, connectorArgs) ?? [];
+  const mappings = useQuery(listMappingsRef, connectorArgs) ?? [];
+  const sourceGuilds = useQuery(listSourceGuildsRef, connectorArgs) ?? [];
+  const allChannels = useQuery(listSourceChannelsRef, connectorArgs) ?? [];
+  const botGuilds = useQuery(listBotGuildsRef, {}) ?? [];
+  const botChannels =
+    useQuery(listBotGuildChannelsRef, hasRouteParams ? { includeInactive: false } : "skip") ?? [];
+  const mirrorRuntime = useQuery(getMirrorRuntimeStatusRef, {});
+  const mirrorQueueStats = useQuery(getMirrorQueueStatsRef, connectorArgs);
   const mirrorLatencyStats = useQuery(
-    getMirrorLatencyStats,
+    getMirrorLatencyStatsRef,
     hasRouteParams ? { tenantKey, connectorId, windowMinutes: 60 } : "skip",
   );
-  const mirrorJobs = useQuery(
-    listMirrorJobs,
-    hasRouteParams ? { tenantKey, connectorId, limit: 50 } : "skip",
-  ) ?? [];
-  const seatSnapshots = useQuery(
-    listSeatSnapshotsByConnector,
-    hasRouteParams ? { tenantKey, connectorId } : "skip",
-  ) ?? [];
-  const serverConfigs = useQuery(
-    listServerConfigsByConnector,
-    hasRouteParams ? { tenantKey, connectorId } : "skip",
-  ) ?? [];
+  const mirrorJobs =
+    useQuery(listMirrorJobsRef, hasRouteParams ? { tenantKey, connectorId, limit: 50 } : "skip") ??
+    [];
+  const seatSnapshots = useQuery(listSeatSnapshotsRef, connectorArgs) ?? [];
+  const serverConfigs = useQuery(listServerConfigsRef, connectorArgs) ?? [];
 
-  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
-  const [requeueingJobId, setRequeuingJobId] = useState<string | null>(null);
-  const [requeueResult, setRequeueResult] = useState<{ jobId: string; message: string; ok: boolean } | null>(null);
-  const [sourceGuildFilterId, setSourceGuildFilterId] = useState<string>("");
-  const [newSourceGuildId, setNewSourceGuildId] = useState("");
-  const [newSourceChannelId, setNewSourceChannelId] = useState("");
-  const [newSourceThreadMode, setNewSourceThreadMode] = useState("");
-  const [newSourceEnabled, setNewSourceEnabled] = useState(true);
-  const [editingSourceChannelId, setEditingSourceChannelId] = useState<string | null>(null);
-  const [sourceFormMessage, setSourceFormMessage] = useState<string | null>(null);
-  const [sourceFormError, setSourceFormError] = useState<string | null>(null);
-  const [newTargetGuildId, setNewTargetGuildId] = useState("");
-  const [newTargetChannelId, setNewTargetChannelId] = useState("");
-  const [targetFormMessage, setTargetFormMessage] = useState<string | null>(null);
-  const [targetFormError, setTargetFormError] = useState<string | null>(null);
-  const [targetFormSaving, setTargetFormSaving] = useState(false);
-
-  const sourceChannelsArgs = !hasRouteParams
-    ? "skip"
-    : newSourceGuildId
-      ? { tenantKey, connectorId, guildId: newSourceGuildId }
-      : { tenantKey, connectorId };
-  const sourceChannels = useQuery(listSourceChannels, sourceChannelsArgs) ?? [];
-
-  const allChannels = useQuery(listSourceChannels, connectorArgs) ?? [];
-
-  const doRotate = useMutation(rotateConnectorToken);
-  const doSetStatus = useMutation(setStatus);
-  const doSetForwardingEnabled = useMutation(setForwardingEnabled);
-  const doUpsertSource = useMutation(upsertSource);
-  const doRemoveSource = useMutation(removeSource);
-  const doUpsertMapping = useMutation(upsertMapping);
-  const doRemoveMapping = useMutation(removeMapping);
-  const doRequestChannelDiscovery = useMutation(requestChannelDiscovery);
-  const doUpsertServerConfig = useMutation(upsertServerConfig);
-  const doRemoveServerConfig = useMutation(removeServerConfig);
-  const doRequeue = useMutation(requeueMirrorJob);
-
-  const [lastToken, setLastToken] = useState<string | null>(null);
-  const [isRotating, setIsRotating] = useState(false);
-  const [isUpdatingForwarding, setIsUpdatingForwarding] = useState(false);
-  const [isRequestingChannels, setIsRequestingChannels] = useState(false);
-  const [lastDiscoveryRequestVersion, setLastDiscoveryRequestVersion] = useState<number | null>(null);
-
-  const [newMappingSource, setNewMappingSource] = useState("");
-  const [newMappingTarget, setNewMappingTarget] = useState("");
-  const [newMappingPriority, setNewMappingPriority] = useState<string>("");
-  const [newMappingDashboardEnabled, setNewMappingDashboardEnabled] = useState(false);
-  const [newMappingMinimumTier, setNewMappingMinimumTier] =
-    useState<SubscriptionTier>("basic");
-  const [newMappingRolePingId, setNewMappingRolePingId] = useState("");
-  const [editingMappingSourceChannelId, setEditingMappingSourceChannelId] = useState<string | null>(
-    null,
-  );
-  const [mappingFormMessage, setMappingFormMessage] = useState<string | null>(null);
-  const [mappingFormError, setMappingFormError] = useState<string | null>(null);
-  const [editingSeatGuildId, setEditingSeatGuildId] = useState<string | null>(null);
-  const [seatLimitDraft, setSeatLimitDraft] = useState("0");
-  const [seatEnforcementDraft, setSeatEnforcementDraft] = useState(true);
-  const [seatConfigSaving, setSeatConfigSaving] = useState(false);
-  const [seatConfigMessage, setSeatConfigMessage] = useState<string | null>(null);
-  const [seatConfigError, setSeatConfigError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!newSourceGuildId || !newSourceChannelId) return;
-    if (editingSourceChannelId === newSourceChannelId) return;
-    if (!sourceChannels.some((channel) => channel.channelId === newSourceChannelId)) {
-      setNewSourceChannelId("");
-    }
-  }, [newSourceGuildId, newSourceChannelId, sourceChannels, editingSourceChannelId]);
-
-  useEffect(() => {
-    if (botGuilds.length === 0) {
-      setNewTargetGuildId("");
-      return;
-    }
-    const exists = botGuilds.some((guild) => guild.guildId === newTargetGuildId);
-    if (!exists) {
-      setNewTargetGuildId(botGuilds[0].guildId);
-    }
-  }, [botGuilds, newTargetGuildId]);
-
-  useEffect(() => {
-    if (!newTargetGuildId || !newTargetChannelId) return;
-    const exists = botChannels.some(
-      (channel) =>
-        channel.guildId === newTargetGuildId &&
-        channel.channelId === newTargetChannelId,
-    );
-    if (!exists) {
-      setNewTargetChannelId("");
-    }
-  }, [newTargetGuildId, newTargetChannelId, botChannels]);
-
-  const guildNameById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const guild of sourceGuilds) {
-      map.set(guild.guildId, guild.name);
-    }
-    for (const guild of botGuilds) {
-      if (!map.has(guild.guildId)) {
-        map.set(guild.guildId, guild.name);
-      }
-    }
-    return map;
-  }, [sourceGuilds, botGuilds]);
-  const channelNameById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const channel of allChannels) {
-      map.set(channel.channelId, channel.name);
-    }
-    for (const channel of botChannels) {
-      if (!map.has(channel.channelId)) {
-        map.set(channel.channelId, channel.name);
-      }
-    }
-    return map;
-  }, [allChannels, botChannels]);
-  const guildIdByChannelId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const source of sources) {
-      map.set(source.channelId, source.guildId);
-    }
-    for (const channel of botChannels) {
-      if (!map.has(channel.channelId)) {
-        map.set(channel.channelId, channel.guildId);
-      }
-    }
-    return map;
-  }, [sources, botChannels]);
-  const botChannelById = useMemo(
-    () => new Map(botChannels.map((channel) => [channel.channelId, channel])),
-    [botChannels],
-  );
-  const selectedMappingTargetGuildId = newTargetGuildId.trim();
-  const serverConfigByGuildId = useMemo(
-    () => new Map(serverConfigs.map((row) => [row.guildId, row])),
-    [serverConfigs],
-  );
-  const seatSnapshotByGuildId = useMemo(
-    () => new Map(seatSnapshots.map((row) => [row.guildId, row])),
-    [seatSnapshots],
-  );
-  const configuredSeatRows = useMemo(
-    () =>
-      [...serverConfigs]
-        .sort((a, b) => a.guildId.localeCompare(b.guildId))
-        .map((config) => ({
-          guildId: config.guildId,
-          config,
-          snapshot: seatSnapshotByGuildId.get(config.guildId) ?? null,
-        })),
-    [serverConfigs, seatSnapshotByGuildId],
-  );
-  const unconfiguredSeatSnapshots = useMemo(
-    () =>
-      seatSnapshots
-        .filter((snapshot) => !serverConfigByGuildId.has(snapshot.guildId))
-        .sort((a, b) => a.guildId.localeCompare(b.guildId)),
-    [seatSnapshots, serverConfigByGuildId],
-  );
-
-  const availableChannels = useMemo(() => {
-    const byChannelId = new Map<
-      string,
-      { guildId: string; channelId: string; isSource: boolean; isTarget: boolean }
-    >();
-    for (const source of sources) {
-      if (!source.isEnabled) continue;
-      if (!source.guildId || !source.channelId) continue;
-      byChannelId.set(source.channelId, {
-        guildId: source.guildId,
-        channelId: source.channelId,
-        isSource: source.isSource ?? true,
-        isTarget: source.isTarget === true,
-      });
-    }
-    const rows = Array.from(byChannelId.values());
-    rows.sort((a, b) => {
-      const guildCmp = renderGuildLabel(a.guildId).localeCompare(renderGuildLabel(b.guildId));
-      if (guildCmp !== 0) return guildCmp;
-      return renderChannelLabel(a.channelId).localeCompare(renderChannelLabel(b.channelId));
-    });
-    return rows;
-  }, [sources, guildNameById, channelNameById]);
-
-  const mappingSourceOptions = useMemo(() => {
-    const scoped = sourceGuildFilterId
-      ? availableChannels.filter((channel) => channel.guildId === sourceGuildFilterId)
-      : availableChannels;
-    return scoped.filter((channel) => channel.isSource);
-  }, [availableChannels, sourceGuildFilterId]);
-  const mappingTargetOptions = useMemo(
-    () =>
-      selectedMappingTargetGuildId
-        ? botChannels.filter((channel) => channel.guildId === selectedMappingTargetGuildId)
-        : [],
-    [botChannels, selectedMappingTargetGuildId],
-  );
-  const wizardTargetChannels = useMemo(
-    () =>
-      newTargetGuildId
-        ? botChannels.filter((channel) => channel.guildId === newTargetGuildId)
-        : [],
-    [botChannels, newTargetGuildId],
-  );
-
-  useEffect(() => {
-    if (editingMappingSourceChannelId && newMappingSource === editingMappingSourceChannelId) return;
-    if (newMappingSource && !mappingSourceOptions.some((channel) => channel.channelId === newMappingSource)) {
-      setNewMappingSource("");
-    }
-    if (newMappingTarget && !mappingTargetOptions.some((channel) => channel.channelId === newMappingTarget)) {
-      setNewMappingTarget("");
-    }
-  }, [
-    mappingSourceOptions,
-    mappingTargetOptions,
-    newMappingSource,
-    newMappingTarget,
-    editingMappingSourceChannelId,
-  ]);
-
-  useEffect(() => {
-    if (!hasRouteParams) return;
-    console.info(
-      `[admin/connectors] mapping route split tenant=${tenantKey} connector=${connectorId} source_filter=${sourceGuildFilterId || "all"} target_guild=${selectedMappingTargetGuildId || "none"} source_options=${mappingSourceOptions.length} target_options=${mappingTargetOptions.length}`,
-    );
-  }, [
-    hasRouteParams,
-    tenantKey,
-    connectorId,
-    sourceGuildFilterId,
-    selectedMappingTargetGuildId,
-    mappingSourceOptions.length,
-    mappingTargetOptions.length,
-  ]);
-
-  useEffect(() => {
-    if (!mirrorQueueStats || !hasRouteParams) return;
-    console.info(
-      `[admin/connectors] mirror queue tenant=${tenantKey} connector=${connectorId} pending=${mirrorQueueStats.pending} processing=${mirrorQueueStats.processing} failed=${mirrorQueueStats.failed}`,
-    );
-  }, [mirrorQueueStats, hasRouteParams, tenantKey, connectorId]);
-
-  useEffect(() => {
-    if (!mirrorLatencyStats || !hasRouteParams) return;
-    console.info(
-      `[admin/connectors] mirror latency tenant=${tenantKey} connector=${connectorId} window_min=${mirrorLatencyStats.windowMinutes} create_p95_ms=${mirrorLatencyStats.create.p95Ms ?? -1} update_p95_ms=${mirrorLatencyStats.update.p95Ms ?? -1} delete_p95_ms=${mirrorLatencyStats.delete.p95Ms ?? -1}`,
-    );
-  }, [mirrorLatencyStats, hasRouteParams, tenantKey, connectorId]);
-
-  useEffect(() => {
-    if (!hasRouteParams || (seatSnapshots.length === 0 && serverConfigs.length === 0)) return;
-    const overLimitCount = seatSnapshots.filter((snapshot) => snapshot.isOverLimit).length;
-    console.info(
-      `[admin/connectors] seat snapshot tenant=${tenantKey} connector=${connectorId} snapshots=${seatSnapshots.length} configured=${serverConfigs.length} over_limit=${overLimitCount}`,
-    );
-  }, [
-    seatSnapshots.length,
-    serverConfigs.length,
-    hasRouteParams,
-    tenantKey,
-    connectorId,
-  ]);
-
-  function renderGuildLabel(guildId: string) {
-    return `${guildNameById.get(guildId) ?? "Unknown guild"} (${guildId})`;
-  }
-
-  function renderChannelLabel(channelId: string) {
-    return `${channelNameById.get(channelId) ?? "Unknown channel"} (${channelId})`;
-  }
-
-  function renderChannelRouteLabel(channelId: string) {
-    const guildId = guildIdByChannelId.get(channelId);
-    if (!guildId) return renderChannelLabel(channelId);
-    return `${renderGuildLabel(guildId)} / ${renderChannelLabel(channelId)}`;
-  }
-
-  function renderLatency(value: number | null) {
-    if (value === null) return "n/a";
-    return `${Math.round(value)}ms`;
-  }
-
-  function formatDateTime(value: number | null | undefined) {
-    if (!value) return "n/a";
-    return new Date(value).toLocaleString();
-  }
-
-  function resetSourceForm() {
-    setEditingSourceChannelId(null);
-    setNewSourceGuildId("");
-    setNewSourceChannelId("");
-    setNewSourceThreadMode("");
-    setNewSourceEnabled(true);
-  }
-
-  function startEditSource(source: SourceRow) {
-    setEditingSourceChannelId(source.channelId);
-    setNewSourceGuildId(source.guildId);
-    setNewSourceChannelId(source.channelId);
-    setNewSourceThreadMode(source.threadMode ?? "");
-    setNewSourceEnabled(source.isEnabled);
-    setSourceFormMessage(null);
-    setSourceFormError(null);
-  }
-
-  function cancelEditSource() {
-    resetSourceForm();
-    setSourceFormMessage(null);
-    setSourceFormError(null);
-  }
-
-  function resetMappingForm() {
-    setEditingMappingSourceChannelId(null);
-    setNewMappingSource("");
-    setNewMappingTarget("");
-    setNewMappingPriority("");
-    setNewMappingDashboardEnabled(false);
-    setNewMappingMinimumTier("basic");
-    setNewMappingRolePingId("");
-  }
-
-  function startEditMapping(mapping: MappingRow) {
-    const mappedTargetGuildId =
-      botChannelById.get(mapping.targetChannelId)?.guildId ??
-      guildIdByChannelId.get(mapping.targetChannelId);
-    if (mappedTargetGuildId) {
-      setNewTargetGuildId(mappedTargetGuildId);
-    }
-    setEditingMappingSourceChannelId(mapping.sourceChannelId);
-    setNewMappingSource(mapping.sourceChannelId);
-    setNewMappingTarget(mapping.targetChannelId);
-    setNewMappingPriority(
-      typeof mapping.priority === "number" && Number.isFinite(mapping.priority)
-        ? String(mapping.priority)
-        : "",
-    );
-    setNewMappingDashboardEnabled(mapping.dashboardEnabled === true);
-    setNewMappingMinimumTier(mapping.minimumTier ?? "basic");
-    setNewMappingRolePingId(extractRolePingId(mapping.transformJson));
-    setMappingFormMessage(null);
-    setMappingFormError(null);
-  }
-
-  function cancelEditMapping() {
-    resetMappingForm();
-    setMappingFormMessage(null);
-    setMappingFormError(null);
-  }
-
-  function renderJobStatusBadge(status: MirrorJobRow["status"]) {
-    if (status === "completed") {
-      return (
-        <span className="rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-300">
-          completed
-        </span>
-      );
-    }
-    if (status === "failed") {
-      return (
-        <span className="rounded-full border border-rose-400/30 bg-rose-500/15 px-2 py-0.5 text-xs font-semibold text-rose-300">
-          failed
-        </span>
-      );
-    }
-    if (status === "processing") {
-      return (
-        <span className="rounded-full border border-amber-400/30 bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-300">
-          processing
-        </span>
-      );
-    }
-    return (
-      <span className="rounded-full border border-slate-500/30 bg-slate-500/20 px-2 py-0.5 text-xs font-semibold text-slate-200">
-        pending
-      </span>
-    );
-  }
-
-  async function onRotate() {
-    if (!hasRouteParams) return;
-    setIsRotating(true);
-    setLastToken(null);
-    try {
-      const res = await doRotate({ tenantKey, connectorId });
-      setLastToken(res.token);
-    } finally {
-      setIsRotating(false);
-    }
-  }
-
-  async function onToggleStatus() {
-    if (!hasRouteParams || !connector) return;
-    const next = connector.status === "active" ? "paused" : "active";
-    await doSetStatus({ tenantKey, connectorId, status: next });
-  }
-
-  async function onToggleForwarding() {
-    if (!hasRouteParams || !connector) return;
-    const next = !(connector.forwardEnabled === true);
-    setIsUpdatingForwarding(true);
-    try {
-      await doSetForwardingEnabled({
-        tenantKey,
-        connectorId,
-        enabled: next,
-      });
-      console.info(
-        `[admin/connectors] forwarding updated tenant=${tenantKey} connector=${connectorId} enabled=${next}`,
-      );
-    } finally {
-      setIsUpdatingForwarding(false);
-    }
-  }
-
-  async function onSubmitSource() {
-    if (!hasRouteParams || !newSourceGuildId || !newSourceChannelId) return;
-    setSourceFormMessage(null);
-    setSourceFormError(null);
-    try {
-      await doUpsertSource({
-        tenantKey,
-        connectorId,
-        guildId: newSourceGuildId,
-        channelId: newSourceChannelId,
-        isSource: true,
-        isTarget: false,
-        threadMode:
-          newSourceThreadMode === "include" ||
-          newSourceThreadMode === "exclude" ||
-          newSourceThreadMode === "only"
-            ? newSourceThreadMode
-            : undefined,
-        isEnabled: newSourceEnabled,
-      });
-      setSourceFormMessage(
-        editingSourceChannelId
-          ? `Updated available channel ${renderChannelLabel(newSourceChannelId)}.`
-          : `Added available channel ${renderChannelLabel(newSourceChannelId)}.`,
-      );
-      console.info(
-        `[admin/connectors] source upsert tenant=${tenantKey} connector=${connectorId} channel=${newSourceChannelId} source=true target=false enabled=${newSourceEnabled}`,
-      );
-      if (editingSourceChannelId) {
-        setEditingSourceChannelId(null);
-      } else {
-        resetSourceForm();
-      }
-    } catch (error) {
-      const text = error instanceof Error ? error.message : "Failed to save available channel";
-      setSourceFormError(text);
-      console.error(`[admin/connectors] source upsert failed: ${text}`);
-    }
-  }
-
-  async function onAddTargetChannel() {
-    if (!hasRouteParams || !newTargetGuildId || !newTargetChannelId) return;
-    setTargetFormMessage(null);
-    setTargetFormError(null);
-    setTargetFormSaving(true);
-    try {
-      await doUpsertSource({
-        tenantKey,
-        connectorId,
-        guildId: newTargetGuildId,
-        channelId: newTargetChannelId,
-        isSource: false,
-        isTarget: true,
-        isEnabled: true,
-      });
-      setTargetFormMessage(
-        `Registered bot target channel ${renderChannelRouteLabel(newTargetChannelId)}.`,
-      );
-      console.info(
-        `[admin/connectors] target channel registered tenant=${tenantKey} connector=${connectorId} guild=${newTargetGuildId} channel=${newTargetChannelId}`,
-      );
-      setNewTargetChannelId("");
-    } catch (error) {
-      const text = error instanceof Error ? error.message : "Failed to register target channel";
-      setTargetFormError(text);
-      console.error(`[admin/connectors] target channel register failed: ${text}`);
-    } finally {
-      setTargetFormSaving(false);
-    }
-  }
-
-  async function onSubmitMapping() {
-    if (!hasRouteParams || !newMappingSource || !newMappingTarget) return;
-    setMappingFormMessage(null);
-    setMappingFormError(null);
-    const prio =
-      newMappingPriority.trim() === ""
-        ? undefined
-        : Number(newMappingPriority.trim());
-    const normalizedRolePingId = normalizeRolePingId(newMappingRolePingId);
-    if (newMappingRolePingId.trim() && !normalizedRolePingId) {
-      setMappingFormError("Role ping must be a valid Discord role ID.");
-      return;
-    }
-    try {
-      const targetChannel = botChannelById.get(newMappingTarget);
-      if (!targetChannel) {
-        throw new Error("target_channel_not_synced_from_bot");
-      }
-      const targetGuildId = targetChannel.guildId.trim();
-      if (!targetGuildId) {
-        throw new Error("target_guild_missing_for_channel");
-      }
-      if (selectedMappingTargetGuildId && targetGuildId !== selectedMappingTargetGuildId) {
-        throw new Error("target_channel_outside_selected_target_guild");
-      }
-
-      await doUpsertSource({
-        tenantKey,
-        connectorId,
-        guildId: targetGuildId,
-        channelId: newMappingTarget,
-        isSource: false,
-        isTarget: true,
-        isEnabled: true,
-      });
-
-      const existingMapping =
-        mappings.find((mapping) => mapping.sourceChannelId === newMappingSource) ??
-        (editingMappingSourceChannelId
-          ? mappings.find(
-              (mapping) => mapping.sourceChannelId === editingMappingSourceChannelId,
-            )
-          : undefined);
-      const transformJson = mergeRolePingIdIntoTransformJson({
-        transformJson: existingMapping?.transformJson,
-        rolePingIdInput: newMappingRolePingId,
-      });
-
-      await doUpsertMapping({
-        tenantKey,
-        connectorId,
-        sourceChannelId: newMappingSource,
-        targetChannelId: newMappingTarget,
-        dashboardEnabled: newMappingDashboardEnabled,
-        minimumTier: newMappingDashboardEnabled ? newMappingMinimumTier : undefined,
-        priority: Number.isFinite(prio) ? prio : undefined,
-        transformJson,
-      });
-      if (
-        editingMappingSourceChannelId &&
-        editingMappingSourceChannelId !== newMappingSource
-      ) {
-        await doRemoveMapping({
-          tenantKey,
-          connectorId,
-          sourceChannelId: editingMappingSourceChannelId,
-        });
-      }
-      setMappingFormMessage(
-        editingMappingSourceChannelId
-          ? `Updated mapping ${renderChannelRouteLabel(newMappingSource)} -> ${renderChannelRouteLabel(newMappingTarget)}.`
-          : `Added mapping ${renderChannelRouteLabel(newMappingSource)} -> ${renderChannelRouteLabel(newMappingTarget)}.`,
-      );
-      console.info(
-        `[admin/connectors] mapping upsert tenant=${tenantKey} connector=${connectorId} source=${newMappingSource} target=${newMappingTarget} target_guild=${targetGuildId ?? "unknown"} dashboard_enabled=${newMappingDashboardEnabled} minimum_tier=${newMappingDashboardEnabled ? newMappingMinimumTier : "none"} priority=${Number.isFinite(prio) ? prio : -1} role_ping=${normalizedRolePingId ?? "none"}`,
-      );
-      resetMappingForm();
-    } catch (error) {
-      const text = error instanceof Error ? error.message : "Failed to save mapping";
-      setMappingFormError(text);
-      console.error(`[admin/connectors] mapping upsert failed: ${text}`);
-    }
-  }
-
-  async function onRequestChannels() {
-    if (!hasRouteParams || !newSourceGuildId) return;
-    setIsRequestingChannels(true);
-    try {
-      const result = await doRequestChannelDiscovery({
-        tenantKey,
-        connectorId,
-        guildId: newSourceGuildId,
-      });
-      setLastDiscoveryRequestVersion(result.requestVersion);
-    } finally {
-      setIsRequestingChannels(false);
-    }
-  }
-
-  function startEditSeatConfig(guildId: string) {
-    const existing = serverConfigByGuildId.get(guildId);
-    const snapshot = seatSnapshotByGuildId.get(guildId);
-    setEditingSeatGuildId(guildId);
-    setSeatLimitDraft(String(existing?.seatLimit ?? snapshot?.seatLimit ?? 0));
-    setSeatEnforcementDraft(existing?.seatEnforcementEnabled ?? true);
-    setSeatConfigMessage(null);
-    setSeatConfigError(null);
-  }
-
-  function cancelEditSeatConfig() {
-    setEditingSeatGuildId(null);
-    setSeatLimitDraft("0");
-    setSeatEnforcementDraft(true);
-    setSeatConfigMessage(null);
-    setSeatConfigError(null);
-  }
-
-  async function onSaveSeatConfig() {
-    if (!hasRouteParams || !editingSeatGuildId) return;
-    const parsedLimit = Number.parseInt(seatLimitDraft.trim(), 10);
-    if (!Number.isFinite(parsedLimit) || parsedLimit < 0) {
-      setSeatConfigError("Seat limit must be a non-negative integer.");
-      return;
-    }
-    setSeatConfigSaving(true);
-    setSeatConfigMessage(null);
-    setSeatConfigError(null);
-    try {
-      await doUpsertServerConfig({
-        tenantKey,
-        connectorId,
-        guildId: editingSeatGuildId,
-        seatLimit: parsedLimit,
-        seatEnforcementEnabled: seatEnforcementDraft,
-      });
-      setSeatConfigMessage(
-        `Saved seat config for ${renderGuildLabel(editingSeatGuildId)}.`,
-      );
-      console.info(
-        `[admin/connectors] seat config saved tenant=${tenantKey} connector=${connectorId} guild=${editingSeatGuildId} seat_limit=${parsedLimit} enforcement=${seatEnforcementDraft}`,
-      );
-      setEditingSeatGuildId(null);
-    } catch (error) {
-      const text = error instanceof Error ? error.message : "Failed to save seat config";
-      setSeatConfigError(text);
-      console.error(
-        `[admin/connectors] seat config save failed tenant=${tenantKey} connector=${connectorId} guild=${editingSeatGuildId}: ${text}`,
-      );
-    } finally {
-      setSeatConfigSaving(false);
-    }
-  }
-
-  async function onDeleteSeatConfig(guildId: string) {
-    if (!hasRouteParams) return;
-    setSeatConfigSaving(true);
-    setSeatConfigMessage(null);
-    setSeatConfigError(null);
-    try {
-      const result = await doRemoveServerConfig({
-        tenantKey,
-        connectorId,
-        guildId,
-      });
-      if (editingSeatGuildId === guildId) {
-        setEditingSeatGuildId(null);
-      }
-      setSeatConfigMessage(
-        result.removed
-          ? `Deleted seat config for ${renderGuildLabel(guildId)}.`
-          : `No saved seat config found for ${renderGuildLabel(guildId)}.`,
-      );
-      console.info(
-        `[admin/connectors] seat config removed tenant=${tenantKey} connector=${connectorId} guild=${guildId} removed=${result.removed}`,
-      );
-    } catch (error) {
-      const text = error instanceof Error ? error.message : "Failed to delete seat config";
-      setSeatConfigError(text);
-      console.error(
-        `[admin/connectors] seat config remove failed tenant=${tenantKey} connector=${connectorId} guild=${guildId}: ${text}`,
-      );
-    } finally {
-      setSeatConfigSaving(false);
-    }
-  }
+  const connectorDetailPath = `/mappings/${encodeURIComponent(tenantKey)}/${encodeURIComponent(connectorId)}`;
 
   return (
     <div className="space-y-6">
       <AdminPageHeader
         chip="Mappings"
         title={`${tenantKey || "unknown"} / ${connectorId || "unknown"}`}
-        description="Runtime config, bot mirroring controls, and token management."
+        description="Configure connector routing, jobs, and settings."
         breadcrumbs={breadcrumbs}
         actions={
           <>
@@ -1175,959 +325,85 @@ export function ConnectorWorkspace({
           </p>
         </AdminSectionCard>
       ) : (
-        <AdminSectionCard>
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-semibold text-slate-200">
-              status: {connector.status}
-            </span>
-            <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-semibold text-slate-200">
-              mirroring: {connector.forwardEnabled === true ? "enabled" : "disabled"}
-            </span>
-            <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-semibold text-slate-200">
-              config: v{connector.configVersion}
-            </span>
-            <button
-              type="button"
-              onClick={onToggleStatus}
-              className="admin-btn-secondary"
-            >
-              Toggle status
-            </button>
-            <button
-              type="button"
-              onClick={onRotate}
-              disabled={isRotating}
-              className="admin-btn-secondary"
-            >
-              {isRotating ? "Rotating..." : "Rotate token"}
-            </button>
-            <button
-              type="button"
-              onClick={onToggleForwarding}
-              disabled={isUpdatingForwarding}
-              className="admin-btn-secondary"
-            >
-              {isUpdatingForwarding
-                ? "Updating..."
-                : connector.forwardEnabled === true
-                  ? "Disable mirroring"
-                  : "Enable mirroring"}
-            </button>
+        <>
+          {/* Tab navigation */}
+          <div className="flex border-b border-slate-800">
+            {CONNECTOR_SUB_NAV_TABS.map((tab) => (
+              <Link
+                key={tab.tabValue}
+                href={`${connectorDetailPath}?tab=${tab.tabValue}`}
+                className={`px-4 py-2.5 text-sm font-medium transition-colors ${
+                  activeTab === tab.tabValue
+                    ? "border-b-2 border-indigo-400 text-indigo-300"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {tab.label}
+              </Link>
+            ))}
           </div>
-        </AdminSectionCard>
+
+          {activeTab === "overview" && (
+            <ConnectorOverviewTab
+              tenantKey={tenantKey}
+              connectorId={connectorId}
+              connector={connector}
+              mirrorRuntime={mirrorRuntime}
+              mirrorQueueStats={mirrorQueueStats}
+              mirrorLatencyStats={mirrorLatencyStats}
+              seatSnapshots={seatSnapshots}
+              serverConfigs={serverConfigs}
+              sourceGuilds={sourceGuilds}
+              botGuilds={botGuilds}
+              sources={sources}
+              allChannels={allChannels}
+              botChannels={botChannels}
+            />
+          )}
+
+          {activeTab === "routes" && (
+            <ConnectorRoutesTab
+              tenantKey={tenantKey}
+              connectorId={connectorId}
+              sources={sources}
+              mappings={mappings}
+              sourceGuilds={sourceGuilds}
+              allChannels={allChannels}
+              botGuilds={botGuilds}
+              botChannels={botChannels}
+              seatSnapshots={seatSnapshots}
+              serverConfigs={serverConfigs}
+            />
+          )}
+
+          {activeTab === "jobs" && (
+            <ConnectorJobsTab
+              tenantKey={tenantKey}
+              connectorId={connectorId}
+              mirrorJobs={mirrorJobs}
+              allChannels={allChannels}
+              botChannels={botChannels}
+              sources={sources}
+            />
+          )}
+
+          {activeTab === "settings" && (
+            <ConnectorSettingsTab
+              tenantKey={tenantKey}
+              connectorId={connectorId}
+              connector={connector}
+            />
+          )}
+        </>
       )}
-
-      {lastToken ? (
-        <AdminSectionCard title="Connector token">
-          <p className="text-xs font-medium text-slate-300">Shown once after rotation:</p>
-          <pre className="mt-2 overflow-x-auto rounded-md bg-zinc-900 p-3 text-xs text-zinc-100">
-            {lastToken}
-          </pre>
-        </AdminSectionCard>
-      ) : null}
-
-      <AdminSectionCard title="Mirror runtime">
-        <div className="text-xs text-slate-300">
-          <p>
-            Mirror bot token configured:{" "}
-            <strong>{mirrorRuntime?.hasMirrorBotToken ? "yes" : "no"}</strong>
-          </p>
-          <p className="mt-1">
-            Dedicated mirror token in use:{" "}
-            <strong>{mirrorRuntime?.usesDedicatedMirrorToken ? "yes" : "no"}</strong>
-          </p>
-          <p className="mt-1">
-            Shared role-sync token fallback:{" "}
-            <strong>{mirrorRuntime?.sharedRoleSyncTokenFallback ? "yes" : "no"}</strong>
-          </p>
-          <p className="mt-2">
-            Queue stats: pending <strong>{mirrorQueueStats?.pending ?? 0}</strong> (ready{" "}
-            <strong>{mirrorQueueStats?.pendingReady ?? 0}</strong>), processing{" "}
-            <strong>{mirrorQueueStats?.processing ?? 0}</strong>, failed{" "}
-            <strong>{mirrorQueueStats?.failed ?? 0}</strong>, total{" "}
-            <strong>{mirrorQueueStats?.total ?? 0}</strong>.
-          </p>
-          <p className="mt-2">
-            Latency (last {mirrorLatencyStats?.windowMinutes ?? 60}m): create p95{" "}
-            <strong>{renderLatency(mirrorLatencyStats?.create.p95Ms ?? null)}</strong> (n=
-            <strong>{mirrorLatencyStats?.create.count ?? 0}</strong>), update p95{" "}
-            <strong>{renderLatency(mirrorLatencyStats?.update.p95Ms ?? null)}</strong> (n=
-            <strong>{mirrorLatencyStats?.update.count ?? 0}</strong>), delete p95{" "}
-            <strong>{renderLatency(mirrorLatencyStats?.delete.p95Ms ?? null)}</strong> (n=
-            <strong>{mirrorLatencyStats?.delete.count ?? 0}</strong>).
-          </p>
-        </div>
-      </AdminSectionCard>
-
-      <AdminSectionCard title="Seat configs by guild">
-        {configuredSeatRows.length === 0 ? (
-          <p className="text-xs text-slate-400">
-            No saved seat configs for this connector yet. Configure seat enforcement in{" "}
-            <Link href="/discord-bot" className="admin-link">
-              Discord Bot
-            </Link>
-            .
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-900 text-xs font-semibold text-slate-300">
-                <tr>
-                  <th className="px-3 py-2">Guild</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Seats</th>
-                  <th className="px-3 py-2">Seat policy</th>
-                  <th className="px-3 py-2">Checked</th>
-                  <th className="px-3 py-2">Error</th>
-                  <th className="px-3 py-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800 bg-slate-950/40 text-slate-200">
-                {configuredSeatRows.map((row) => {
-                  const snapshot = row.snapshot;
-                  const isEditing = editingSeatGuildId === row.guildId;
-                  return (
-                    <tr key={`${tenantKey}:${connectorId}:${row.guildId}`}>
-                      <td className="px-3 py-2">{renderGuildLabel(row.guildId)}</td>
-                      <td className="px-3 py-2">
-                        {snapshot ? (
-                          snapshot.isOverLimit ? (
-                            <span className="rounded-full border border-rose-400/30 bg-rose-500/15 px-2 py-0.5 text-xs font-semibold text-rose-300">
-                              over-limit ({snapshot.status})
-                            </span>
-                          ) : (
-                            <span className="rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-300">
-                              ok ({snapshot.status})
-                            </span>
-                          )
-                        ) : (
-                          <span className="rounded-full border border-slate-500/30 bg-slate-500/20 px-2 py-0.5 text-xs font-semibold text-slate-200">
-                            no snapshot
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        {snapshot ? `${snapshot.seatsUsed} / ${snapshot.seatLimit}` : "-"}
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="space-y-1">
-                          <p className="text-xs text-slate-200">limit: {row.config.seatLimit}</p>
-                          <p className="text-xs text-slate-400">
-                            enforcement: {row.config.seatEnforcementEnabled ? "enabled" : "disabled"}
-                          </p>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2">{formatDateTime(snapshot?.checkedAt)}</td>
-                      <td className="px-3 py-2">{snapshot?.lastError ?? "-"}</td>
-                      <td className="px-3 py-2 align-top">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => startEditSeatConfig(row.guildId)}
-                            className="text-sm font-medium text-cyan-300 underline"
-                            disabled={seatConfigSaving}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void onDeleteSeatConfig(row.guildId)}
-                            className="text-sm font-medium text-rose-300 underline"
-                            disabled={seatConfigSaving}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                        {isEditing ? (
-                          <div className="mt-3 space-y-2 rounded-md border border-slate-800 bg-slate-950/50 p-2">
-                            <label className="admin-label text-[11px]">
-                              Seat limit
-                              <input
-                                type="number"
-                                min={0}
-                                value={seatLimitDraft}
-                                onChange={(event) => setSeatLimitDraft(event.target.value)}
-                                className="admin-input mt-1 w-28"
-                              />
-                            </label>
-                            <label className="flex items-center gap-2 text-xs font-medium text-slate-300">
-                              <input
-                                type="checkbox"
-                                checked={seatEnforcementDraft}
-                                onChange={(event) => setSeatEnforcementDraft(event.target.checked)}
-                              />
-                              Enable enforcement
-                            </label>
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                onClick={() => void onSaveSeatConfig()}
-                                className="admin-btn-secondary"
-                                disabled={seatConfigSaving}
-                              >
-                                {seatConfigSaving ? "Saving..." : "Save"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={cancelEditSeatConfig}
-                                className="admin-btn-secondary"
-                                disabled={seatConfigSaving}
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        ) : null}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {unconfiguredSeatSnapshots.length > 0 ? (
-          <details className="mt-3 rounded-md border border-slate-800 bg-slate-950/40 p-3">
-            <summary className="cursor-pointer text-xs font-semibold text-slate-300">
-              Unconfigured seat snapshots ({unconfiguredSeatSnapshots.length})
-            </summary>
-            <p className="mt-2 text-xs text-slate-400">
-              These are audit snapshots without saved seat configs. They are read-only here.
-            </p>
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-900 text-xs font-semibold text-slate-300">
-                  <tr>
-                    <th className="px-3 py-2">Guild</th>
-                    <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2">Seats</th>
-                    <th className="px-3 py-2">Checked</th>
-                    <th className="px-3 py-2">Error</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800 bg-slate-950/40 text-slate-200">
-                  {unconfiguredSeatSnapshots.map((snapshot) => (
-                    <tr key={`${snapshot.tenantKey}:${snapshot.connectorId}:${snapshot.guildId}`}>
-                      <td className="px-3 py-2">{renderGuildLabel(snapshot.guildId)}</td>
-                      <td className="px-3 py-2">
-                        {snapshot.isOverLimit ? (
-                          <span className="rounded-full border border-rose-400/30 bg-rose-500/15 px-2 py-0.5 text-xs font-semibold text-rose-300">
-                            over-limit ({snapshot.status})
-                          </span>
-                        ) : (
-                          <span className="rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-300">
-                            ok ({snapshot.status})
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        {snapshot.seatsUsed} / {snapshot.seatLimit}
-                      </td>
-                      <td className="px-3 py-2">{formatDateTime(snapshot.checkedAt)}</td>
-                      <td className="px-3 py-2">{snapshot.lastError ?? "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </details>
-        ) : null}
-        {seatConfigMessage ? <p className="mt-3 text-sm text-emerald-400">{seatConfigMessage}</p> : null}
-        {seatConfigError ? <p className="mt-3 text-sm text-rose-400">{seatConfigError}</p> : null}
-      </AdminSectionCard>
-
-      <div className="space-y-8">
-        <div>
-          <AdminSectionCard title="Quick Setup Wizard">
-            <div className="admin-surface-soft">
-              <p className="text-xs text-slate-300">
-                Step 1: register plugin source channels. Step 2: register bot target channels.
-                Step 3: create source -&gt; target routes below.
-              </p>
-
-              <div className="mt-3 rounded-md border border-slate-800 bg-slate-950/40 p-3">
-                <p className="text-xs font-semibold text-cyan-200">
-                  Step 1: Source channels (Vencord plugin)
-                </p>
-                <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                  <label className="admin-label">
-                    Guild (plugin-discovered)
-                    <select
-                      className="admin-input"
-                      value={newSourceGuildId}
-                      onChange={(e) => setNewSourceGuildId(e.target.value)}
-                    >
-                      <option value="">Select guild</option>
-                      {sourceGuilds.map((g) => (
-                        <option key={g._id} value={g.guildId}>
-                          {g.name} ({g.guildId})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="admin-label">
-                    Channel (from selected plugin guild)
-                    <select
-                      className="admin-input"
-                      value={newSourceChannelId}
-                      onChange={(e) => setNewSourceChannelId(e.target.value)}
-                      disabled={Boolean(editingSourceChannelId)}
-                    >
-                      <option value="">Select channel</option>
-                      {sourceChannels.map((channel) => (
-                        <option key={channel._id} value={channel.channelId}>
-                          {channel.name} ({channel.channelId})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-
-                <div className="mt-3 flex flex-wrap items-end gap-3">
-                  <label className="admin-label">
-                    Thread mode
-                    <select
-                      className="admin-input w-40"
-                      value={newSourceThreadMode}
-                      onChange={(e) => setNewSourceThreadMode(e.target.value)}
-                    >
-                      <option value="">default</option>
-                      <option value="include">include</option>
-                      <option value="exclude">exclude</option>
-                      <option value="only">only</option>
-                    </select>
-                  </label>
-                  <label className="flex items-center gap-2 text-xs font-medium text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={newSourceEnabled}
-                      onChange={(e) => setNewSourceEnabled(e.target.checked)}
-                    />
-                    Enabled
-                  </label>
-                  <button
-                    type="button"
-                    onClick={onRequestChannels}
-                    disabled={!newSourceGuildId || isRequestingChannels}
-                    className="admin-btn-secondary"
-                  >
-                    {isRequestingChannels ? "Requesting..." : "Fetch channels"}
-                  </button>
-                  <button type="button" onClick={onSubmitSource} className="admin-btn-primary">
-                    {editingSourceChannelId ? "Save source" : "Add source"}
-                  </button>
-                  {editingSourceChannelId ? (
-                    <button type="button" onClick={cancelEditSource} className="admin-btn-secondary">
-                      Cancel
-                    </button>
-                  ) : null}
-                </div>
-                <p className="mt-3 text-xs text-slate-400">
-                  Guilds sync automatically from the plugin. Select a guild, click{" "}
-                  <strong>Fetch channels</strong>, pick a channel, and save it as available.
-                  Source registration is source-only in this step.
-                  {lastDiscoveryRequestVersion
-                    ? ` Last fetch request: v${lastDiscoveryRequestVersion}.`
-                    : ""}
-                  {editingSourceChannelId
-                    ? " While editing, channel ID is locked to preserve mapping references."
-                    : ""}
-                </p>
-                {sourceFormMessage ? <p className="mt-3 text-sm text-emerald-400">{sourceFormMessage}</p> : null}
-                {sourceFormError ? <p className="mt-3 text-sm text-rose-400">{sourceFormError}</p> : null}
-              </div>
-
-              <div className="mt-4 rounded-md border border-cyan-900/50 bg-cyan-950/20 p-3">
-                <p className="text-xs font-semibold text-cyan-200">
-                  Step 2: Target channels (Discord bot guilds)
-                </p>
-                <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                  <label className="admin-label">
-                    Target guild (bot)
-                    <select
-                      className="admin-input"
-                      value={newTargetGuildId}
-                      onChange={(e) => setNewTargetGuildId(e.target.value)}
-                    >
-                      <option value="">Select target guild</option>
-                      {botGuilds.map((guild) => (
-                        <option key={`bot-guild-${guild.guildId}`} value={guild.guildId}>
-                          {guild.name} ({guild.guildId})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="admin-label">
-                    Target channel (bot mirror)
-                    <select
-                      className="admin-input"
-                      value={newTargetChannelId}
-                      onChange={(e) => setNewTargetChannelId(e.target.value)}
-                      disabled={!newTargetGuildId}
-                    >
-                      <option value="">Select target channel</option>
-                      {wizardTargetChannels.map((channel) => (
-                        <option key={`wizard-target-${channel.channelId}`} value={channel.channelId}>
-                          {channel.name} ({channel.channelId})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => void onAddTargetChannel()}
-                    disabled={targetFormSaving || !newTargetGuildId || !newTargetChannelId}
-                    className="admin-btn-primary"
-                  >
-                    {targetFormSaving ? "Saving..." : "Add target channel"}
-                  </button>
-                  <p className="text-xs text-cyan-100/80">
-                    Bot guild/channel catalogs sync automatically from Discord-Bot runtime.
-                  </p>
-                </div>
-                {targetFormMessage ? <p className="mt-3 text-sm text-emerald-400">{targetFormMessage}</p> : null}
-                {targetFormError ? <p className="mt-3 text-sm text-rose-400">{targetFormError}</p> : null}
-              </div>
-            </div>
-          </AdminSectionCard>
-
-          <AdminTableShell
-            title="Configured channel registry (sources + targets)"
-            isEmpty={sources.length === 0}
-            emptyMessage="No available channels yet."
-            tableClassName="overflow-x-auto"
-          >
-            <table className="w-full table-auto text-left text-sm">
-              <thead className="sticky top-0 z-10 bg-slate-900 text-xs font-semibold text-slate-300">
-                <tr>
-                  <th className="px-3 py-2">Guild</th>
-                  <th className="px-3 py-2">Channel</th>
-                  <th className="px-3 py-2">Thread</th>
-                  <th className="px-3 py-2">Enabled</th>
-                  <th className="px-3 py-2">Role</th>
-                  <th className="px-3 py-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800 bg-slate-950/40 text-slate-200">
-                {sources.map((s) => (
-                  <tr key={s._id}>
-                    <td className="px-3 py-2 align-top">{renderGuildLabel(s.guildId)}</td>
-                    <td className="px-3 py-2 align-top break-all">{renderChannelLabel(s.channelId)}</td>
-                    <td className="px-3 py-2">{s.threadMode ?? "-"}</td>
-                    <td className="px-3 py-2">{s.isEnabled ? "yes" : "no"}</td>
-                    <td className="px-3 py-2">
-                      {s.isSource ?? true
-                        ? s.isTarget === true
-                          ? "source + target (legacy)"
-                          : "source"
-                        : s.isTarget === true
-                          ? "target"
-                          : "source (legacy)"}
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex flex-wrap gap-2">
-                        {s.isSource ?? true ? (
-                          <button
-                            type="button"
-                            onClick={() => startEditSource(s)}
-                            className="text-sm font-medium text-cyan-300 underline"
-                          >
-                            Edit
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            try {
-                              await doRemoveSource({
-                                tenantKey,
-                                connectorId,
-                                channelId: s.channelId,
-                              });
-                              if (editingSourceChannelId === s.channelId) {
-                                cancelEditSource();
-                              }
-                              setSourceFormMessage(`Removed available channel ${renderChannelLabel(s.channelId)}.`);
-                            } catch (error) {
-                              const text =
-                                error instanceof Error ? error.message : "Failed to remove available channel";
-                              setSourceFormError(text);
-                            }
-                          }}
-                          className="text-sm font-medium text-rose-300 underline"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </AdminTableShell>
-        </div>
-
-        <div>
-          <AdminSectionCard title="Source (Plugin) -> Target (Bot) Mappings">
-            <div className="admin-surface-soft">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="admin-label">
-                  Source guild filter (plugin)
-                  <select
-                    className="admin-input mt-1"
-                    value={sourceGuildFilterId}
-                    onChange={(e) => setSourceGuildFilterId(e.target.value)}
-                  >
-                    <option value="">All source guilds</option>
-                    {sourceGuilds.map((g) => (
-                      <option key={`src-guild-${g._id}`} value={g.guildId}>
-                        {g.name} ({g.guildId})
-                      </option>
-                      ))}
-                    </select>
-                  </label>
-                <label className="admin-label">
-                  Target guild (from Step 2)
-                  <div className="admin-input mt-1 flex items-center">
-                    {selectedMappingTargetGuildId
-                      ? renderGuildLabel(selectedMappingTargetGuildId)
-                      : "Select a target guild in Step 2 above"}
-                  </div>
-                </label>
-              </div>
-
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <label className="admin-label">
-                  Source channel (plugin ingest)
-                  <select
-                    className="admin-input"
-                    value={newMappingSource}
-                    onChange={(e) => setNewMappingSource(e.target.value)}
-                  >
-                    <option value="">Select source</option>
-                    {mappingSourceOptions.map((channel) => (
-                      <option key={`src-${channel.channelId}`} value={channel.channelId}>
-                        {renderGuildLabel(channel.guildId)} / {renderChannelLabel(channel.channelId)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="admin-label">
-                  Target channel (bot mirror, from Step 2 guild)
-                  <select
-                    className="admin-input"
-                    value={newMappingTarget}
-                    onChange={(e) => setNewMappingTarget(e.target.value)}
-                    disabled={!selectedMappingTargetGuildId}
-                  >
-                    <option value="">Select target</option>
-                    {mappingTargetOptions.map((channel) => (
-                      <option key={`dst-${channel.channelId}`} value={channel.channelId}>
-                        {renderGuildLabel(channel.guildId)} / {renderChannelLabel(channel.channelId)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              {availableChannels.length === 0 ? (
-                <p className="mt-3 text-xs text-slate-400">
-                  Add at least one enabled source channel in Step 1 before creating routes.
-                </p>
-              ) : !selectedMappingTargetGuildId ? (
-                <p className="mt-3 text-xs text-slate-400">
-                  Select a target guild in Step 2 before creating routes.
-                </p>
-              ) : mappingSourceOptions.length === 0 || mappingTargetOptions.length === 0 ? (
-                <p className="mt-3 text-xs text-slate-400">
-                  Ensure you have source options (Step 1) and bot target channel options (Step 2).
-                </p>
-              ) : null}
-              <p className="mt-3 text-xs text-slate-400">
-                These routes define how plugin source channels map to bot target channels.
-                Advanced dashboard controls are optional.
-                {editingMappingSourceChannelId
-                  ? " Editing keeps this row in place and updates it directly."
-                  : ""}
-              </p>
-
-              <div className="mt-3 flex flex-wrap items-end gap-3">
-                <button type="button" onClick={onSubmitMapping} className="admin-btn-primary">
-                  {editingMappingSourceChannelId ? "Save mapping" : "Add mapping"}
-                </button>
-                {editingMappingSourceChannelId ? (
-                  <button type="button" onClick={cancelEditMapping} className="admin-btn-secondary">
-                    Cancel
-                  </button>
-                ) : null}
-              </div>
-              <details className="mt-3 rounded-md border border-slate-800 bg-slate-950/40 p-3">
-                <summary className="cursor-pointer text-xs font-semibold text-slate-300">
-                  Advanced route options
-                </summary>
-                <div className="mt-3 flex flex-wrap items-end gap-3">
-                  <label className="flex items-center gap-2 text-xs font-medium text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={newMappingDashboardEnabled}
-                      onChange={(e) => setNewMappingDashboardEnabled(e.target.checked)}
-                    />
-                    Visible on dashboard
-                  </label>
-                  <label className="admin-label">
-                    Minimum tier
-                    <select
-                      className="admin-input w-36"
-                      value={newMappingMinimumTier}
-                      onChange={(e) =>
-                        setNewMappingMinimumTier(e.target.value as SubscriptionTier)
-                      }
-                      disabled={!newMappingDashboardEnabled}
-                    >
-                      <option value="basic">basic</option>
-                      <option value="advanced">advanced</option>
-                      <option value="pro">pro</option>
-                    </select>
-                  </label>
-                  <label className="admin-label">
-                    Priority
-                    <input
-                      value={newMappingPriority}
-                      onChange={(e) => setNewMappingPriority(e.target.value)}
-                      className="admin-input w-32"
-                      placeholder="(optional)"
-                    />
-                  </label>
-                  <label className="admin-label">
-                    Role ping ID
-                    <input
-                      value={newMappingRolePingId}
-                      onChange={(e) => setNewMappingRolePingId(e.target.value)}
-                      className="admin-input w-52"
-                      placeholder="123456789012345678"
-                    />
-                  </label>
-                </div>
-                <p className="mt-2 text-xs text-slate-400">
-                  Optional: when set, mirrored posts in this target channel will include
-                  a role mention outside the embed (`&lt;@&amp;roleId&gt;`).
-                </p>
-              </details>
-              <div>
-                <p className="mt-3 text-xs text-slate-400">
-                  Target selection is now always bot-side and scoped to Step 2.
-                </p>
-              </div>
-              {mappingFormMessage ? <p className="mt-3 text-sm text-emerald-400">{mappingFormMessage}</p> : null}
-              {mappingFormError ? <p className="mt-3 text-sm text-rose-400">{mappingFormError}</p> : null}
-            </div>
-          </AdminSectionCard>
-
-          <AdminTableShell
-            title="Configured source->target routes"
-            isEmpty={mappings.length === 0}
-            emptyMessage="No mappings yet."
-            tableClassName="overflow-x-auto"
-          >
-            <table className="w-full table-auto text-left text-sm">
-              <thead className="sticky top-0 z-10 bg-slate-900 text-xs font-semibold text-slate-300">
-                <tr>
-                  <th className="px-3 py-2">Source (plugin)</th>
-                  <th className="px-3 py-2">Target (bot)</th>
-                  <th className="px-3 py-2">Role ping</th>
-                  <th className="px-3 py-2">Dashboard</th>
-                  <th className="px-3 py-2">Min tier</th>
-                  <th className="px-3 py-2">Priority</th>
-                  <th className="px-3 py-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800 bg-slate-950/40 text-slate-200">
-                {mappings.map((m) => {
-                  const rolePingId = extractRolePingId(m.transformJson);
-                  return (
-                    <tr key={m._id}>
-                      <td className="px-3 py-2 align-top break-all">{renderChannelRouteLabel(m.sourceChannelId)}</td>
-                      <td className="px-3 py-2 align-top break-all">{renderChannelRouteLabel(m.targetChannelId)}</td>
-                      <td className="px-3 py-2">
-                        {rolePingId ? (
-                          <span className="text-xs text-slate-200">{`<@&${rolePingId}>`}</span>
-                        ) : (
-                          "-"
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        {m.dashboardEnabled === true ? (
-                          <span className="rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-300">
-                            visible
-                          </span>
-                        ) : (
-                          <span className="rounded-full border border-slate-500/30 bg-slate-600/20 px-2 py-0.5 text-xs font-medium text-slate-200">
-                            hidden
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">{m.minimumTier ?? "-"}</td>
-                      <td className="px-3 py-2">{m.priority ?? "-"}</td>
-                      <td className="px-3 py-2">
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => startEditMapping(m)}
-                            className="text-sm font-medium text-cyan-300 underline"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              try {
-                                await doRemoveMapping({
-                                  tenantKey,
-                                  connectorId,
-                                  sourceChannelId: m.sourceChannelId,
-                                });
-                                if (editingMappingSourceChannelId === m.sourceChannelId) {
-                                  cancelEditMapping();
-                                }
-                                setMappingFormMessage(
-                                  `Removed mapping ${renderChannelRouteLabel(m.sourceChannelId)} -> ${renderChannelRouteLabel(m.targetChannelId)}.`,
-                                );
-                              } catch (error) {
-                                const text = error instanceof Error ? error.message : "Failed to remove mapping";
-                                setMappingFormError(text);
-                              }
-                            }}
-                            className="text-sm font-medium text-rose-300 underline"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </AdminTableShell>
-
-          <AdminTableShell
-            title="Recent Mirror Jobs"
-            isEmpty={mirrorJobs.length === 0}
-            emptyMessage="No mirror jobs yet."
-            tableClassName="overflow-x-auto"
-          >
-            <table className="w-full text-left text-sm">
-              <thead className="sticky top-0 z-10 bg-slate-900 text-xs font-semibold text-slate-300">
-                <tr>
-                  <th className="w-4 px-2 py-2" />
-                  <th className="px-3 py-2">Updated</th>
-                  <th className="px-3 py-2">Event</th>
-                  <th className="px-3 py-2">Route</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Attempts</th>
-                  <th className="px-3 py-2">Images</th>
-                  <th className="px-3 py-2">Last error</th>
-                  <th className="px-3 py-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800 bg-slate-950/40 text-slate-200">
-                {mirrorJobs.map((job) => {
-                  const isExpanded = expandedJobId === job.jobId;
-                  const sourceImgCount = (job.sourceAttachments ?? job.jobAttachments).filter(
-                    (a) => a.contentType?.startsWith("image/") || /\.(png|jpg|jpeg|gif|webp)$/i.test(a.name ?? a.url),
-                  ).length;
-                  const dbReadyCount = job.mediaRows.filter((r) => r.status === "ready").length;
-                  const dbFailedCount = job.mediaRows.filter((r) => r.status === "failed").length;
-                  const signalReadyCount = (job.sourceAttachments ?? job.jobAttachments).filter(
-                    (a) => a.hasMirrorUrl,
-                  ).length;
-                  const isRequeuing = requeueingJobId === job.jobId;
-                  const thisRequeueResult = requeueResult?.jobId === job.jobId ? requeueResult : null;
-                  return (
-                    <>
-                      <tr
-                        key={job.jobId}
-                        className="cursor-pointer hover:bg-slate-800/40"
-                        onClick={() => setExpandedJobId(isExpanded ? null : job.jobId)}
-                      >
-                        <td className="px-2 py-2 text-slate-400">
-                          <span className="text-xs">{isExpanded ? "▾" : "▸"}</span>
-                        </td>
-                        <td className="px-3 py-2 text-xs text-slate-300">{formatDateTime(job.updatedAt)}</td>
-                        <td className="px-3 py-2">
-                          <span className={`rounded px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${
-                            job.eventType === "create" ? "bg-emerald-900/50 text-emerald-300" :
-                            job.eventType === "update" ? "bg-sky-900/50 text-sky-300" :
-                            "bg-rose-900/50 text-rose-300"
-                          }`}>{job.eventType}</span>
-                        </td>
-                        <td className="px-3 py-2">
-                          <p className="text-xs text-slate-100">{renderChannelLabel(job.sourceChannelId)}</p>
-                          <p className="text-xs text-slate-400">→ {renderChannelLabel(job.targetChannelId)}</p>
-                        </td>
-                        <td className="px-3 py-2">{renderJobStatusBadge(job.status)}</td>
-                        <td className="px-3 py-2 text-xs text-slate-300">
-                          {job.attemptCount}/{job.maxAttempts}
-                        </td>
-                        <td className="px-3 py-2 text-xs">
-                          {sourceImgCount === 0 ? (
-                            <span className="text-slate-500">none</span>
-                          ) : (
-                            <span className={`font-mono ${signalReadyCount === sourceImgCount ? "text-emerald-400" : dbFailedCount > 0 ? "text-rose-400" : "text-amber-400"}`}>
-                              {signalReadyCount}/{sourceImgCount} ready
-                              {dbFailedCount > 0 && <span className="ml-1 text-rose-400">({dbFailedCount} failed)</span>}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-xs">
-                          {job.lastError ? (
-                            <span className="text-rose-300">{job.lastError}</span>
-                          ) : (
-                            <span className="text-slate-500">none</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            disabled={isRequeuing}
-                            className="rounded bg-sky-700 px-2 py-1 text-xs font-medium text-white hover:bg-sky-600 disabled:opacity-50"
-                            onClick={async () => {
-                              setRequeuingJobId(job.jobId);
-                              setRequeueResult(null);
-                              try {
-                                const res = await doRequeue({
-                                  tenantKey,
-                                  connectorId,
-                                  sourceMessageId: job.sourceMessageId,
-                                  targetChannelId: job.targetChannelId,
-                                });
-                                setRequeueResult({
-                                  jobId: job.jobId,
-                                  ok: res.ok,
-                                  message: res.ok
-                                    ? res.enqueued
-                                      ? `Enqueued ${res.enqueued} job(s)`
-                                      : "Already queued (deduped)"
-                                    : (res.reason ?? "failed"),
-                                });
-                              } catch (err) {
-                                setRequeueResult({ jobId: job.jobId, ok: false, message: String(err) });
-                              } finally {
-                                setRequeuingJobId(null);
-                              }
-                            }}
-                          >
-                            {isRequeuing ? "…" : "Retry"}
-                          </button>
-                          {thisRequeueResult && (
-                            <p className={`mt-1 text-xs ${thisRequeueResult.ok ? "text-emerald-400" : "text-rose-400"}`}>
-                              {thisRequeueResult.message}
-                            </p>
-                          )}
-                        </td>
-                      </tr>
-                      {isExpanded && (
-                        <tr key={`${job.jobId}-expanded`} className="bg-slate-900/60">
-                          <td colSpan={9} className="px-4 py-3">
-                            <div className="space-y-3 text-xs">
-                              {/* Message content */}
-                              <div>
-                                <p className="mb-1 font-semibold text-slate-300">Message content</p>
-                                <p className="rounded border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-slate-200 whitespace-pre-wrap break-all">
-                                  {job.content?.trim() || <span className="italic text-slate-500">(empty — image-only message)</span>}
-                                </p>
-                              </div>
-                              {/* IDs row */}
-                              <div className="flex flex-wrap gap-4 text-slate-400">
-                                <span>Source msg: <span className="font-mono text-slate-200">{job.sourceMessageId}</span></span>
-                                {job.mirroredMessageId && (
-                                  <span>Mirrored msg: <span className="font-mono text-slate-200">{job.mirroredMessageId}</span></span>
-                                )}
-                                <span>Run after: <span className="text-slate-200">{formatDateTime(job.runAfter)}</span></span>
-                              </div>
-                              {/* Attachment breakdown */}
-                              {sourceImgCount > 0 && (
-                                <div>
-                                  <p className="mb-1 font-semibold text-slate-300">Attachment pipeline</p>
-                                  <div className="overflow-x-auto rounded border border-slate-700">
-                                    <table className="w-full text-xs">
-                                      <thead className="bg-slate-800 text-slate-400">
-                                        <tr>
-                                          <th className="px-2 py-1 text-left">File</th>
-                                          <th className="px-2 py-1 text-left">Seen from source</th>
-                                          <th className="px-2 py-1 text-left">DB (Convex storage)</th>
-                                          <th className="px-2 py-1 text-left">On signal (mirrorUrl)</th>
-                                          <th className="px-2 py-1 text-left">On job (queued)</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="divide-y divide-slate-800">
-                                        {(job.sourceAttachments ?? job.jobAttachments).map((att, i) => {
-                                          const isImg = att.contentType?.startsWith("image/") || /\.(png|jpg|jpeg|gif|webp)$/i.test(att.name ?? att.url);
-                                          const mediaRow = job.mediaRows.find((r) => {
-                                            if (att.attachmentId && r.attachmentKey === `id:${att.attachmentId}`) return true;
-                                            if (r.attachmentKey === `url:${att.url}`) return true;
-                                            return false;
-                                          });
-                                          const jobAtt = job.jobAttachments[i];
-                                          return (
-                                            <tr key={i} className="text-slate-300">
-                                              <td className="px-2 py-1 font-mono">
-                                                <span className="text-slate-400">{att.name ?? `attachment-${i + 1}`}</span>
-                                                {!isImg && <span className="ml-1 text-slate-500 italic">(non-image)</span>}
-                                              </td>
-                                              <td className="px-2 py-1">
-                                                <span className="text-emerald-400">✓ seen</span>
-                                              </td>
-                                              <td className="px-2 py-1">
-                                                {!mediaRow ? (
-                                                  <span className="text-slate-500">no row</span>
-                                                ) : mediaRow.status === "ready" ? (
-                                                  <span className="text-emerald-400">✓ ready</span>
-                                                ) : mediaRow.status === "failed" ? (
-                                                  <span className="text-rose-400">✗ failed</span>
-                                                ) : (
-                                                  <span className="text-amber-400">⏳ {mediaRow.status}</span>
-                                                )}
-                                              </td>
-                                              <td className="px-2 py-1">
-                                                {att.hasMirrorUrl ? (
-                                                  <span className="text-emerald-400">✓ set</span>
-                                                ) : att.hasStorageId ? (
-                                                  <span className="text-amber-400">stored, no url</span>
-                                                ) : (
-                                                  <span className="text-rose-400">✗ missing</span>
-                                                )}
-                                              </td>
-                                              <td className="px-2 py-1">
-                                                {!jobAtt ? (
-                                                  <span className="text-slate-500">—</span>
-                                                ) : jobAtt.hasMirrorUrl ? (
-                                                  <span className="text-emerald-400">✓ set</span>
-                                                ) : (
-                                                  <span className="text-rose-400">✗ missing</span>
-                                                )}
-                                              </td>
-                                            </tr>
-                                          );
-                                        })}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </>
-                  );
-                })}
-              </tbody>
-            </table>
-          </AdminTableShell>
-        </div>
-      </div>
     </div>
   );
 }
 
+export function ConnectorWorkspace(props: ConnectorWorkspaceProps) {
+  return (
+    <Suspense fallback={null}>
+      <ConnectorWorkspaceInner {...props} />
+    </Suspense>
+  );
+}

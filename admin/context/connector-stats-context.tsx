@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo, ReactNode } from "react";
+import React, { createContext, useContext, useMemo, ReactNode } from "react";
 import { useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 
@@ -32,7 +32,7 @@ export function ConnectorStatsProvider({
   children,
 }: {
   children: ReactNode;
-}): JSX.Element {
+}): React.JSX.Element {
   const healthData = useQuery(getConnectorHealthSummaryRef, {});
 
   const value = useMemo<ConnectorStatsContextValue>(() => {
