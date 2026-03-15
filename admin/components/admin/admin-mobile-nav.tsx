@@ -1,7 +1,7 @@
 "use client";
 
 import { Menu } from "lucide-react";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { AdminNavigation } from "./admin-sidebar";
@@ -25,7 +25,9 @@ export function AdminMobileNav({ pathname }: AdminMobileNavProps) {
           <SheetTitle className="text-left text-base text-slate-100">Admin Workspace</SheetTitle>
         </SheetHeader>
         <div className="p-5">
-          <AdminNavigation pathname={pathname} onNavigate={() => setOpen(false)} />
+          <Suspense fallback={null}>
+            <AdminNavigation pathname={pathname} onNavigate={() => setOpen(false)} />
+          </Suspense>
         </div>
       </SheetContent>
     </Sheet>

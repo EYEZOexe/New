@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { ADMIN_ROUTE_GROUPS, CONNECTOR_SUB_NAV_TABS, getAdminNavState } from "@/lib/adminRoutes";
+import { ADMIN_ROUTE_GROUPS, CONNECTOR_SUB_NAV_TABS, getAdminNavState, getConnectorDetailSegments } from "@/lib/adminRoutes";
 import { useConnectorStats } from "@/context/connector-stats-context";
 
 type AdminNavigationProps = {
@@ -43,15 +44,6 @@ function NavLink({
   );
 }
 
-// Returns { tenantKey, connectorId } if on /mappings/[tenantKey]/[connectorId], else null
-function getConnectorDetailSegments(pathname: string): { tenantKey: string; connectorId: string } | null {
-  const normalized = pathname.split("?")[0].replace(/\/$/, "");
-  const parts = normalized.split("/").filter(Boolean);
-  if (parts[0] === "mappings" && parts.length === 3) {
-    return { tenantKey: parts[1], connectorId: parts[2] };
-  }
-  return null;
-}
 
 export function AdminNavigation({ pathname, onNavigate, className }: AdminNavigationProps) {
   const state = getAdminNavState(pathname);
@@ -93,7 +85,8 @@ export function AdminNavigation({ pathname, onNavigate, className }: AdminNaviga
           {connectorDetail && (
             <div className="ml-3 space-y-1 border-l border-slate-700/60 pl-3">
               {CONNECTOR_SUB_NAV_TABS.map((tab) => {
-                const isTabActive = activeTab === tab.tabValue;
+                const resolvedTab = activeTab ?? "overview";
+                const isTabActive = resolvedTab === tab.tabValue;
                 const tabHref = `/mappings/${connectorDetail.tenantKey}/${connectorDetail.connectorId}?tab=${tab.tabValue}`;
                 const isJobsTab = tab.tabValue === "jobs";
                 return (
@@ -109,7 +102,7 @@ export function AdminNavigation({ pathname, onNavigate, className }: AdminNaviga
                     <span>{tab.label}</span>
                     {isJobsTab && failedJobsCount > 0 && (
                       <span className="ml-auto rounded-full bg-red-500 px-1.5 py-0.5 text-xs font-semibold text-white">
-                        {failedJobsCount}
+                        {failedJobsCount > 99 ? "99+" : failedJobsCount}
                       </span>
                     )}
                   </Link>
@@ -178,7 +171,9 @@ export function AdminSidebar({ pathname }: AdminSidebarProps) {
         <p className="mt-2 text-sm text-slate-400">
           Mappings, filtering, bot operations, and shop configuration in one workspace.
         </p>
-        <AdminNavigation pathname={pathname} className="mt-6" />
+        <Suspense fallback={null}>
+          <AdminNavigation pathname={pathname} className="mt-6" />
+        </Suspense>
       </div>
     </aside>
   );

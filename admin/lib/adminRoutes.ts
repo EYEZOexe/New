@@ -113,6 +113,17 @@ export function getAdminNavState(pathname: string): AdminNavState {
   };
 }
 
+export function getConnectorDetailSegments(
+  pathname: string,
+): { tenantKey: string; connectorId: string } | null {
+  const normalized = normalizePathname(pathname);
+  const parts = normalized.split("/").filter(Boolean);
+  if (parts[0] === "mappings" && parts.length === 3) {
+    return { tenantKey: parts[1], connectorId: parts[2] };
+  }
+  return null;
+}
+
 export function buildAdminBreadcrumbs(pathname: string): string[] {
   const normalizedPath = normalizePathname(pathname);
   const [head, ...rest] = normalizedPath.split("/").filter(Boolean);

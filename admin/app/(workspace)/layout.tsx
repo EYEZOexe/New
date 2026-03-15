@@ -4,8 +4,8 @@ import { ConnectorStatsProvider } from "@/context/connector-stats-context";
 
 export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   return (
-    <AdminShell>
-      <ConnectorStatsProvider>{children}</ConnectorStatsProvider>
-    </AdminShell>
+    <ConnectorStatsProvider>
+      <AdminShell>{children}</AdminShell>
+    </ConnectorStatsProvider>
   );
 }
