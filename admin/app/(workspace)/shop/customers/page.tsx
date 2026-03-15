@@ -40,6 +40,38 @@ function formatDateTime(value: number | null): string {
   return new Date(value).toLocaleString();
 }
 
+// Derive a simplified status for the badge
+type SimpleStatus = "active" | "expired" | "none";
+
+function getSimpleStatus(row: OperatorPaymentRow): SimpleStatus {
+  if (!row.subscriptionStatus) return "none";
+  if (row.subscriptionStatus === "active") return "active";
+  return "expired";
+}
+
+function StatusBadge({ row }: { row: OperatorPaymentRow }) {
+  const status = getSimpleStatus(row);
+  if (status === "active") {
+    return (
+      <span className="rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-300">
+        active
+      </span>
+    );
+  }
+  if (status === "expired") {
+    return (
+      <span className="rounded-full border border-red-400/30 bg-red-500/15 px-2 py-0.5 text-xs font-semibold text-red-300">
+        expired
+      </span>
+    );
+  }
+  return (
+    <span className="rounded-full border border-slate-500/30 bg-slate-500/20 px-2 py-0.5 text-xs font-semibold text-slate-400">
+      none
+    </span>
+  );
+}
+
 function CustomerActionsPanel({
   row,
   onUpdateEmail,
@@ -48,21 +80,13 @@ function CustomerActionsPanel({
 }: {
   row: OperatorPaymentRow;
   onUpdateEmail: (args: { userId: string; email: string }) => Promise<
-    OperatorResult<{
-      userId: string;
-      email: string;
-    }>
+    OperatorResult<{ userId: string; email: string }>
   >;
   onSetPassword: (args: {
     userId: string;
     password: string;
     invalidateExistingSessions?: boolean;
-  }) => Promise<
-    OperatorResult<{
-      userId: string;
-      sessionsInvalidated: boolean;
-    }>
-  >;
+  }) => Promise<OperatorResult<{ userId: string; sessionsInvalidated: boolean }>>;
   onSetSubscription: (args: {
     userId: string;
     action: "grant" | "revoke";
@@ -99,25 +123,14 @@ function CustomerActionsPanel({
     setMessage(null);
     setError(null);
     try {
-      const result = await onUpdateEmail({
-        userId: row.userId,
-        email: emailDraft,
-      });
+      const result = await onUpdateEmail({ userId: row.userId, email: emailDraft });
       if (!result.ok) {
         setError(result.error.message);
-        console.error(
-          `[admin/shop] customer email update failed user=${row.userId} code=${result.error.code} message=${result.error.message}`,
-        );
         return;
       }
       setMessage(`Email updated to ${result.email}.`);
-      console.info(
-        `[admin/shop] customer email updated user=${row.userId} email=${result.email}`,
-      );
     } catch (err) {
-      const text = err instanceof Error ? err.message : "Failed to update email";
-      setError(text);
-      console.error(`[admin/shop] customer email update failed user=${row.userId}: ${text}`);
+      setError(err instanceof Error ? err.message : "Failed to update email");
     } finally {
       setIsSavingEmail(false);
     }
@@ -135,22 +148,14 @@ function CustomerActionsPanel({
       });
       if (!result.ok) {
         setError(result.error.message);
-        console.error(
-          `[admin/shop] customer password reset failed user=${row.userId} code=${result.error.code} message=${result.error.message}`,
-        );
         return;
       }
       setPasswordDraft("");
       setMessage(
         `Password reset complete. Sessions invalidated: ${result.sessionsInvalidated ? "yes" : "no"}.`,
       );
-      console.info(
-        `[admin/shop] customer password reset user=${row.userId} sessions_invalidated=${result.sessionsInvalidated}`,
-      );
     } catch (err) {
-      const text = err instanceof Error ? err.message : "Failed to reset password";
-      setError(text);
-      console.error(`[admin/shop] customer password reset failed user=${row.userId}: ${text}`);
+      setError(err instanceof Error ? err.message : "Failed to reset password");
     } finally {
       setIsSavingPassword(false);
     }
@@ -173,21 +178,13 @@ function CustomerActionsPanel({
       });
       if (!result.ok) {
         setError(result.error.message);
-        console.error(
-          `[admin/shop] customer grant failed user=${row.userId} code=${result.error.code} message=${result.error.message}`,
-        );
         return;
       }
       setMessage(
         `Access granted (${result.tier ?? "none"}) until ${formatDateTime(result.endsAt)}. Role sync jobs: ${result.roleSyncQueued}.`,
       );
-      console.info(
-        `[admin/shop] customer access granted user=${row.userId} tier=${result.tier ?? "none"} ends_at=${result.endsAt ?? 0} role_sync_jobs=${result.roleSyncQueued}`,
-      );
     } catch (err) {
-      const text = err instanceof Error ? err.message : "Failed to grant subscription";
-      setError(text);
-      console.error(`[admin/shop] customer grant failed user=${row.userId}: ${text}`);
+      setError(err instanceof Error ? err.message : "Failed to grant subscription");
     } finally {
       setIsGranting(false);
     }
@@ -198,172 +195,181 @@ function CustomerActionsPanel({
     setMessage(null);
     setError(null);
     try {
-      const result = await onSetSubscription({
-        userId: row.userId,
-        action: "revoke",
-      });
+      const result = await onSetSubscription({ userId: row.userId, action: "revoke" });
       if (!result.ok) {
         setError(result.error.message);
-        console.error(
-          `[admin/shop] customer revoke failed user=${row.userId} code=${result.error.code} message=${result.error.message}`,
-        );
         return;
       }
       setMessage(`Access revoked. Role sync jobs: ${result.roleSyncQueued}.`);
-      console.info(
-        `[admin/shop] customer access revoked user=${row.userId} role_sync_jobs=${result.roleSyncQueued}`,
-      );
     } catch (err) {
-      const text = err instanceof Error ? err.message : "Failed to revoke subscription";
-      setError(text);
-      console.error(`[admin/shop] customer revoke failed user=${row.userId}: ${text}`);
+      setError(err instanceof Error ? err.message : "Failed to revoke subscription");
     } finally {
       setIsRevoking(false);
     }
   }
 
   return (
-    <div className="admin-surface-soft space-y-4">
-      <div className="grid gap-3 md:grid-cols-3">
-        <label className="admin-label">
-          Email
-          <input
-            className="admin-input"
-            value={emailDraft}
-            onChange={(event) => setEmailDraft(event.target.value)}
-            placeholder="customer@email.com"
-          />
-        </label>
-        <label className="admin-label">
-          New password
-          <input
-            className="admin-input"
-            type="password"
-            value={passwordDraft}
-            onChange={(event) => setPasswordDraft(event.target.value)}
-            placeholder="At least 8 characters"
-          />
-        </label>
-        <div className="admin-label">
-          Subscription status
-          <div className="admin-input flex items-center text-xs font-mono text-slate-300">
-            {row.subscriptionStatus ?? "none"} / tier {row.tier ?? "none"}
+    <div className="admin-surface-soft">
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Left: info */}
+        <div className="space-y-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              User ID
+            </p>
+            <p className="mt-0.5 font-mono text-xs text-slate-300">{row.userId}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              Subscription
+            </p>
+            <p className="mt-0.5 font-mono text-xs text-slate-300">
+              {row.subscriptionStatus ?? "none"} / tier {row.tier ?? "none"}
+            </p>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              Expires
+            </p>
+            <p className="mt-0.5 text-xs text-slate-300">{formatDateTime(row.endsAt)}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              Customer email
+            </p>
+            <p className="mt-0.5 text-xs text-slate-300">{row.customerEmail ?? "n/a"}</p>
+          </div>
+          {message ? <p className="text-sm text-emerald-400">{message}</p> : null}
+          {error ? <p className="text-sm text-rose-400">{error}</p> : null}
+        </div>
+
+        {/* Right: actions */}
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="admin-label">
+              Email
+              <input
+                className="admin-input"
+                value={emailDraft}
+                onChange={(e) => setEmailDraft(e.target.value)}
+                placeholder="customer@email.com"
+              />
+            </label>
+            <button
+              type="button"
+              className="admin-btn-secondary"
+              onClick={() => void onSaveEmail()}
+              disabled={isSavingEmail}
+            >
+              {isSavingEmail ? "Saving email..." : "Save email"}
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <label className="admin-label">
+              New password
+              <input
+                className="admin-input"
+                type="password"
+                value={passwordDraft}
+                onChange={(e) => setPasswordDraft(e.target.value)}
+                placeholder="At least 8 characters"
+              />
+            </label>
+            <button
+              type="button"
+              className="admin-btn-secondary"
+              onClick={() => void onSavePassword()}
+              disabled={isSavingPassword}
+            >
+              {isSavingPassword ? "Setting password..." : "Set password"}
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <label className="admin-label">
+                Grant tier
+                <select
+                  className="admin-input"
+                  value={tierDraft}
+                  onChange={(e) => setTierDraft(e.target.value as SubscriptionTier)}
+                >
+                  <option value="basic">basic</option>
+                  <option value="advanced">advanced</option>
+                  <option value="pro">pro</option>
+                </select>
+              </label>
+              <label className="admin-label">
+                Duration days
+                <input
+                  className="admin-input"
+                  value={durationDaysDraft}
+                  onChange={(e) => setDurationDaysDraft(e.target.value)}
+                />
+              </label>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="admin-btn-primary"
+                onClick={() => void onGrantSubscription()}
+                disabled={isGranting}
+              >
+                {isGranting ? "Granting..." : "Grant access"}
+              </button>
+              <button
+                type="button"
+                className="admin-btn-secondary"
+                onClick={() => void onRevokeSubscription()}
+                disabled={isRevoking}
+              >
+                {isRevoking ? "Revoking..." : "Revoke access"}
+              </button>
+            </div>
           </div>
         </div>
       </div>
-
-      <div className="grid gap-3 md:grid-cols-3">
-        <label className="admin-label">
-          Grant tier
-          <select
-            className="admin-input"
-            value={tierDraft}
-            onChange={(event) => setTierDraft(event.target.value as SubscriptionTier)}
-          >
-            <option value="basic">basic</option>
-            <option value="advanced">advanced</option>
-            <option value="pro">pro</option>
-          </select>
-        </label>
-        <label className="admin-label">
-          Grant duration days
-          <input
-            className="admin-input"
-            value={durationDaysDraft}
-            onChange={(event) => setDurationDaysDraft(event.target.value)}
-          />
-        </label>
-        <div className="admin-label">
-          Expires
-          <div className="admin-input flex items-center text-xs text-slate-300">
-            {formatDateTime(row.endsAt)}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          className="admin-btn-secondary"
-          onClick={() => void onSaveEmail()}
-          disabled={isSavingEmail}
-        >
-          {isSavingEmail ? "Saving email..." : "Save email"}
-        </button>
-        <button
-          type="button"
-          className="admin-btn-secondary"
-          onClick={() => void onSavePassword()}
-          disabled={isSavingPassword}
-        >
-          {isSavingPassword ? "Setting password..." : "Set password"}
-        </button>
-        <button
-          type="button"
-          className="admin-btn-primary"
-          onClick={() => void onGrantSubscription()}
-          disabled={isGranting}
-        >
-          {isGranting ? "Granting..." : "Grant access"}
-        </button>
-        <button
-          type="button"
-          className="admin-btn-secondary"
-          onClick={() => void onRevokeSubscription()}
-          disabled={isRevoking}
-        >
-          {isRevoking ? "Revoking..." : "Revoke access"}
-        </button>
-      </div>
-
-      {message ? <p className="text-sm text-emerald-400">{message}</p> : null}
-      {error ? <p className="text-sm text-rose-400">{error}</p> : null}
     </div>
   );
 }
+
+const listPaymentCustomersRef = makeFunctionReference<
+  "query",
+  { limit?: number; search?: string },
+  OperatorPaymentRow[]
+>("payments:listPaymentCustomers");
+const updateCustomerEmailRef = makeFunctionReference<
+  "mutation",
+  { userId: string; email: string },
+  OperatorResult<{ userId: string; email: string }>
+>("payments:adminUpdatePaymentCustomerEmail");
+const setCustomerPasswordRef = makeFunctionReference<
+  "action",
+  { userId: string; password: string; invalidateExistingSessions?: boolean },
+  OperatorResult<{ userId: string; sessionsInvalidated: boolean }>
+>("payments:adminSetPaymentCustomerPassword");
+const setCustomerSubscriptionRef = makeFunctionReference<
+  "mutation",
+  {
+    userId: string;
+    action: "grant" | "revoke";
+    tier?: SubscriptionTier;
+    durationDays?: number;
+  },
+  OperatorResult<{
+    userId: string;
+    subscriptionStatus: SubscriptionStatus;
+    tier: SubscriptionTier | null;
+    endsAt: number | null;
+    roleSyncQueued: number;
+  }>
+>("payments:adminSetPaymentCustomerSubscription");
 
 export default function ShopCustomersPage() {
   const [search, setSearch] = useState("");
   const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
   const debouncedSearch = useMemo(() => search.trim(), [search]);
-
-  const listPaymentCustomersRef = makeFunctionReference<
-    "query",
-    { limit?: number; search?: string },
-    OperatorPaymentRow[]
-  >("payments:listPaymentCustomers");
-  const updateCustomerEmailRef = makeFunctionReference<
-    "mutation",
-    { userId: string; email: string },
-    OperatorResult<{
-      userId: string;
-      email: string;
-    }>
-  >("payments:adminUpdatePaymentCustomerEmail");
-  const setCustomerPasswordRef = makeFunctionReference<
-    "action",
-    { userId: string; password: string; invalidateExistingSessions?: boolean },
-    OperatorResult<{
-      userId: string;
-      sessionsInvalidated: boolean;
-    }>
-  >("payments:adminSetPaymentCustomerPassword");
-  const setCustomerSubscriptionRef = makeFunctionReference<
-    "mutation",
-    {
-      userId: string;
-      action: "grant" | "revoke";
-      tier?: SubscriptionTier;
-      durationDays?: number;
-    },
-    OperatorResult<{
-      userId: string;
-      subscriptionStatus: SubscriptionStatus;
-      tier: SubscriptionTier | null;
-      endsAt: number | null;
-      roleSyncQueued: number;
-    }>
-  >("payments:adminSetPaymentCustomerSubscription");
 
   const rows = useQuery(listPaymentCustomersRef, {
     limit: 200,
@@ -405,17 +411,14 @@ export default function ShopCustomersPage() {
         }
       />
 
-      <div>
-        <label className="admin-label max-w-md">
-          Search
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="email, customer id, subscription id, event id..."
-            className="admin-input"
-          />
-        </label>
-      </div>
+      {/* Full-width auto-focused search bar */}
+      <input
+        autoFocus
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Search email, customer id, subscription id, event id..."
+        className="admin-input w-full"
+      />
 
       <AdminTableShell
         title="Customer Records"
@@ -428,12 +431,9 @@ export default function ShopCustomersPage() {
           <thead className="sticky top-0 bg-slate-900 text-left text-xs uppercase tracking-wide text-slate-300">
             <tr>
               <th className="px-3 py-2">User</th>
-              <th className="px-3 py-2">Subscription</th>
-              <th className="px-3 py-2">Tier</th>
-              <th className="px-3 py-2">Ends</th>
+              <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2">Customer ID</th>
               <th className="px-3 py-2">Subscription ID</th>
-              <th className="px-3 py-2">Last Event</th>
               <th className="px-3 py-2">Updated</th>
               <th className="px-3 py-2">Actions</th>
             </tr>
@@ -447,26 +447,24 @@ export default function ShopCustomersPage() {
                   <tr>
                     <td className="px-3 py-3 align-top">
                       <p className="font-medium text-slate-100">{row.userEmail ?? row.userId}</p>
-                      <p className="mt-1 font-mono text-xs text-slate-400">{row.userId}</p>
-                      <p className="mt-1 text-xs text-slate-400">
-                        customer email: {row.customerEmail ?? "n/a"}
-                      </p>
+                      <p className="mt-0.5 font-mono text-xs text-slate-400">{row.userId}</p>
                     </td>
-                    <td className="px-3 py-3 align-top text-slate-300">
-                      {row.subscriptionStatus ?? "none"}
-                    </td>
-                    <td className="px-3 py-3 align-top text-slate-300">{row.tier ?? "n/a"}</td>
-                    <td className="px-3 py-3 align-top text-xs text-slate-300">
-                      {formatDateTime(row.endsAt)}
+                    <td className="px-3 py-3 align-top">
+                      <StatusBadge row={row} />
+                      {row.tier && (
+                        <p className="mt-1 text-xs text-slate-400">
+                          {row.tier}
+                          {row.endsAt
+                            ? ` · expires ${new Date(row.endsAt).toLocaleDateString()}`
+                            : ""}
+                        </p>
+                      )}
                     </td>
                     <td className="px-3 py-3 align-top font-mono text-xs text-slate-300">
                       {row.externalCustomerId ?? "n/a"}
                     </td>
                     <td className="px-3 py-3 align-top font-mono text-xs text-slate-300">
                       {row.externalSubscriptionId ?? "n/a"}
-                    </td>
-                    <td className="px-3 py-3 align-top font-mono text-xs text-slate-300">
-                      {row.lastEventId ?? "n/a"}
                     </td>
                     <td className="px-3 py-3 align-top text-xs text-slate-300">
                       {formatDateTime(row.updatedAt)}
@@ -485,7 +483,7 @@ export default function ShopCustomersPage() {
                   </tr>
                   {isExpanded ? (
                     <tr>
-                      <td colSpan={9} className="px-3 py-3">
+                      <td colSpan={6} className="px-3 py-3">
                         <CustomerActionsPanel
                           row={row}
                           onUpdateEmail={updateCustomerEmail}

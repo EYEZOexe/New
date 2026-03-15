@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
-import { AdminSectionCard } from "@/components/admin/admin-section-card";
 import { AdminTableShell } from "@/components/admin/admin-table-shell";
+import { ConnectorTokenSheet } from "@/components/admin/connector-token-sheet";
+import { useConnectorStats } from "@/context/connector-stats-context";
 import { buildAdminBreadcrumbs } from "@/lib/adminRoutes";
 
 type ConnectorRow = {
@@ -20,52 +21,72 @@ type ConnectorRow = {
   lastSeenAt: number;
 };
 
-export default function MappingsPage() {
-  const listConnectors = useMemo(
-    () => makeFunctionReference<"query", {}, ConnectorRow[]>("connectors:listConnectors"),
-    [],
-  );
-  const rotateConnectorToken = useMemo(
-    () =>
-      makeFunctionReference<
-        "mutation",
-        { tenantKey: string; connectorId: string },
-        { token: string }
-      >("connectors:rotateConnectorToken"),
-    [],
-  );
+const listConnectorsRef = makeFunctionReference<"query", Record<string, never>, ConnectorRow[]>(
+  "connectors:listConnectors",
+);
 
-  const connectors = useQuery(listConnectors);
-  const doRotate = useMutation(rotateConnectorToken);
+function relativeTime(ms: number): string {
+  const diff = Date.now() - ms;
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
 
-  const [tenantKey, setTenantKey] = useState("t1");
-  const [connectorId, setConnectorId] = useState("conn_01");
-  const [lastToken, setLastToken] = useState<string | null>(null);
-  const [isRotating, setIsRotating] = useState(false);
-
-  async function onCreateOrRotate() {
-    setIsRotating(true);
-    setLastToken(null);
-    try {
-      const res = await doRotate({ tenantKey, connectorId });
-      setLastToken(res.token);
-      console.info(
-        `[admin/mappings] connector token rotated tenant=${tenantKey} connector=${connectorId}`,
-      );
-    } finally {
-      setIsRotating(false);
-    }
+function HealthDot({ failedJobs, status }: { failedJobs: number; status: "active" | "paused" }) {
+  if (failedJobs > 0) {
+    return (
+      <span
+        className="inline-block h-2 w-2 rounded-full bg-red-500"
+        title="Failed jobs"
+        aria-label="failed"
+      />
+    );
   }
+  if (status !== "active") {
+    return (
+      <span
+        className="inline-block h-2 w-2 rounded-full bg-amber-500"
+        title="Not active"
+        aria-label="paused"
+      />
+    );
+  }
+  return (
+    <span
+      className="inline-block h-2 w-2 rounded-full bg-emerald-500"
+      title="Healthy"
+      aria-label="active"
+    />
+  );
+}
+
+export default function MappingsPage() {
+  const connectors = useQuery(listConnectorsRef, {});
+  const { failedJobsByConnector } = useConnectorStats();
+  const [tokenSheetOpen, setTokenSheetOpen] = useState(false);
+
+  const breadcrumbs = useMemo(() => buildAdminBreadcrumbs("/mappings"), []);
 
   return (
     <div className="space-y-6">
       <AdminPageHeader
         chip="Mappings"
-        title="Connector Mappings"
-        description="Create connector tokens and manage routing surfaces for Discord mirroring."
-        breadcrumbs={buildAdminBreadcrumbs("/mappings")}
+        title="Connectors"
+        description="Manage connector routing surfaces for Discord mirroring."
+        breadcrumbs={breadcrumbs}
         actions={
           <>
+            <button
+              type="button"
+              onClick={() => setTokenSheetOpen(true)}
+              className="admin-btn-secondary"
+            >
+              Create / Rotate Token
+            </button>
             <Link href="/shop/policies" className="admin-link">
               Shop policies
             </Link>
@@ -82,46 +103,8 @@ export default function MappingsPage() {
         }
       />
 
-      <AdminSectionCard title="Create or rotate token">
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="admin-label">
-            Tenant
-            <input
-              value={tenantKey}
-              onChange={(e) => setTenantKey(e.target.value)}
-              className="admin-input w-40"
-            />
-          </label>
-          <label className="admin-label">
-            Connector ID
-            <input
-              value={connectorId}
-              onChange={(e) => setConnectorId(e.target.value)}
-              className="admin-input w-56"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={onCreateOrRotate}
-            disabled={isRotating}
-            className="admin-btn-secondary"
-          >
-            {isRotating ? "Working..." : "Create/Rotate"}
-          </button>
-        </div>
-
-        {lastToken ? (
-          <div className="mt-4">
-            <p className="text-xs font-medium text-slate-300">Connector token (shown once):</p>
-            <pre className="mt-2 overflow-x-auto rounded-md bg-zinc-900 p-3 text-xs text-zinc-100">
-              {lastToken}
-            </pre>
-          </div>
-        ) : null}
-      </AdminSectionCard>
-
       <AdminTableShell
-        title="Existing Connectors"
+        title="Connectors"
         isLoading={!connectors}
         isEmpty={connectors !== undefined && connectors.length === 0}
         emptyMessage="No connectors yet."
@@ -129,43 +112,58 @@ export default function MappingsPage() {
         <table className="w-full text-left text-sm">
           <thead className="sticky top-0 bg-slate-900 text-xs font-semibold text-slate-300">
             <tr>
+              <th className="px-3 py-2" />
               <th className="px-3 py-2">Tenant</th>
               <th className="px-3 py-2">Connector</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2">Mirroring</th>
-              <th className="px-3 py-2">Config</th>
-              <th className="px-3 py-2">Last Seen</th>
+              <th className="px-3 py-2">Failed jobs</th>
+              <th className="px-3 py-2">Last seen</th>
               <th className="px-3 py-2">Open</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800 bg-slate-950/40 text-slate-200">
-            {connectors?.map((connector) => (
-              <tr key={connector._id}>
-                <td className="px-3 py-2">{connector.tenantKey}</td>
-                <td className="px-3 py-2">{connector.connectorId}</td>
-                <td className="px-3 py-2">{connector.status}</td>
-                <td className="px-3 py-2">
-                  {connector.forwardEnabled === true ? "enabled" : "disabled"}
-                </td>
-                <td className="px-3 py-2">v{connector.configVersion}</td>
-                <td className="px-3 py-2">
-                  {connector.lastSeenAt ? new Date(connector.lastSeenAt).toLocaleString() : "never"}
-                </td>
-                <td className="px-3 py-2">
-                  <Link
-                    className="font-medium text-cyan-300 underline"
-                    href={`/mappings/${encodeURIComponent(connector.tenantKey)}/${encodeURIComponent(
-                      connector.connectorId,
-                    )}`}
-                  >
-                    Configure
-                  </Link>
-                </td>
-              </tr>
-            ))}
+            {connectors?.map((connector) => {
+              const key = `${connector.tenantKey}::${connector.connectorId}`;
+              const failedJobs = failedJobsByConnector[key] ?? 0;
+              const openHref =
+                failedJobs > 0
+                  ? `/mappings/${encodeURIComponent(connector.tenantKey)}/${encodeURIComponent(connector.connectorId)}?tab=jobs`
+                  : `/mappings/${encodeURIComponent(connector.tenantKey)}/${encodeURIComponent(connector.connectorId)}?tab=overview`;
+              return (
+                <tr key={connector._id}>
+                  <td className="px-3 py-2">
+                    <HealthDot failedJobs={failedJobs} status={connector.status} />
+                  </td>
+                  <td className="px-3 py-2">{connector.tenantKey}</td>
+                  <td className="px-3 py-2">{connector.connectorId}</td>
+                  <td className="px-3 py-2">{connector.status}</td>
+                  <td className="px-3 py-2">
+                    {connector.forwardEnabled === true ? "enabled" : "disabled"}
+                  </td>
+                  <td className="px-3 py-2">
+                    {failedJobs > 0 ? (
+                      <span className="rounded-full border border-red-400/30 bg-red-500/15 px-2 py-0.5 text-xs font-semibold text-red-300">
+                        {failedJobs}
+                      </span>
+                    ) : null}
+                  </td>
+                  <td className="px-3 py-2 text-xs text-slate-400">
+                    {connector.lastSeenAt ? relativeTime(connector.lastSeenAt) : "never"}
+                  </td>
+                  <td className="px-3 py-2">
+                    <Link className="font-medium text-indigo-300 underline" href={openHref}>
+                      Open
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </AdminTableShell>
+
+      <ConnectorTokenSheet open={tokenSheetOpen} onOpenChange={setTokenSheetOpen} />
     </div>
   );
 }
