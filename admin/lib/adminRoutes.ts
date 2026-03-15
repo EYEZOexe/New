@@ -23,6 +23,9 @@ export type AdminNavState = {
   activeShopRoute: AdminShopRoute | null;
 };
 
+// NOTE: "dashboard" is intentionally omitted from this list and is handled as a special case
+// in getAdminNavState (see root route check). This ensures the root "/" route returns
+// activeItem: "dashboard" without relying on route matching logic.
 export const ADMIN_ROUTE_ITEMS: readonly AdminRouteConfig[] = [
   { id: "mappings", href: "/mappings" },
   { id: "filtering", href: "/filtering" },
@@ -76,6 +79,8 @@ function decodePathSegment(segment: string): string {
   }
 }
 
+const CONNECTOR_ITEMS = new Set<AdminNavItem>(["mappings", "filtering"]);
+
 export function getAdminNavState(pathname: string): AdminNavState {
   const normalizedPath = normalizePathname(pathname);
 
@@ -92,7 +97,7 @@ export function getAdminNavState(pathname: string): AdminNavState {
     ADMIN_ROUTE_ITEMS.find((item) => isPathWithinRoute(normalizedPath, item.href))?.id ?? null;
 
   // Check if path is within connectors routes (mappings or filtering)
-  const isConnectorPath = isPathWithinRoute(normalizedPath, "/mappings") || isPathWithinRoute(normalizedPath, "/filtering");
+  const isConnectorPath = activeItem !== null && CONNECTOR_ITEMS.has(activeItem);
   const activeGroup = isConnectorPath
     ? "connectors"
     : ADMIN_ROUTE_GROUPS.find((group) => isPathWithinRoute(normalizedPath, group.href))?.id ?? null;
@@ -121,10 +126,13 @@ export function buildAdminBreadcrumbs(pathname: string): string[] {
       breadcrumbs.push(decodePathSegment(rest[0]));
       breadcrumbs.push(decodePathSegment(rest[1]));
 
-      // Extract tab query parameter from original pathname
+      // Extract tab query parameter from original pathname.
+      // We use the raw pathname here (rather than normalizedPath) because query parameters
+      // are removed during normalization, so we must extract the tab from the original string.
+      // Path segments are split from normalizedPath since they've been canonicalized.
       const tabMatch = pathname.match(/[?&]tab=([^&]+)/);
       if (tabMatch) {
-        const tabValue = tabMatch[1];
+        const tabValue = decodePathSegment(tabMatch[1]);
         const tabLabel = CONNECTOR_SUB_NAV_TABS.find((tab) => tab.tabValue === tabValue)?.label;
         if (tabLabel) {
           breadcrumbs.push(tabLabel);
