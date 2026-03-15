@@ -516,3 +516,82 @@ export const removeMapping = mutation({
     return { ok: true };
   },
 });
+
+export const getConnectorHealthSummary = query({
+  args: {},
+  handler: async (ctx) => {
+    const connectors = await ctx.db.query("connectors").collect();
+
+    const healthSummary = [];
+
+    for (const connector of connectors) {
+      const jobs = await ctx.db
+        .query("signalMirrorJobs")
+        .withIndex("by_tenant_connector", (q) =>
+          q.eq("tenantKey", connector.tenantKey).eq("connectorId", connector.connectorId),
+        )
+        .collect();
+
+      let failedJobs = 0;
+      let pendingJobs = 0;
+
+      for (const job of jobs) {
+        if (job.status === "failed") {
+          failedJobs++;
+        } else if (job.status === "pending") {
+          pendingJobs++;
+        }
+      }
+
+      healthSummary.push({
+        tenantKey: connector.tenantKey,
+        connectorId: connector.connectorId,
+        failedJobs,
+        pendingJobs,
+        totalJobs: jobs.length,
+      });
+    }
+
+    return healthSummary;
+  },
+});
+
+export const listRecentJobsGlobal = query({
+  args: {
+    limit: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const clampedLimit = Math.max(1, Math.min(50, args.limit));
+    const statuses = ["pending", "processing", "completed", "failed"] as const;
+
+    // Query each status bucket separately
+    const jobsByStatus = await Promise.all(
+      statuses.map((status) =>
+        ctx.db
+          .query("signalMirrorJobs")
+          .withIndex("by_status_updatedAt", (q) => q.eq("status", status))
+          .order("desc")
+          .take(clampedLimit),
+      ),
+    );
+
+    // Flatten and merge all results
+    const allJobs = jobsByStatus.flat();
+
+    // Sort by updatedAt descending across all statuses
+    allJobs.sort((a, b) => b.updatedAt - a.updatedAt);
+
+    // Slice to limit and map to output shape
+    return allJobs.slice(0, clampedLimit).map((job) => ({
+      _id: job._id,
+      updatedAt: job.updatedAt,
+      eventType: job.eventType,
+      tenantKey: job.tenantKey,
+      connectorId: job.connectorId,
+      sourceChannelId: job.sourceChannelId,
+      targetChannelId: job.targetChannelId,
+      status: job.status,
+      attempts: job.attemptCount,
+    }));
+  },
+});
