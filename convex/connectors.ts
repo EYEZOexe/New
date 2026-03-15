@@ -575,6 +575,14 @@ export const getConnectorHealthSummary = query({
   },
 });
 
+export const countAllMappings = query({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("connectorMappings").collect();
+    return rows.length;
+  },
+});
+
 export const listRecentJobsGlobal = query({
   args: {
     limit: v.number(),

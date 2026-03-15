@@ -24,6 +24,12 @@ const requeueMirrorJobRef = makeFunctionReference<
   { ok: boolean; reason?: string; enqueued?: number; deduped?: number }
 >("mirror:requeueMirrorJobForTarget");
 
+const dismissMirrorJobRef = makeFunctionReference<
+  "mutation",
+  { jobId: string },
+  { ok: boolean; reason?: string }
+>("mirror:dismissSignalMirrorJob");
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 type EventTypeFilter = "all" | "create" | "update" | "delete";
@@ -92,11 +98,13 @@ export function ConnectorJobsTab({
     message: string;
     ok: boolean;
   } | null>(null);
+  const [dismissingJobId, setDismissingJobId] = useState<string | null>(null);
 
   const [eventTypeFilter, setEventTypeFilter] = useState<EventTypeFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   const doRequeue = useMutation(requeueMirrorJobRef);
+  const doDismiss = useMutation(dismissMirrorJobRef);
 
   const channelNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -140,6 +148,15 @@ export function ConnectorJobsTab({
     setStatusFilter("all");
   }
 
+  async function onDismiss(job: MirrorJobRow) {
+    setDismissingJobId(job.jobId);
+    try {
+      await doDismiss({ jobId: job.jobId });
+    } finally {
+      setDismissingJobId(null);
+    }
+  }
+
   async function onRetry(job: MirrorJobRow) {
     setRequeuingJobId(job.jobId);
     setRequeueResult(null);
@@ -169,6 +186,7 @@ export function ConnectorJobsTab({
   function renderJobRow(job: MirrorJobRow, pinned = false) {
     const isExpanded = expandedJobId === job.jobId;
     const isRequeuing = requeueingJobId === job.jobId;
+    const isDismissing = dismissingJobId === job.jobId;
     const thisRequeueResult = requeueResult?.jobId === job.jobId ? requeueResult : null;
     const sourceImgCount = (job.sourceAttachments ?? job.jobAttachments).filter(
       (a) =>
@@ -239,13 +257,25 @@ export function ConnectorJobsTab({
             )}
           </td>
           <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-            <button
-              disabled={isRequeuing}
-              className="rounded bg-sky-700 px-2 py-1 text-xs font-medium text-white hover:bg-sky-600 disabled:opacity-50"
-              onClick={() => void onRetry(job)}
-            >
-              {isRequeuing ? "…" : "Retry"}
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                disabled={isRequeuing}
+                className="rounded bg-sky-700 px-2 py-1 text-xs font-medium text-white hover:bg-sky-600 disabled:opacity-50"
+                onClick={() => void onRetry(job)}
+              >
+                {isRequeuing ? "…" : "Retry"}
+              </button>
+              {job.status === "failed" && (
+                <button
+                  disabled={isDismissing}
+                  className="rounded bg-slate-700 px-2 py-1 text-xs font-medium text-slate-300 hover:bg-slate-600 disabled:opacity-50"
+                  onClick={() => void onDismiss(job)}
+                  title="Delete this failed job"
+                >
+                  {isDismissing ? "…" : "Dismiss"}
+                </button>
+              )}
+            </div>
             {thisRequeueResult && (
               <p
                 className={`mt-1 text-xs ${thisRequeueResult.ok ? "text-emerald-400" : "text-rose-400"}`}

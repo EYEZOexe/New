@@ -967,6 +967,19 @@ export const listSignalMirrorJobs = query({
   },
 });
 
+export const dismissSignalMirrorJob = mutation({
+  args: {
+    jobId: v.id("signalMirrorJobs"),
+  },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job) return { ok: false as const, reason: "not_found" };
+    if (job.status !== "failed") return { ok: false as const, reason: "not_failed" };
+    await ctx.db.delete(args.jobId);
+    return { ok: true as const };
+  },
+});
+
 export const requeueMirrorJobForTarget = mutation({
   args: {
     tenantKey: v.string(),

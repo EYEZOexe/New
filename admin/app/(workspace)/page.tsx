@@ -57,6 +57,12 @@ const listRecentJobsRef = makeFunctionReference<
   RecentJob[]
 >("connectors:listRecentJobsGlobal");
 
+const countAllMappingsRef = makeFunctionReference<
+  "query",
+  Record<string, never>,
+  number
+>("connectors:countAllMappings");
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -173,6 +179,7 @@ export default function DashboardPage() {
   const { connectorHealth } = useConnectorStats();
   const connectorsRaw = useQuery(listConnectorsRef, {});
   const recentJobs = useQuery(listRecentJobsRef, { limit: 10 });
+  const totalRoutes = useQuery(countAllMappingsRef, {});
   const [tokenSheetOpen, setTokenSheetOpen] = useState(false);
 
   // Derived stat values
@@ -253,13 +260,14 @@ export default function DashboardPage() {
           <p className="mt-2 text-2xl font-bold text-slate-100">{totalPending}</p>
         </div>
 
-        {/* TODO: route count requires a separate query not yet implemented */}
         {/* Total Routes */}
         <div className="admin-section-card">
           <p className="text-xs font-semibold uppercase tracking-wide text-white/40">
             Total Routes
           </p>
-          <p className="mt-2 text-2xl font-bold text-slate-100">—</p>
+          <p className="mt-2 text-2xl font-bold text-slate-100">
+            {totalRoutes ?? "—"}
+          </p>
         </div>
       </div>
 
