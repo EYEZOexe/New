@@ -22,21 +22,11 @@ const ConnectorStatsContext = createContext<
   ConnectorStatsContextValue | undefined
 >(undefined);
 
-const getConnectorHealthSummaryRef = useMemo(
-  () =>
-    makeFunctionReference<
-      "query",
-      Record<string, never>,
-      Array<{
-        tenantKey: string;
-        connectorId: string;
-        failedJobs: number;
-        pendingJobs: number;
-        totalJobs: number;
-      }>
-    >("connectors:getConnectorHealthSummary"),
-  [],
-);
+const getConnectorHealthSummaryRef = makeFunctionReference<
+  "query",
+  Record<string, never>,
+  ConnectorHealth[]
+>("connectors:getConnectorHealthSummary");
 
 export function ConnectorStatsProvider({
   children,
