@@ -1,5 +1,5 @@
-export type AdminNavItem = "mappings" | "filtering" | "discord-bot";
-export type AdminNavGroup = "shop";
+export type AdminNavItem = "dashboard" | "mappings" | "filtering" | "discord-bot";
+export type AdminNavGroup = "connectors" | "shop";
 export type AdminShopRoute = "catalog" | "policies" | "customers" | "statistics";
 
 type AdminRouteConfig = {
@@ -27,6 +27,13 @@ export const ADMIN_ROUTE_ITEMS: readonly AdminRouteConfig[] = [
   { id: "mappings", href: "/mappings" },
   { id: "filtering", href: "/filtering" },
   { id: "discord-bot", href: "/discord-bot" },
+] as const;
+
+export const CONNECTOR_SUB_NAV_TABS = [
+  { label: "Overview", tabValue: "overview" },
+  { label: "Routes", tabValue: "routes" },
+  { label: "Jobs", tabValue: "jobs" },
+  { label: "Settings", tabValue: "settings" },
 ] as const;
 
 export const ADMIN_ROUTE_GROUPS: readonly AdminRouteGroupConfig[] = [
@@ -72,10 +79,24 @@ function decodePathSegment(segment: string): string {
 export function getAdminNavState(pathname: string): AdminNavState {
   const normalizedPath = normalizePathname(pathname);
 
+  // Root route
+  if (normalizedPath === "/") {
+    return {
+      activeItem: "dashboard",
+      activeGroup: null,
+      activeShopRoute: null,
+    };
+  }
+
   const activeItem =
     ADMIN_ROUTE_ITEMS.find((item) => isPathWithinRoute(normalizedPath, item.href))?.id ?? null;
-  const activeGroup =
-    ADMIN_ROUTE_GROUPS.find((group) => isPathWithinRoute(normalizedPath, group.href))?.id ?? null;
+
+  // Check if path is within connectors routes (mappings or filtering)
+  const isConnectorPath = isPathWithinRoute(normalizedPath, "/mappings") || isPathWithinRoute(normalizedPath, "/filtering");
+  const activeGroup = isConnectorPath
+    ? "connectors"
+    : ADMIN_ROUTE_GROUPS.find((group) => isPathWithinRoute(normalizedPath, group.href))?.id ?? null;
+
   const activeShopRoute =
     ADMIN_ROUTE_GROUPS.find((group) => group.id === "shop")
       ?.children.find((route) => isPathWithinRoute(normalizedPath, route.href))?.id ?? null;
@@ -91,13 +112,26 @@ export function buildAdminBreadcrumbs(pathname: string): string[] {
   const normalizedPath = normalizePathname(pathname);
   const [head, ...rest] = normalizedPath.split("/").filter(Boolean);
 
+  // Root route
   if (!head) return [];
 
   if (head === "mappings") {
+    const breadcrumbs = ["Mappings"];
     if (rest.length >= 2) {
-      return ["Mappings", decodePathSegment(rest[0]), decodePathSegment(rest[1])];
+      breadcrumbs.push(decodePathSegment(rest[0]));
+      breadcrumbs.push(decodePathSegment(rest[1]));
+
+      // Extract tab query parameter from original pathname
+      const tabMatch = pathname.match(/[?&]tab=([^&]+)/);
+      if (tabMatch) {
+        const tabValue = tabMatch[1];
+        const tabLabel = CONNECTOR_SUB_NAV_TABS.find((tab) => tab.tabValue === tabValue)?.label;
+        if (tabLabel) {
+          breadcrumbs.push(tabLabel);
+        }
+      }
     }
-    return ["Mappings"];
+    return breadcrumbs;
   }
 
   if (head === "discord-bot") {
