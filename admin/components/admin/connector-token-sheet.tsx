@@ -18,6 +18,8 @@ type ConnectorTokenSheetProps = {
   connectorId?: string;
 };
 
+// Module-level constant: makeFunctionReference returns a stable string-backed
+// reference object — no per-render recreation needed.
 const rotateTokenRef = makeFunctionReference<
   "mutation",
   { tenantKey: string; connectorId: string },
@@ -35,6 +37,7 @@ export function ConnectorTokenSheet({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultToken, setResultToken] = useState<string | null>(null);
+  const [copyError, setCopyError] = useState(false);
 
   const rotateToken = useMutation(rotateTokenRef);
 
@@ -45,7 +48,11 @@ export function ConnectorTokenSheet({
       setIsSubmitting(false);
       setError(null);
       setResultToken(null);
+      setCopyError(false);
     }
+    // Props are included so that if the parent changes tenantKey/connectorId
+    // while the sheet is closed and re-opens it, the local state picks up the
+    // new values on the open→true transition.
   }, [open, tenantKey, connectorId]);
 
   async function handleSubmit() {
@@ -79,7 +86,12 @@ export function ConnectorTokenSheet({
   }
 
   async function handleCopy() {
-    await navigator.clipboard.writeText(resultToken!);
+    try {
+      await navigator.clipboard.writeText(resultToken!);
+      setCopyError(false);
+    } catch {
+      setCopyError(true);
+    }
   }
 
   return (
@@ -127,16 +139,16 @@ export function ConnectorTokenSheet({
             </label>
 
             {error ? (
-              <p className="text-sm text-rose-400">{error}</p>
+              <p className="text-sm text-rose-400" role="alert">{error}</p>
             ) : null}
 
             {resultToken ? (
               <div className="space-y-3">
                 <label className="admin-label">
                   Token
-                  <code className="admin-input block break-all font-mono text-xs">
+                  <pre className="admin-input block break-all font-mono text-xs">
                     {resultToken}
-                  </code>
+                  </pre>
                 </label>
                 <div className="flex gap-2">
                   <button
@@ -154,6 +166,7 @@ export function ConnectorTokenSheet({
                     Done
                   </button>
                 </div>
+                {copyError && <p className="text-xs text-rose-400">Copy failed — please select and copy manually.</p>}
               </div>
             ) : (
               <button
