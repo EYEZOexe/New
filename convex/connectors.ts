@@ -522,37 +522,55 @@ export const getConnectorHealthSummary = query({
   handler: async (ctx) => {
     const connectors = await ctx.db.query("connectors").collect();
 
-    const healthSummary = [];
-
-    for (const connector of connectors) {
-      const jobs = await ctx.db
+    // Query failed, pending, and processing jobs globally using by_status_updatedAt index.
+    // This avoids N+1 queries and unbounded memory use by scanning 3 status buckets instead of querying per-connector.
+    // totalJobs = failedJobs + pendingJobs + processingJobs (active jobs only, excludes historical completed).
+    const [failedJobs, pendingJobs, processingJobs] = await Promise.all([
+      ctx.db
         .query("signalMirrorJobs")
-        .withIndex("by_tenant_connector", (q) =>
-          q.eq("tenantKey", connector.tenantKey).eq("connectorId", connector.connectorId),
-        )
-        .collect();
+        .withIndex("by_status_updatedAt", (q) => q.eq("status", "failed"))
+        .collect(),
+      ctx.db
+        .query("signalMirrorJobs")
+        .withIndex("by_status_updatedAt", (q) => q.eq("status", "pending"))
+        .collect(),
+      ctx.db
+        .query("signalMirrorJobs")
+        .withIndex("by_status_updatedAt", (q) => q.eq("status", "processing"))
+        .collect(),
+    ]);
 
-      let failedJobs = 0;
-      let pendingJobs = 0;
+    // Build maps: key = `${tenantKey}::${connectorId}`
+    const failedByConnector = new Map<string, number>();
+    const pendingByConnector = new Map<string, number>();
+    const processingByConnector = new Map<string, number>();
 
-      for (const job of jobs) {
-        if (job.status === "failed") {
-          failedJobs++;
-        } else if (job.status === "pending") {
-          pendingJobs++;
-        }
-      }
-
-      healthSummary.push({
-        tenantKey: connector.tenantKey,
-        connectorId: connector.connectorId,
-        failedJobs,
-        pendingJobs,
-        totalJobs: jobs.length,
-      });
+    for (const job of failedJobs) {
+      const key = `${job.tenantKey}::${job.connectorId}`;
+      failedByConnector.set(key, (failedByConnector.get(key) ?? 0) + 1);
+    }
+    for (const job of pendingJobs) {
+      const key = `${job.tenantKey}::${job.connectorId}`;
+      pendingByConnector.set(key, (pendingByConnector.get(key) ?? 0) + 1);
+    }
+    for (const job of processingJobs) {
+      const key = `${job.tenantKey}::${job.connectorId}`;
+      processingByConnector.set(key, (processingByConnector.get(key) ?? 0) + 1);
     }
 
-    return healthSummary;
+    return connectors.map((connector) => {
+      const key = `${connector.tenantKey}::${connector.connectorId}`;
+      const failedCount = failedByConnector.get(key) ?? 0;
+      const pendingCount = pendingByConnector.get(key) ?? 0;
+      const processingCount = processingByConnector.get(key) ?? 0;
+      return {
+        tenantKey: connector.tenantKey,
+        connectorId: connector.connectorId,
+        failedJobs: failedCount,
+        pendingJobs: pendingCount,
+        totalJobs: failedCount + pendingCount + processingCount,
+      };
+    });
   },
 });
 
@@ -564,7 +582,9 @@ export const listRecentJobsGlobal = query({
     const clampedLimit = Math.max(1, Math.min(50, args.limit));
     const statuses = ["pending", "processing", "completed", "failed"] as const;
 
-    // Query each status bucket separately
+    // Query each status bucket separately using the by_status_updatedAt index.
+    // This fetches up to clampedLimit items from each of the 4 status buckets (up to 4x clampedLimit docs total),
+    // then merges and sorts by updatedAt globally. This ensures we get the true top-N across all statuses.
     const jobsByStatus = await Promise.all(
       statuses.map((status) =>
         ctx.db
