@@ -1,0 +1,166 @@
+<h2>Section 1: Layout shell & navigation</h2>
+<p class="subtitle">New sidebar grouping, contextual sub-nav, and visual direction. Does this feel right?</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">Sidebar — top-level (e.g. on Dashboard or Shop page)</div>
+    <div class="mockup-body" style="padding:0;display:flex;height:420px">
+      <!-- Sidebar -->
+      <div style="width:220px;background:#0a0f1a;border-right:1px solid rgba(255,255,255,0.07);padding:0;display:flex;flex-direction:column">
+        <div style="padding:18px 16px 12px;border-bottom:1px solid rgba(255,255,255,0.06)">
+          <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:rgba(255,255,255,0.35);text-transform:uppercase">Control Plane</div>
+        </div>
+        <div style="padding:12px 8px;flex:1;overflow:auto">
+          <!-- Dashboard -->
+          <a style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.25);margin-bottom:2px;text-decoration:none">
+            <span style="font-size:14px">⬛</span>
+            <span style="font-size:13px;font-weight:600;color:#a5b4fc">Dashboard</span>
+          </a>
+
+          <!-- Connectors group -->
+          <div style="margin-top:16px;margin-bottom:4px;padding:0 10px">
+            <span style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.25)">Connectors</span>
+          </div>
+          <a style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:2px;text-decoration:none">
+            <span style="font-size:14px">🔗</span>
+            <span style="font-size:13px;color:rgba(255,255,255,0.65)">Mappings</span>
+          </a>
+          <a style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:2px;text-decoration:none">
+            <span style="font-size:14px">🔽</span>
+            <span style="font-size:13px;color:rgba(255,255,255,0.65)">Filtering</span>
+          </a>
+
+          <!-- Discord group -->
+          <div style="margin-top:16px;margin-bottom:4px;padding:0 10px">
+            <span style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.25)">Discord</span>
+          </div>
+          <a style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:2px;text-decoration:none">
+            <span style="font-size:14px">🤖</span>
+            <span style="font-size:13px;color:rgba(255,255,255,0.65)">Bot Config</span>
+          </a>
+
+          <!-- Shop group -->
+          <div style="margin-top:16px;margin-bottom:4px;padding:0 10px">
+            <span style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.25)">Shop</span>
+          </div>
+          <a style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:2px;text-decoration:none">
+            <span style="font-size:14px">📦</span>
+            <span style="font-size:13px;color:rgba(255,255,255,0.65)">Catalog</span>
+          </a>
+          <a style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:2px;text-decoration:none">
+            <span style="font-size:14px">📋</span>
+            <span style="font-size:13px;color:rgba(255,255,255,0.65)">Policies</span>
+          </a>
+          <a style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:2px;text-decoration:none">
+            <span style="font-size:14px">👥</span>
+            <span style="font-size:13px;color:rgba(255,255,255,0.65)">Customers</span>
+          </a>
+          <a style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:2px;text-decoration:none">
+            <span style="font-size:14px">📊</span>
+            <span style="font-size:13px;color:rgba(255,255,255,0.65)">Statistics</span>
+          </a>
+        </div>
+      </div>
+      <!-- Main content placeholder -->
+      <div style="flex:1;background:#060b14;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.2);font-size:13px">
+        page content
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">Sidebar — contextual (inside t1 / conn_01)</div>
+    <div class="mockup-body" style="padding:0;display:flex;height:420px">
+      <div style="width:220px;background:#0a0f1a;border-right:1px solid rgba(255,255,255,0.07);padding:0;display:flex;flex-direction:column">
+        <div style="padding:18px 16px 12px;border-bottom:1px solid rgba(255,255,255,0.06)">
+          <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:rgba(255,255,255,0.35);text-transform:uppercase">Control Plane</div>
+        </div>
+        <div style="padding:12px 8px;flex:1;overflow:auto">
+          <a style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:2px;text-decoration:none">
+            <span style="font-size:14px">⬛</span>
+            <span style="font-size:13px;color:rgba(255,255,255,0.65)">Dashboard</span>
+          </a>
+
+          <div style="margin-top:16px;margin-bottom:4px;padding:0 10px">
+            <span style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.25)">Connectors</span>
+          </div>
+          <!-- Mappings active with connector sub-nav expanded -->
+          <a style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:rgba(99,102,241,0.1);margin-bottom:2px;text-decoration:none">
+            <span style="font-size:14px">🔗</span>
+            <span style="font-size:13px;color:rgba(255,255,255,0.9);font-weight:500">Mappings</span>
+          </a>
+          <!-- Connector sub-nav -->
+          <div style="margin:4px 0 4px 16px;padding-left:12px;border-left:1px solid rgba(99,102,241,0.3)">
+            <div style="font-size:11px;color:rgba(255,255,255,0.4);padding:4px 8px;margin-bottom:2px">t1 / conn_01</div>
+            <a style="display:block;padding:6px 8px;border-radius:6px;font-size:12px;color:#a5b4fc;font-weight:600;background:rgba(99,102,241,0.15);margin-bottom:1px;text-decoration:none">Overview</a>
+            <a style="display:block;padding:6px 8px;border-radius:6px;font-size:12px;color:rgba(255,255,255,0.55);margin-bottom:1px;text-decoration:none">Routes</a>
+            <a style="display:block;padding:6px 8px;border-radius:6px;font-size:12px;color:rgba(255,255,255,0.55);margin-bottom:1px;text-decoration:none">Jobs <span style="background:#ef4444;color:#fff;font-size:9px;padding:1px 5px;border-radius:10px;margin-left:4px">4</span></a>
+            <a style="display:block;padding:6px 8px;border-radius:6px;font-size:12px;color:rgba(255,255,255,0.55);margin-bottom:1px;text-decoration:none">Settings</a>
+          </div>
+          <a style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:2px;text-decoration:none">
+            <span style="font-size:14px">🔽</span>
+            <span style="font-size:13px;color:rgba(255,255,255,0.65)">Filtering</span>
+          </a>
+
+          <div style="margin-top:16px;margin-bottom:4px;padding:0 10px">
+            <span style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.25)">Discord</span>
+          </div>
+          <a style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:2px;text-decoration:none">
+            <span style="font-size:14px">🤖</span>
+            <span style="font-size:13px;color:rgba(255,255,255,0.65)">Bot Config</span>
+          </a>
+
+          <div style="margin-top:16px;margin-bottom:4px;padding:0 10px">
+            <span style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.25)">Shop</span>
+          </div>
+          <a style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:2px;text-decoration:none">
+            <span style="font-size:14px">📦</span>
+            <span style="font-size:13px;color:rgba(255,255,255,0.65)">Catalog</span>
+          </a>
+          <a style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:2px;text-decoration:none">
+            <span style="font-size:14px">👥</span>
+            <span style="font-size:13px;color:rgba(255,255,255,0.65)">Customers</span>
+          </a>
+        </div>
+      </div>
+      <div style="flex:1;background:#060b14;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.2);font-size:13px">
+        connector detail tabs here
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:24px">
+  <h3>Visual direction</h3>
+  <p class="subtitle">Keeping the dark base but shifting the accent from cyan → indigo/violet. Feels more premium, less developer-tool. Cyan still used for status indicators (active, healthy).</p>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">
+    <div style="background:#0a0f1a;border:1px solid rgba(99,102,241,0.3);border-radius:10px;padding:16px 20px;min-width:140px">
+      <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.08em">Primary accent</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div style="width:28px;height:28px;border-radius:6px;background:#6366f1"></div>
+        <div style="width:28px;height:28px;border-radius:6px;background:#8b5cf6"></div>
+        <div style="width:28px;height:28px;border-radius:6px;background:#a5b4fc"></div>
+      </div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-top:6px">indigo / violet</div>
+    </div>
+    <div style="background:#0a0f1a;border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:16px 20px;min-width:140px">
+      <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.08em">Status colours</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div style="width:28px;height:28px;border-radius:6px;background:#22d3ee"></div>
+        <div style="width:28px;height:28px;border-radius:6px;background:#22c55e"></div>
+        <div style="width:28px;height:28px;border-radius:6px;background:#ef4444"></div>
+        <div style="width:28px;height:28px;border-radius:6px;background:#f59e0b"></div>
+      </div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-top:6px">cyan · green · red · amber</div>
+    </div>
+    <div style="background:#0a0f1a;border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:16px 20px;min-width:140px">
+      <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.08em">Backgrounds</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div style="width:28px;height:28px;border-radius:6px;background:#060b14;border:1px solid rgba(255,255,255,0.1)"></div>
+        <div style="width:28px;height:28px;border-radius:6px;background:#0a0f1a;border:1px solid rgba(255,255,255,0.1)"></div>
+        <div style="width:28px;height:28px;border-radius:6px;background:#111827;border:1px solid rgba(255,255,255,0.1)"></div>
+      </div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-top:6px">page · sidebar · card</div>
+    </div>
+  </div>
+</div>

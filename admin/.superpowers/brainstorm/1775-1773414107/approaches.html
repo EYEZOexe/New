@@ -1,0 +1,62 @@
+<h2>Admin panel overhaul — 3 approaches</h2>
+<p class="subtitle">Pick the scope that feels right. We can always expand later.</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Fix the pain points <span style="font-size:11px;font-weight:400;opacity:0.6;margin-left:8px">Focused · Lower risk</span></h3>
+      <p>Target only the known problems. Everything else stays as-is.</p>
+      <ul style="font-size:13px;color:rgba(255,255,255,0.7);padding-left:20px;margin:8px 0">
+        <li>Add a dashboard home page with connector health + failed job counts</li>
+        <li>Regroup sidebar into Connectors / Discord / Shop</li>
+        <li>Convert connector detail page to tabbed layout (Overview, Routes, Jobs, Settings)</li>
+        <li>Surface job failure counts on the connectors list</li>
+      </ul>
+      <div class="pros-cons" style="margin-top:10px">
+        <div class="pros"><h4>Pros</h4><ul><li>Fastest to ship</li><li>Low regression risk</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Other pages still clunky</li><li>Misses opportunity for cohesive improvement</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Full overhaul <span style="font-size:11px;font-weight:400;opacity:0.6;margin-left:8px">Recommended ✦</span></h3>
+      <p>Redesign the entire admin panel coherently — navigation, layout, and individual pages — while keeping the existing dark theme and tech stack.</p>
+      <ul style="font-size:13px;color:rgba(255,255,255,0.7);padding-left:20px;margin:8px 0">
+        <li><strong>Dashboard home</strong> — connector health, job stats, quick links</li>
+        <li><strong>Sidebar</strong> — Connectors / Discord / Shop groups + contextual sub-nav when inside a connector</li>
+        <li><strong>Connectors list</strong> — richer table with inline health indicators (failed jobs, last seen status)</li>
+        <li><strong>Connector detail</strong> — tabbed: Overview, Routes, Jobs, Settings</li>
+        <li><strong>Filtering page</strong> — improved layout, clearer route selection UX</li>
+        <li><strong>Shop pages</strong> — consistent card-based layout, better visual hierarchy</li>
+        <li><strong>Customers page</strong> — improved search + action panel layout</li>
+      </ul>
+      <div class="pros-cons" style="margin-top:10px">
+        <div class="pros"><h4>Pros</h4><ul><li>Cohesive, polished result</li><li>Fixes all known pain points</li><li>Better foundation for future features</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>More work</li><li>More files touched</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Full overhaul + visual rebrand <span style="font-size:11px;font-weight:400;opacity:0.6;margin-left:8px">Most ambitious</span></h3>
+      <p>Everything in B, plus a refreshed visual design — new colour accents, updated typography scale, improved component styling beyond what shadcn ships with.</p>
+      <ul style="font-size:13px;color:rgba(255,255,255,0.7);padding-left:20px;margin:8px 0">
+        <li>All of Approach B</li>
+        <li>Refreshed colour system (keep dark base, update accent palette)</li>
+        <li>Improved card and table styling</li>
+        <li>Better status indicators (colour-coded badges, health dots)</li>
+        <li>Polished empty states and loading states</li>
+      </ul>
+      <div class="pros-cons" style="margin-top:10px">
+        <div class="pros"><h4>Pros</h4><ul><li>Most polished end result</li><li>Feels like a proper product</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Highest effort</li><li>CSS changes can have broad impact</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>

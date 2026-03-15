@@ -49,9 +49,45 @@ SHOP
   Statistics
 ```
 
+### `adminRoutes.ts` Type System Changes
+
+The existing rigid type system (`AdminNavItem`, `AdminNavGroup`, `AdminNavState`) is extended:
+
+```ts
+// AdminNavItem gains "dashboard"
+export type AdminNavItem = "dashboard" | "mappings" | "filtering" | "discord-bot";
+
+// AdminNavGroup gains "connectors" (renames "shop" stays)
+export type AdminNavGroup = "connectors" | "shop";
+
+// AdminNavState updated accordingly
+export type AdminNavState = {
+  activeItem: AdminNavItem | null;
+  activeGroup: AdminNavGroup | null;
+  activeShopRoute: AdminShopRoute | null;
+};
+```
+
+`getAdminNavState(pathname)` is updated to return `activeItem: "dashboard"` for the `/` route, and `activeGroup: "connectors"` for `/mappings` and `/filtering` routes. `buildAdminBreadcrumbs` is updated to handle the `/` route (returns empty breadcrumbs) and the `?tab=` connector detail route (appends the active tab label to the breadcrumb trail).
+
+The CONNECTORS group label in the sidebar is purely visual — it is not an `AdminNavGroup` value used for routing logic. Only `"shop"` and `"connectors"` are `AdminNavGroup` values.
+
+### `CONNECTOR_SUB_NAV_TABS` Constant
+
+```ts
+export const CONNECTOR_SUB_NAV_TABS = [
+  { label: "Overview", tabValue: "overview" },
+  { label: "Routes",   tabValue: "routes"   },
+  { label: "Jobs",     tabValue: "jobs"     },
+  { label: "Settings", tabValue: "settings" },
+] as const;
+```
+
+The sidebar maps over this array to render tab links as `/mappings/[tenantKey]/[connectorId]?tab=[tabValue]`. The Overview sub-nav link always includes `?tab=overview` explicitly (not omitted) to keep all tab links consistent in format.
+
 ### Contextual Sub-Nav
 
-When navigating inside a connector detail page, the sidebar expands a sub-menu beneath "Mappings":
+When the current URL matches `/mappings/[tenantKey]/[connectorId]` (with any `?tab=`), the sidebar expands a sub-menu beneath "Mappings":
 
 ```
 CONNECTORS
@@ -64,7 +100,38 @@ CONNECTORS
   Filtering
 ```
 
-The connector name and tab links are derived from the current URL (`/mappings/[tenantKey]/[connectorId]`). The badge on Jobs shows the current failed job count from the connector's queue stats. Navigating away from the connector collapses the sub-menu.
+**Sub-nav collapse rules:**
+- Sub-menu shown when `pathname` matches `/mappings/` followed by exactly two path segments. Hidden for all other paths.
+- "Mappings" remains clickable; clicking navigates to `/mappings` which collapses the sub-menu.
+- Tab switches (`?tab=` change) do not collapse the sub-menu.
+
+**Mobile nav:** Same pathname-driven sub-nav logic. Sub-menu is expanded by default on connector detail URLs. Sheet closes on navigate (standard shadcn Sheet `onOpenChange`).
+
+### Failure Badge Data — Connector Stats Context
+
+**Data source for failed job counts:**
+
+`connectors:listConnectors` returns raw connector documents with no queue stats. Queue stats are provided by separate queries in `convex/mirror.ts`: `getSignalMirrorQueueStats` and `getSignalMirrorLatencyStats` (per-connector). A new Convex read-only query `connectors:getConnectorHealthSummary` is added. It returns an array of `{ tenantKey, connectorId, failedJobs, pendingJobs, totalJobs }` by joining connector documents with their queue stats. This is the second new backend function in this spec (alongside `listRecentJobsGlobal`).
+
+**`ConnectorStatsContext`** is created at `context/connector-stats-context.tsx`:
+
+```ts
+type ConnectorHealth = {
+  tenantKey: string;
+  connectorId: string;
+  failedJobs: number;
+  pendingJobs: number;
+  totalJobs: number;
+};
+
+type ConnectorStatsContextValue = {
+  connectorHealth: ConnectorHealth[];
+  // key format: `${tenantKey}::${connectorId}` (double-colon separator — neither segment contains "::")
+  failedJobsByConnector: Record<string, number>;
+};
+```
+
+The double-colon separator (`::`) is safe because tenant keys and connector IDs are alphanumeric with underscores only (no `:`). The context provider is added to `app/(workspace)/layout.tsx` and runs a single `useQuery(api.connectors.getConnectorHealthSummary)`.
 
 ### Visual Design
 
@@ -84,102 +151,125 @@ The connector name and tab links are derived from the current URL (`/mappings/[t
 - Sidebar background: `#0a0f1a`
 - Card/surface background: `#111827`
 
-**Typography:** No font change. Improve hierarchy with consistent use of uppercase section labels, weight-600 headings, and `rgba(255,255,255,0.4)` for secondary text.
+**Typography:** No font change. Improve hierarchy with uppercase section labels, weight-600 headings, `rgba(255,255,255,0.4)` for secondary text.
 
 ---
 
 ## Section 2: Dashboard Home Page
 
-**Route:** `/` (replace current redirect to `/mappings`)
+**Route:** `/`
 **File:** `app/(workspace)/page.tsx`
 
-### Layout
+### Layout (top to bottom)
 
-**Top row — 4 stat cards:**
+1. Stat cards row
+2. Connector health table
+3. Quick links row
+4. Recent activity section
+
+### Stat Cards (row 1)
+
+Data source: `ConnectorStatsContext` (already provided at layout level — no additional query).
+
 | Card | Value | Click behaviour |
 |------|-------|----------------|
-| Active connectors | N active / M total | → /mappings |
-| Failed jobs | N failed across all connectors | → connector with most failures |
+| Active connectors | N active / M total | → `/mappings` |
+| Failed jobs | N failed across all connectors | → `/mappings/[tenantKey]/[connectorId]?tab=jobs` for the **first** connector in `connectorHealth` array with `failedJobs > 0`; if N = 0, card is not clickable |
 | Pending jobs | N pending | — |
 | Total routes | N configured | — |
 
-**Middle section — Connector health table:**
+The "first connector with failures" tiebreak is by array order from the server (no secondary sort required).
+
+### Connector Health Table (row 2)
 
 Columns: Health dot · Tenant · Connector · Status · Mirroring · Failed jobs · Last seen · Open
 
-- Health dot: green (0 failures, active), red (failures > 0 or inactive), amber (inactive but 0 failures)
-- Failed jobs: shown in red if > 0
-- Last seen: relative time ("2 mins ago")
-- Open link: goes to Jobs tab if failures > 0, otherwise Overview tab
+**Health dot colour (strict precedence, first rule wins):**
+1. **Red** — `failedJobs > 0`
+2. **Amber** — `status !== "active"` and `failedJobs === 0`
+3. **Green** — `status === "active"` and `failedJobs === 0`
 
-**Bottom section — Recent activity:**
+- Failed jobs cell: red badge if > 0, empty if 0
+- Last seen: relative time ("2 mins ago")
+- **Open link:** `/mappings/[tenantKey]/[connectorId]?tab=jobs` if `failedJobs > 0`, otherwise `/mappings/[tenantKey]/[connectorId]?tab=overview`. This same rule applies on the Connectors List page (Section 4). In both places, the Overview case explicitly includes `?tab=overview`.
+
+### Quick Links (row 3)
+
+Rendered in `app/(workspace)/page.tsx`. Open state for the token sheet is local to this component.
+
+- **Create token** → opens `<ConnectorTokenSheet>` (Tenant and Connector ID fields blank — user fills them in)
+- **Manage customers** → `/shop/customers`
+- **View statistics** → `/shop/statistics`
+
+### Recent Activity (row 4)
+
 - Last 10 mirror jobs across all connectors
 - Columns: Time · Event · Connector · Route · Status · Attempts
-- No retry button here (go to connector Jobs tab for that)
+- Each row has a "View →" link → `/mappings/[tenantKey]/[connectorId]?tab=jobs`
+- No retry button
+- **Data source:** New Convex read-only query `connectors:listRecentJobsGlobal(limit: number)`.
 
-**Quick links row** (between health table and activity):
-- Create connector token → opens token creation panel
-- Manage customers → /shop/customers
-- View statistics → /shop/statistics
+**`listRecentJobsGlobal` return shape:**
+```ts
+Array<{
+  _id: Id<"signalMirrorJobs">;
+  updatedAt: number;           // ms timestamp
+  eventType: "CREATE" | "UPDATE" | "DELETE";
+  tenantKey: string;
+  connectorId: string;
+  sourceChannelId: string;     // for Route display
+  targetChannelId: string;     // for Route display
+  status: "completed" | "failed" | "processing" | "pending";
+  attempts: number;
+}>
+```
 
 ---
 
 ## Section 3: Connector Detail Page — Tabbed Layout
 
 **Route:** `/mappings/[tenantKey]/[connectorId]`
-**Tabs:** Overview · Routes · Jobs · Settings
+
+Tab navigation rendered below page header. Active tab controlled by `?tab=` query param (valid values: `overview`, `routes`, `jobs`, `settings`). Absent or unrecognised `?tab=` silently defaults to `overview`.
+
+### Connector Workspace Component Refactor
+
+`components/mappings/connector-workspace.tsx` becomes a thin shell:
+- Owns all Convex `useQuery` calls for connector data
+- Renders page header and status bar
+- Reads `?tab=` from `useSearchParams()`
+- Renders the appropriate tab component, passing fetched data as props
+- Tab components do not fetch data independently
 
 ### Overview Tab (default)
 
-**Status bar** (full width, below page header):
-- Badges: `status: active`, `mirroring: enabled`, `config: vN`
-- Action buttons inline: Toggle status · Rotate token · Disable mirroring
+**Status bar:** badges (`status: active`, `mirroring: enabled`, `config: vN`) + quick action buttons (Toggle status · Rotate token · Disable mirroring). These buttons are convenience duplicates of the authoritative Settings tab controls. Both call the same mutations. Rotate token button here opens `<ConnectorTokenSheet>` with `tenantKey` and `connectorId` **pre-filled and read-only**.
 
-**Stat cards row (2 cards):**
-- Queue stats: pending / failed (red if > 0) / total
-- Latency (last 60m): create p95 · update p95 · delete p95
+**Stat cards (2):**
+- Queue stats: pending / failed (red if > 0) / total — from existing `getSignalMirrorQueueStats`
+- Latency (last 60m): create p95 · update p95 · delete p95 — from existing `getSignalMirrorLatencyStats`
 
-**Mirror runtime section:**
-- Mirror bot token configured: yes/no
-- Dedicated mirror token in use: yes/no
-- Shared role-sync token fallback: yes/no
+**Mirror runtime section:** bot token configured · dedicated token in use · role-sync fallback (all existing data)
 
-**Seat configs by guild table:**
-- Columns: Guild · Status · Seats · Seat policy · Checked · Error · Actions (Edit/Delete)
-- Unconfigured seat snapshots collapsible section
+**Seat configs by guild table:** Guild · Status · Seats · Seat policy · Checked · Error · Actions (Edit/Delete)
 
 ### Routes Tab
 
-**Add route button** — prominent at the top right
-
-**Configured source→target routes table:**
-- Columns: Source (plugin) · Target (bot) · Role ping · Dashboard · Min tier · Priority · Actions (Edit/Remove)
-- Full table, same as current but without being buried
-
-**Unconfigured seat snapshots** collapsible section
+Add route button (top right) · source→target routes table · unconfigured seat snapshots collapsible (this tab only, not on Overview)
 
 ### Jobs Tab
 
-**Filters row:** Event type (ALL / CREATE / UPDATE / DELETE) · Status (ALL / completed / failed / processing) · clear filters
-
-**Failed jobs** pinned to top of table with red row highlight when status filter is ALL
-
-**Jobs table:**
-- Columns: Updated · Event · Route · Status · Attempts · Images · Last error · Actions
-- Expandable rows (already exists, keep)
-- Retry button per row
+Filters (event type · status · clear) · failed jobs pinned top with red left border when filter is ALL · jobs table (Updated · Event · Route · Status · Attempts · Images · Last error · Retry button)
 
 ### Settings Tab
 
-**Token management section:**
-- Current token info
-- Rotate token button
+Authoritative location for all control actions.
 
-**Mirroring section:**
-- Enable/disable mirroring toggle
+**Token management:** masked token display · Rotate token button (confirmation dialog → calls existing rotate mutation → refreshes; the button here opens `<ConnectorTokenSheet>` with `tenantKey` and `connectorId` pre-filled and read-only, same as the Overview shortcut)
 
-**Danger zone section:**
-- Toggle connector active/inactive
+**Mirroring:** enable/disable toggle
+
+**Danger zone:** toggle active/inactive
 
 ---
 
@@ -187,41 +277,53 @@ Columns: Health dot · Tenant · Connector · Status · Mirroring · Failed jobs
 
 ### Connectors List (`/mappings`)
 
-- Rename page title: "Connector Mappings" → "Connectors"
-- Rename "Configure" link → "Open"
-- Add health dot column (green/red/amber) as first column
-- Add "Failed jobs" column (red badge, hidden if 0)
-- "Last seen" displayed as relative time
-- Token creation UI moves to a slide-out sheet panel (button in page header actions)
+- Page title: "Connectors"
+- "Configure" → "Open"
+- Open link: `?tab=jobs` if `failedJobs > 0`, else `?tab=overview`
+- Health dot first column (red → amber → green)
+- "Failed jobs" column (red badge or empty)
+- "Last seen" as relative time
+- Token form removed; replaced with "Create / Rotate Token" button → opens `<ConnectorTokenSheet>` with fields blank
+
+**`ConnectorTokenSheet` (`components/admin/connector-token-sheet.tsx`):**
+- Fields: Tenant (text) · Connector ID (text) — may be pre-filled and read-only when called from the connector detail page
+- Submit: "Create / Rotate"
+- Success: close sheet + refresh connector list
+- Error: inline error, sheet stays open
+- Cancel / Escape: close without action
 
 ### Filtering Page (`/filtering`)
 
-- Connector selector at the top (replaces current two-dropdown flow)
-- Show current saved rules for the selected route before editing
-- Replace raw textareas with tag-input fields: comma or Enter to add a tag, click × to remove
-- Tags validated/normalised on input (trim whitespace, lowercase domains)
+- **Connector selector:** single grouped Combobox (searchable), options grouped by tenant as `tenantKey / connectorId`; changing selection resets route dropdown and clears unsaved edits
+- **Rule display:** current saved rules shown as read-only chips above edit fields
+- **Tag inputs:** four fields replacing textareas; Enter or comma adds tag (trimmed, lowercased); × removes; duplicates silently ignored; no UI max length/count
 
 ### Customers Page (`/shop/customers`)
 
-- Search bar prominent at the top (full width)
-- Customer result shows subscription status badge: `active` (green) · `expired` (red) · `none` (grey)
-- Actions panel (grant/revoke, update email, reset password) in a two-column layout: info on left, actions on right
-- Subscription details (tier, expiration) shown inline with the status badge
+- Full-width search bar, auto-focused
+- Status badge per result: `active` (green) · `expired` (red) · `none` (grey); tier + expiration as secondary text
+- Expanded actions panel: two-column (info left, actions right)
 
 ### Shop Pages (Catalog, Policies, Statistics)
 
-**Shared improvements:**
-- Consistent card-based section layout across all three
-- Section headers with consistent typography
+**Shared:** consistent `AdminSectionCard` usage; uppercase label + weight-600 title headers
+
+**Catalog:** shared improvements only, no page-specific changes
 
 **Statistics:**
-- Metric cards row at top (completed sales, revenue, renewals %, AOV, etc.)
-- Charts and tables below
-- Period selector (7/30/90 days) prominent at the top right
+- Data source: `sellStats:getSellStatsOverview` is a Convex **action** (not a query) and must be called with `useAction`. It is not reactive — the component calls it via `useAction` and re-invokes manually when the period selection changes.
+- Metric cards row (8 metrics), period selector (7/30/90 days) in page header actions, default **30 days**, stored in local React state; changing period calls the action again with the new period; all cards and tables reflect the selected period.
 
-**Policies:**
-- Tier badges colour-coded: basic (grey) · pro (indigo) · advanced (violet)
-- Cleaner table row styling with better visual separation
+**Policies:** tier badges colour-coded: `basic` (slate) · `pro` (indigo) · `advanced` (violet); improved table row separation
+
+---
+
+## Backend Functions Added (read-only, no schema changes)
+
+| Function | Location | Purpose |
+|----------|----------|---------|
+| `getConnectorHealthSummary` | `convex/connectors.ts` | Returns per-connector failed/pending/total job counts for context |
+| `listRecentJobsGlobal` | `convex/connectors.ts` | Returns last N mirror jobs across all connectors for dashboard |
 
 ---
 
@@ -230,24 +332,33 @@ Columns: Health dot · Tenant · Connector · Status · Mirroring · Failed jobs
 | File | Change type |
 |------|------------|
 | `app/globals.css` | Update CSS variables / colour tokens |
-| `lib/adminRoutes.ts` | Add Dashboard route, rename items, add connector sub-nav logic |
-| `components/admin/admin-sidebar.tsx` | Implement new groups + contextual sub-nav |
-| `components/admin/admin-mobile-nav.tsx` | Mirror sidebar changes |
+| `lib/adminRoutes.ts` | Extend type system; add `CONNECTOR_SUB_NAV_TABS`; update `getAdminNavState` and `buildAdminBreadcrumbs` |
+| `context/connector-stats-context.tsx` | New — `ConnectorStatsContext` provider and hook |
+| `app/(workspace)/layout.tsx` | Add `ConnectorStatsContext` provider |
+| `components/admin/admin-sidebar.tsx` | New group structure (Connectors/Discord/Shop), contextual sub-nav, failure badge from context |
+| `components/admin/admin-mobile-nav.tsx` | Same group structure + contextual sub-nav; sheet closes on navigate |
 | `app/(workspace)/page.tsx` | New dashboard home page |
-| `app/(workspace)/mappings/page.tsx` | Rename, richer table, health dots, slide-out token panel |
+| `app/(workspace)/mappings/page.tsx` | Rename, health dots, conditional Open link, token sheet trigger |
 | `app/(workspace)/mappings/[tenantKey]/[connectorId]/page.tsx` | Tabbed layout shell |
-| `components/mappings/connector-workspace.tsx` | Refactor into tab components |
-| `app/(workspace)/filtering/page.tsx` | Tag inputs, improved connector selector |
-| `app/(workspace)/shop/customers/page.tsx` | Improved layout, status badges |
-| `app/(workspace)/shop/statistics/page.tsx` | Dashboard-style layout |
-| `app/(workspace)/shop/policies/page.tsx` | Tier badge colours |
-| `components/ui/tag-input.tsx` | New component for filtering page |
+| `components/mappings/connector-workspace.tsx` | Thin shell: data fetching + tab routing |
+| `components/mappings/connector-overview-tab.tsx` | New |
+| `components/mappings/connector-routes-tab.tsx` | New |
+| `components/mappings/connector-jobs-tab.tsx` | New |
+| `components/mappings/connector-settings-tab.tsx` | New |
+| `components/admin/connector-token-sheet.tsx` | New — token creation/rotation sheet |
+| `app/(workspace)/filtering/page.tsx` | Combobox selector, tag inputs, rule display |
+| `app/(workspace)/shop/catalog/page.tsx` | Shared layout improvements only |
+| `app/(workspace)/shop/customers/page.tsx` | Status badges, two-column action panel |
+| `app/(workspace)/shop/statistics/page.tsx` | `useAction`, metric cards, period selector |
+| `app/(workspace)/shop/policies/page.tsx` | Tier badge colours, table styling |
+| `components/ui/tag-input.tsx` | New |
+| `convex/connectors.ts` | Add `getConnectorHealthSummary` and `listRecentJobsGlobal` |
 
 ---
 
 ## Out of Scope
 
-- Backend / Convex function changes (UI-only overhaul)
+- Schema changes or new mutations
 - Authentication or access control changes
-- Mobile-first redesign (desktop-primary, mobile navigation improved but not a focus)
+- Mobile-first redesign (mobile nav updated but not redesigned)
 - New features beyond what currently exists

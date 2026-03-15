@@ -1,0 +1,119 @@
+<h2>Connector detail page — how should it be organized?</h2>
+<p class="subtitle">Currently everything is on one long scrolling page. Here are 3 approaches.</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Tabbed layout</h3>
+      <p>Break the page into tabs: <strong>Overview</strong> (status + runtime info), <strong>Routes</strong> (source→target mappings), <strong>Jobs</strong> (recent mirror jobs), <strong>Settings</strong> (token, seat configs). Each tab is focused and fast to reach directly from the URL or sidebar.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">t1 / conn_01</div>
+        <div class="mockup-body" style="padding:0">
+          <div style="display:flex;gap:0;border-bottom:1px solid rgba(255,255,255,0.1);padding:0 16px">
+            <div style="padding:10px 16px;border-bottom:2px solid #22d3ee;color:#22d3ee;font-size:13px;font-weight:600">Overview</div>
+            <div style="padding:10px 16px;color:rgba(255,255,255,0.5);font-size:13px">Routes</div>
+            <div style="padding:10px 16px;color:rgba(255,255,255,0.5);font-size:13px">Jobs</div>
+            <div style="padding:10px 16px;color:rgba(255,255,255,0.5);font-size:13px">Settings</div>
+          </div>
+          <div style="padding:16px;font-size:12px;color:rgba(255,255,255,0.7)">
+            <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+              <span style="background:rgba(34,211,238,0.15);border:1px solid rgba(34,211,238,0.3);padding:4px 10px;border-radius:20px;font-size:11px">status: active</span>
+              <span style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);padding:4px 10px;border-radius:20px;font-size:11px">mirroring: enabled</span>
+              <span style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);padding:4px 10px;border-radius:20px;font-size:11px">config: v254</span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:12px">
+                <div style="font-size:11px;font-weight:600;margin-bottom:6px;color:rgba(255,255,255,0.9)">Mirror runtime</div>
+                <div style="color:#22d3ee;font-size:11px">Queue: 0 pending, 4 failed</div>
+                <div style="color:rgba(255,255,255,0.5);font-size:11px">2607 total</div>
+              </div>
+              <div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:12px">
+                <div style="font-size:11px;font-weight:600;margin-bottom:6px;color:rgba(255,255,255,0.9)">Latency (60m)</div>
+                <div style="color:rgba(255,255,255,0.6);font-size:11px">create p95 2020ms</div>
+                <div style="color:rgba(255,255,255,0.6);font-size:11px">update p95 2254ms</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Two-panel layout</h3>
+      <p>Left panel: connector status + controls + runtime info (sticky). Right panel: scrollable content with collapsible sections for Routes, Jobs, Seat configs. No tabs — everything visible at once but organised with clear headings.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">t1 / conn_01</div>
+        <div class="mockup-body" style="padding:0">
+          <div style="display:flex;gap:0">
+            <div style="width:200px;min-width:200px;border-right:1px solid rgba(255,255,255,0.1);padding:12px;background:rgba(0,0,0,0.2)">
+              <div style="font-size:11px;font-weight:600;margin-bottom:8px;color:rgba(255,255,255,0.9)">Status</div>
+              <div style="font-size:11px;color:#22d3ee;margin-bottom:4px">● active · mirroring on</div>
+              <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:12px">config v254</div>
+              <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:4px">0 pending · <span style="color:#ef4444">4 failed</span></div>
+              <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:12px">2607 total jobs</div>
+              <div style="background:rgba(255,255,255,0.08);border-radius:6px;padding:6px 10px;font-size:11px;margin-bottom:6px">Toggle status</div>
+              <div style="background:rgba(255,255,255,0.08);border-radius:6px;padding:6px 10px;font-size:11px;margin-bottom:6px">Rotate token</div>
+              <div style="background:rgba(255,255,255,0.08);border-radius:6px;padding:6px 10px;font-size:11px">Disable mirror</div>
+            </div>
+            <div style="flex:1;padding:12px;font-size:11px;color:rgba(255,255,255,0.6)">
+              <div style="font-weight:600;color:rgba(255,255,255,0.9);margin-bottom:6px">▼ Recent Jobs</div>
+              <div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:8px;margin-bottom:10px;color:rgba(255,255,255,0.5)">UPDATE completed 1/8 · 16:32:38<br>CREATE completed 1/8 · 16:32:33</div>
+              <div style="font-weight:600;color:rgba(255,255,255,0.9);margin-bottom:6px">▼ Routes (10)</div>
+              <div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:8px;margin-bottom:10px;color:rgba(255,255,255,0.5)">Unity Academy → G3n S1gnals · 10 routes</div>
+              <div style="font-weight:600;color:rgba(255,255,255,0.9);margin-bottom:6px">▶ Seat configs</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Restructured single page</h3>
+      <p>Keep single-page but fix organisation: sticky status bar at top, then summary cards (jobs, latency), then full sections below in logical order. Jobs surface near the top instead of buried at the bottom. No tabs needed.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">t1 / conn_01</div>
+        <div class="mockup-body" style="padding:12px;font-size:11px">
+          <div style="background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.2);border-radius:8px;padding:10px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <div style="color:#22d3ee">● active · mirroring on · v254</div>
+            <div style="display:flex;gap:6px">
+              <span style="background:rgba(255,255,255,0.08);padding:4px 8px;border-radius:4px">Toggle</span>
+              <span style="background:rgba(255,255,255,0.08);padding:4px 8px;border-radius:4px">Rotate</span>
+              <span style="background:rgba(255,255,255,0.08);padding:4px 8px;border-radius:4px">Disable mirror</span>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+            <div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:10px">
+              <div style="font-weight:600;margin-bottom:4px;font-size:10px;text-transform:uppercase;color:rgba(255,255,255,0.4)">Jobs</div>
+              <div style="color:#ef4444;font-size:13px;font-weight:600">4 failed</div>
+              <div style="color:rgba(255,255,255,0.4)">0 pending · 2607 total</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:10px">
+              <div style="font-weight:600;margin-bottom:4px;font-size:10px;text-transform:uppercase;color:rgba(255,255,255,0.4)">Latency</div>
+              <div style="color:rgba(255,255,255,0.8);font-size:13px;font-weight:600">2020ms</div>
+              <div style="color:rgba(255,255,255,0.4)">create p95</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:10px">
+              <div style="font-weight:600;margin-bottom:4px;font-size:10px;text-transform:uppercase;color:rgba(255,255,255,0.4)">Routes</div>
+              <div style="color:rgba(255,255,255,0.8);font-size:13px;font-weight:600">10</div>
+              <div style="color:rgba(255,255,255,0.4)">configured</div>
+            </div>
+          </div>
+          <div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:10px;margin-bottom:8px">
+            <div style="font-weight:600;margin-bottom:4px">Recent Mirror Jobs</div>
+            <div style="color:rgba(255,255,255,0.4)">UPDATE completed · CREATE completed · …</div>
+          </div>
+          <div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:10px">
+            <div style="font-weight:600;margin-bottom:4px">Routes · Seat configs below…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
