@@ -525,19 +525,20 @@ export const getConnectorHealthSummary = query({
     // Query failed, pending, and processing jobs globally using by_status_updatedAt index.
     // This avoids N+1 queries and unbounded memory use by scanning 3 status buckets instead of querying per-connector.
     // totalJobs = failedJobs + pendingJobs + processingJobs (active jobs only, excludes historical completed).
+    // take(8192) guards against Convex's 16,384-doc collect limit in case failed/pending rows grow large.
     const [failedJobs, pendingJobs, processingJobs] = await Promise.all([
       ctx.db
         .query("signalMirrorJobs")
         .withIndex("by_status_updatedAt", (q) => q.eq("status", "failed"))
-        .collect(),
+        .take(8192),
       ctx.db
         .query("signalMirrorJobs")
         .withIndex("by_status_updatedAt", (q) => q.eq("status", "pending"))
-        .collect(),
+        .take(8192),
       ctx.db
         .query("signalMirrorJobs")
         .withIndex("by_status_updatedAt", (q) => q.eq("status", "processing"))
-        .collect(),
+        .take(8192),
     ]);
 
     // Build maps: key = `${tenantKey}::${connectorId}`
