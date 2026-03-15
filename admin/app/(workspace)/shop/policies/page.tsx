@@ -37,6 +37,22 @@ function policyIdFromProduct(product: SellProductRow): string {
   return `${product.id}|${product.slug}`;
 }
 
+const tierBadgeClass: Record<Tier, string> = {
+  basic: "border-slate-600 bg-slate-700/60 text-slate-200",
+  advanced: "border-violet-500/40 bg-violet-500/15 text-violet-300",
+  pro: "border-indigo-500/40 bg-indigo-500/15 text-indigo-300",
+};
+
+function TierBadge({ tier }: { tier: Tier }) {
+  return (
+    <span
+      className={`inline-block rounded-md border px-2 py-0.5 text-xs font-semibold ${tierBadgeClass[tier]}`}
+    >
+      {tier}
+    </span>
+  );
+}
+
 export default function ShopPoliciesPage() {
   const listPoliciesRef = useMemo(
     () =>
@@ -536,12 +552,14 @@ export default function ShopPoliciesPage() {
               <th className="px-3 py-2">Remove</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800 bg-slate-950/40">
+          <tbody className="divide-y divide-slate-700 bg-slate-950/40">
             {rows?.map((row) => (
-              <tr key={`${row.scope}:${row.externalId}`}>
+              <tr key={`${row.scope}:${row.externalId}`} className="hover:bg-slate-800/40">
                 <td className="px-3 py-3 text-slate-200">{row.scope}</td>
                 <td className="px-3 py-3 font-mono text-xs text-cyan-300">{row.externalId}</td>
-                <td className="px-3 py-3 text-slate-200">{row.tier}</td>
+                <td className="px-3 py-3">
+                  <TierBadge tier={row.tier} />
+                </td>
                 <td className="px-3 py-3 text-slate-300">{row.durationDays ?? "n/a"}</td>
                 <td className="px-3 py-3 text-slate-300">{row.enabled ? "yes" : "no"}</td>
                 <td className="px-3 py-3 text-xs text-slate-400">

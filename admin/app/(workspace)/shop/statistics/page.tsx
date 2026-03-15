@@ -109,6 +109,28 @@ export default function ShopStatisticsPage() {
         breadcrumbs={buildAdminBreadcrumbs("/shop/statistics")}
         actions={
           <>
+            {[7, 30, 90].map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setPeriodDays(value as 7 | 30 | 90)}
+                className={`inline-flex h-8 items-center rounded-md px-3 text-xs font-semibold transition ${
+                  periodDays === value
+                    ? "bg-cyan-500 text-slate-950"
+                    : "bg-slate-800 text-slate-300"
+                }`}
+              >
+                Last {value} days
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => void loadStats()}
+              className="admin-btn-secondary"
+              disabled={isLoading}
+            >
+              {isLoading ? "Refreshing..." : "Refresh"}
+            </button>
             <Link href="/shop/catalog" className="admin-link">
               Catalog
             </Link>
@@ -122,45 +144,18 @@ export default function ShopStatisticsPage() {
         }
       />
 
-      <AdminSectionCard
-        title="Filters"
-        description="Metrics are computed from Sell invoices, not recurring subscription objects."
-        actions={
-          <button
-            type="button"
-            onClick={() => void loadStats()}
-            className="admin-btn-secondary"
-            disabled={isLoading}
-          >
-            {isLoading ? "Refreshing..." : "Refresh"}
-          </button>
-        }
-      >
-        <div className="flex flex-wrap items-center gap-2">
-          {[7, 30, 90].map((value) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setPeriodDays(value as 7 | 30 | 90)}
-              className={`inline-flex h-8 items-center rounded-md px-3 text-xs font-semibold transition ${
-                periodDays === value
-                  ? "bg-cyan-500 text-slate-950"
-                  : "bg-slate-800 text-slate-300"
-              }`}
-            >
-              Last {value} days
-            </button>
-          ))}
+      {(stats || error) && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-slate-400">
+          {stats && (
+            <span>
+              Window: {new Date(stats.periodStart).toLocaleString()} {"->"}{" "}
+              {new Date(stats.generatedAt).toLocaleString()} &middot; pages: {stats.pagesFetched}{" "}
+              &middot; invoices: {stats.invoicesScanned}
+            </span>
+          )}
+          {error && <span className="text-rose-400">{error}</span>}
         </div>
-        {stats ? (
-          <p className="mt-3 text-xs text-slate-400">
-            Window: {new Date(stats.periodStart).toLocaleString()} {"->"}{" "}
-            {new Date(stats.generatedAt).toLocaleString()} | pages fetched: {stats.pagesFetched} |
-            invoices scanned: {stats.invoicesScanned}
-          </p>
-        ) : null}
-        {error ? <p className="mt-3 text-sm text-rose-400">{error}</p> : null}
-      </AdminSectionCard>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className="admin-surface-soft">
