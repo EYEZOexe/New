@@ -42,6 +42,7 @@ async function enqueueMirrorJobForTarget(
     sourceMessageId: string;
     sourceChannelId: string;
     sourceGuildId: string;
+    referencedMessageId?: string;
     targetChannelId: string;
     targetGuildId?: string;
     eventType: SignalMirrorEventType;
@@ -81,6 +82,7 @@ async function enqueueMirrorJobForTarget(
       await ctx.db.patch(existing._id, {
         sourceChannelId: args.sourceChannelId,
         sourceGuildId: args.sourceGuildId,
+        referencedMessageId: args.referencedMessageId,
         content: args.content,
         attachments: args.attachments,
         sourceCreatedAt: args.sourceCreatedAt,
@@ -107,6 +109,7 @@ async function enqueueMirrorJobForTarget(
     sourceMessageId: args.sourceMessageId,
     sourceChannelId: args.sourceChannelId,
     sourceGuildId: args.sourceGuildId,
+    referencedMessageId: args.referencedMessageId,
     targetChannelId,
     targetGuildId,
     eventType: args.eventType,
@@ -139,6 +142,7 @@ export async function enqueueMirrorJobsForSignal(
     sourceMessageId: string;
     sourceChannelId: string;
     sourceGuildId: string;
+    referencedMessageId?: string;
     targets: Array<{
       targetChannelId: string;
       targetGuildId?: string;
@@ -181,6 +185,7 @@ export async function enqueueMirrorJobsForSignal(
       sourceMessageId: args.sourceMessageId,
       sourceChannelId: args.sourceChannelId,
       sourceGuildId: args.sourceGuildId,
+      referencedMessageId: args.referencedMessageId,
       targetChannelId,
       targetGuildId: targetGuildIdByChannel.get(targetChannelId),
       eventType: args.eventType,

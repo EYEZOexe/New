@@ -31,6 +31,7 @@ type MirrorMessagePayload = {
   content?: string;
   embeds?: APIEmbed[];
   allowedMentions?: APIAllowedMentions;
+  reply?: { messageReference: string; failIfNotExists: boolean };
 };
 
 type RoleMentionSanitizationResult = {
@@ -202,6 +203,10 @@ export class DiscordSignalMirrorManager {
       sourceMessageId: job.sourceMessageId,
       targetChannelId: job.targetChannelId,
     });
+    const replyRef = job.replyToMirroredMessageId
+      ? { messageReference: job.replyToMirroredMessageId, failIfNotExists: false }
+      : undefined;
+
     const editPayload: MirrorMessagePayload = {
       embeds: [payload.embed],
     };
@@ -213,9 +218,11 @@ export class DiscordSignalMirrorManager {
             parse: [],
             roles: [rolePingId],
           },
+          ...(replyRef ? { reply: replyRef } : {}),
         }
       : {
           embeds: [payload.embed],
+          ...(replyRef ? { reply: replyRef } : {}),
         };
 
     let upsertedMessage: Message | null = null;

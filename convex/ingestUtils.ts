@@ -28,6 +28,7 @@ type IngestMessageEvent = {
   deleted_at?: string | null;
   attachments: IngestAttachment[];
   embeds?: IngestEmbed[];
+  replied_to_message_id?: string | null;
 };
 
 type IngestNormalizationOptions = {
@@ -68,6 +69,7 @@ export function messageEventToSignalFields(
     contentType?: string;
     size?: number;
   }>;
+  referencedMessageId?: string;
   createdAt: number;
   editedAt?: number;
   deletedAt?: number;
@@ -126,12 +128,18 @@ export function messageEventToSignalFields(
       ? editedAtFromPayload ?? (typeof receivedAt === "number" ? receivedAt : undefined)
       : undefined);
 
+  const referencedMessageId =
+    typeof event.replied_to_message_id === "string"
+      ? event.replied_to_message_id.trim() || undefined
+      : undefined;
+
   return {
     tenantKey: scope.tenantKey,
     connectorId: scope.connectorId,
     sourceMessageId: event.discord_message_id,
     sourceChannelId: event.discord_channel_id,
     sourceGuildId: event.discord_guild_id,
+    ...(referencedMessageId ? { referencedMessageId } : {}),
     content: normalizedContent || embedDerivedContent,
     attachments,
     createdAt: parseIsoToMs(event.created_at),

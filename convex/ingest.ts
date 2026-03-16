@@ -79,6 +79,7 @@ const IngestMessageEvent = v.object({
   embeds: v.array(v.any()),
   mentioned_role_ids: v.optional(v.array(v.string())),
   mentioned_user_ids: v.optional(v.array(v.string())),
+  replied_to_message_id: v.optional(v.union(v.string(), v.null())),
 });
 
 const IngestGuild = v.object({
@@ -325,6 +326,7 @@ export const ingestMessageBatch = internalMutation({
         sourceMessageId: fields.sourceMessageId,
         sourceChannelId: fields.sourceChannelId,
         sourceGuildId: fields.sourceGuildId,
+        referencedMessageId: fields.referencedMessageId,
         targets,
         eventType: message.event_type,
         content: mirrorContent,

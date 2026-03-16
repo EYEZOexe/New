@@ -466,6 +466,7 @@ export default defineSchema({
     sourceMessageId: v.string(),
     sourceChannelId: v.string(),
     sourceGuildId: v.string(),
+    referencedMessageId: v.optional(v.string()),
     targetChannelId: v.string(),
     targetGuildId: v.optional(v.string()),
     eventType: v.union(
@@ -569,6 +570,7 @@ export default defineSchema({
     sourceMessageId: v.string(),
     sourceChannelId: v.string(),
     sourceGuildId: v.string(),
+    referencedMessageId: v.optional(v.string()),
     content: v.string(),
     attachments: v.optional(
       v.array(

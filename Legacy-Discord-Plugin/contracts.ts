@@ -78,6 +78,7 @@ export type IngestMessageEvent = {
     embeds: IngestEmbed[];
     mentioned_role_ids?: string[];
     mentioned_user_ids?: string[];
+    replied_to_message_id?: string | null;
 };
 
 export type IngestThreadEventType = "create" | "update" | "delete" | "members_update";

@@ -212,6 +212,7 @@ export const claimPendingSignalMirrorJobs = mutation({
       existingMirroredExtraMessageIds: string[];
       existingMirroredGuildId: string | null;
       rolePingId: string | null;
+      replyToMirroredMessageId: string | null;
     }> = [];
 
     for (const job of pending) {
@@ -444,6 +445,22 @@ export const claimPendingSignalMirrorJobs = mutation({
         );
       }
 
+      let replyToMirroredMessageId: string | null = null;
+      const referencedMessageId = job.referencedMessageId?.trim() ?? "";
+      if (referencedMessageId && job.eventType === "create") {
+        const referencedMirror = await ctx.db
+          .query("mirroredSignals")
+          .withIndex("by_source_target", (q) =>
+            q
+              .eq("tenantKey", job.tenantKey)
+              .eq("connectorId", job.connectorId)
+              .eq("sourceMessageId", referencedMessageId)
+              .eq("targetChannelId", job.targetChannelId),
+          )
+          .first();
+        replyToMirroredMessageId = referencedMirror?.mirroredMessageId?.trim() || null;
+      }
+
       claimed.push({
         jobId: job._id,
         claimToken,
@@ -468,6 +485,7 @@ export const claimPendingSignalMirrorJobs = mutation({
         existingMirroredExtraMessageIds: existingMirror?.mirroredExtraMessageIds ?? [],
         existingMirroredGuildId: existingMirror?.mirroredGuildId ?? null,
         rolePingId,
+        replyToMirroredMessageId,
       });
 
       const baseEventAt =

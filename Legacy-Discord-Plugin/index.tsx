@@ -62,6 +62,7 @@ interface FluxMessage {
     attachments: MessageAttachment[];
     embeds?: FluxEmbed[];
     mention_roles: string[];
+    message_reference?: { message_id?: string; channel_id?: string; guild_id?: string } | null;
 }
 
 interface FluxMessageDeleteEvent {
@@ -1146,6 +1147,7 @@ async function handleMessage(message: FluxMessage, isUpdate: boolean) {
         })),
         embeds: toIngestEmbeds(message.embeds),
         mentioned_role_ids: Array.isArray(message.mention_roles) ? message.mention_roles.map((r) => String(r)) : [],
+        replied_to_message_id: message.message_reference?.message_id ?? null,
     };
 
     if (!event.content_clean && event.embeds.length > 0) {
