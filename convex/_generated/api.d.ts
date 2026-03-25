@@ -36,6 +36,7 @@ import type * as mirrorQueue from "../mirrorQueue.js";
 import type * as payments from "../payments.js";
 import type * as paymentsUtils from "../paymentsUtils.js";
 import type * as retention from "../retention.js";
+import type * as retentionPolicy from "../retentionPolicy.js";
 import type * as roleSync from "../roleSync.js";
 import type * as roleSyncQueue from "../roleSyncQueue.js";
 import type * as seatEnforcement from "../seatEnforcement.js";
@@ -87,6 +88,7 @@ declare const fullApi: ApiFromModules<{
   payments: typeof payments;
   paymentsUtils: typeof paymentsUtils;
   retention: typeof retention;
+  retentionPolicy: typeof retentionPolicy;
   roleSync: typeof roleSync;
   roleSyncQueue: typeof roleSyncQueue;
   seatEnforcement: typeof seatEnforcement;
