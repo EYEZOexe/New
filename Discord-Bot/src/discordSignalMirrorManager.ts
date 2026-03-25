@@ -130,6 +130,18 @@ export class DiscordSignalMirrorManager {
       .map((value) => value.trim())
       .filter((value) => value.length > 0);
 
+    if (job.eventType === "update" && !existingMessageId) {
+      console.warn(
+        `[mirror] skipped update without existing mirror pointer source_message=${job.sourceMessageId} target_channel=${job.targetChannelId}`,
+      );
+      return {
+        ok: true,
+        message: "message_skipped_missing_existing_mirror",
+        mirroredExtraMessageIds: existingExtraMessageIds,
+        mirroredGuildId: guildId,
+      };
+    }
+
     if (job.eventType === "delete") {
       const deleteStartedAt = Date.now();
       const idsToDelete = [

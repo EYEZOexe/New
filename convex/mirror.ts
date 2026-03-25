@@ -11,6 +11,7 @@ import { evaluateSeatGate } from "./seatEnforcement";
 
 const SEAT_GATE_REQUEUE_MS = 15_000;
 const PROCESSING_RECLAIM_AFTER_MS = 5 * 60_000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const hydrateSignalMediaForMessageRef = makeFunctionReference<
   "action",
   {
@@ -82,6 +83,18 @@ function normalizeRolePingId(value: unknown): string | null {
 function extractRolePingIdFromTransformJson(transformJson: unknown): string | null {
   if (!isRecord(transformJson)) return null;
   return normalizeRolePingId(transformJson.rolePingId);
+}
+
+function decodeDiscordSnowflakeTimestampMs(snowflake: string): number | null {
+  const trimmed = snowflake.trim();
+  if (!/^\d{8,25}$/.test(trimmed)) return null;
+  try {
+    const discordEpoch = 1420070400000n;
+    const timestamp = Number((BigInt(trimmed) >> 22n) + discordEpoch);
+    return Number.isFinite(timestamp) ? timestamp : null;
+  } catch {
+    return null;
+  }
 }
 
 function hasPendingImageHydration(
@@ -762,6 +775,301 @@ export const getSignalMirrorLatencyStats = query({
       create: summarize(createLatencies),
       update: summarize(updateLatencies),
       delete: summarize(deleteLatencies),
+    };
+  },
+});
+
+export const diagnoseMirrorReplayCandidates = query({
+  args: {
+    tenantKey: v.string(),
+    connectorId: v.string(),
+    lookbackDays: v.optional(v.number()),
+    sourceMinAgeDays: v.optional(v.number()),
+    limit: v.optional(v.number()),
+    recentEditWindowDays: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const lookbackDays = Math.max(1, Math.min(90, args.lookbackDays ?? 14));
+    const sourceMinAgeDays = Math.max(1, Math.min(3650, args.sourceMinAgeDays ?? 30));
+    const limit = Math.max(1, Math.min(100, args.limit ?? 30));
+    const recentEditWindowDays = Math.max(1, Math.min(120, args.recentEditWindowDays ?? 14));
+
+    const now = Date.now();
+    const cutoffMs = now - lookbackDays * DAY_MS;
+    const sourceMinAgeMs = sourceMinAgeDays * DAY_MS;
+    const recentEditWindowMs = recentEditWindowDays * DAY_MS;
+
+    const rows = await ctx.db
+      .query("signalMirrorJobs")
+      .withIndex("by_tenant_connector", (q) =>
+        q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+      )
+      .order("desc")
+      .take(2500);
+
+    const completedRows = rows.filter((row) => row.status === "completed");
+    const completedByPair = new Map<string, typeof completedRows>();
+    for (const row of completedRows) {
+      const key = `${row.sourceMessageId}::${row.targetChannelId}`;
+      const group = completedByPair.get(key) ?? [];
+      group.push(row);
+      completedByPair.set(key, group);
+    }
+    for (const group of completedByPair.values()) {
+      group.sort((a, b) => a.updatedAt - b.updatedAt);
+    }
+
+    const candidates = completedRows
+      .filter((row) => row.updatedAt >= cutoffMs)
+      .filter((row) => now - row.sourceCreatedAt >= sourceMinAgeMs)
+      .slice(0, limit);
+
+    const diagnostics = [] as Array<{
+      jobId: string;
+      sourceMessageId: string;
+      targetChannelId: string;
+      eventType: "create" | "update" | "delete";
+      status: "completed";
+      sourceCreatedAt: number;
+      sourceCreatedAtIso: string;
+      sourceMessageSnowflakeCreatedAt: number | null;
+      sourceMessageSnowflakeCreatedAtIso: string | null;
+      sourceEditedAt: number | null;
+      sourceEditedAtIso: string | null;
+      mirroredAt: number;
+      mirroredAtIso: string;
+      queueDelayMs: number;
+      sourceAgeDaysAtMirror: number;
+      editLagDays: number | null;
+      hasPriorCompletedInScan: boolean;
+      mirroredSignalPresentNow: boolean;
+      mirroredSignalLastMirroredAt: number | null;
+      mirroredSignalLastMirroredAtIso: string | null;
+      currentSignalEditedAt: number | null;
+      currentSignalEditedAtIso: string | null;
+      currentSignalDeletedAt: number | null;
+      currentSignalDeletedAtIso: string | null;
+      likelyCause:
+        | "likely_legit_late_edit"
+        | "possible_history_gap_or_replay"
+        | "likely_replayed_update_without_edit_timestamp"
+        | "delete_event"
+        | "needs_manual_review";
+    }>;
+
+    for (const row of candidates) {
+      const pairKey = `${row.sourceMessageId}::${row.targetChannelId}`;
+      const pairRows = completedByPair.get(pairKey) ?? [];
+      const hasPriorCompletedInScan = pairRows.some((candidate) => candidate.updatedAt < row.updatedAt);
+
+      const [signal, mirroredSignal] = await Promise.all([
+        ctx.db
+          .query("signals")
+          .withIndex("by_sourceMessageId", (q) =>
+            q
+              .eq("tenantKey", args.tenantKey)
+              .eq("connectorId", args.connectorId)
+              .eq("sourceMessageId", row.sourceMessageId),
+          )
+          .first(),
+        ctx.db
+          .query("mirroredSignals")
+          .withIndex("by_source_target", (q) =>
+            q
+              .eq("tenantKey", args.tenantKey)
+              .eq("connectorId", args.connectorId)
+              .eq("sourceMessageId", row.sourceMessageId)
+              .eq("targetChannelId", row.targetChannelId),
+          )
+          .first(),
+      ]);
+
+      const sourceAgeDaysAtMirror = (row.updatedAt - row.sourceCreatedAt) / DAY_MS;
+      const editLagDays =
+        typeof row.sourceEditedAt === "number"
+          ? Math.abs(row.updatedAt - row.sourceEditedAt) / DAY_MS
+          : null;
+      const recentlyEdited =
+        typeof row.sourceEditedAt === "number" &&
+        Math.abs(row.updatedAt - row.sourceEditedAt) <= recentEditWindowMs;
+
+      let likelyCause:
+        | "likely_legit_late_edit"
+        | "possible_history_gap_or_replay"
+        | "likely_replayed_update_without_edit_timestamp"
+        | "delete_event"
+        | "needs_manual_review" = "needs_manual_review";
+
+      if (row.eventType === "delete") {
+        likelyCause = "delete_event";
+      } else if (row.eventType === "update" && recentlyEdited) {
+        likelyCause = "likely_legit_late_edit";
+      } else if (row.eventType === "update" && typeof row.sourceEditedAt !== "number") {
+        likelyCause = "likely_replayed_update_without_edit_timestamp";
+      } else if (!hasPriorCompletedInScan && sourceAgeDaysAtMirror >= sourceMinAgeDays) {
+        likelyCause = "possible_history_gap_or_replay";
+      }
+
+      const sourceSnowflakeMs = decodeDiscordSnowflakeTimestampMs(row.sourceMessageId);
+
+      diagnostics.push({
+        jobId: row._id,
+        sourceMessageId: row.sourceMessageId,
+        targetChannelId: row.targetChannelId,
+        eventType: row.eventType,
+        status: "completed",
+        sourceCreatedAt: row.sourceCreatedAt,
+        sourceCreatedAtIso: new Date(row.sourceCreatedAt).toISOString(),
+        sourceMessageSnowflakeCreatedAt: sourceSnowflakeMs,
+        sourceMessageSnowflakeCreatedAtIso:
+          typeof sourceSnowflakeMs === "number"
+            ? new Date(sourceSnowflakeMs).toISOString()
+            : null,
+        sourceEditedAt: row.sourceEditedAt ?? null,
+        sourceEditedAtIso:
+          typeof row.sourceEditedAt === "number"
+            ? new Date(row.sourceEditedAt).toISOString()
+            : null,
+        mirroredAt: row.updatedAt,
+        mirroredAtIso: new Date(row.updatedAt).toISOString(),
+        queueDelayMs: Math.max(0, row.updatedAt - row.createdAt),
+        sourceAgeDaysAtMirror,
+        editLagDays,
+        hasPriorCompletedInScan,
+        mirroredSignalPresentNow: Boolean(mirroredSignal),
+        mirroredSignalLastMirroredAt: mirroredSignal?.lastMirroredAt ?? null,
+        mirroredSignalLastMirroredAtIso:
+          typeof mirroredSignal?.lastMirroredAt === "number"
+            ? new Date(mirroredSignal.lastMirroredAt).toISOString()
+            : null,
+        currentSignalEditedAt: signal?.editedAt ?? null,
+        currentSignalEditedAtIso:
+          typeof signal?.editedAt === "number"
+            ? new Date(signal.editedAt).toISOString()
+            : null,
+        currentSignalDeletedAt: signal?.deletedAt ?? null,
+        currentSignalDeletedAtIso:
+          typeof signal?.deletedAt === "number"
+            ? new Date(signal.deletedAt).toISOString()
+            : null,
+        likelyCause,
+      });
+    }
+
+    return {
+      lookbackDays,
+      sourceMinAgeDays,
+      recentEditWindowDays,
+      scannedJobs: rows.length,
+      completedInScan: completedRows.length,
+      candidates: diagnostics,
+    };
+  },
+});
+
+export const traceMirrorSourceMessage = query({
+  args: {
+    tenantKey: v.string(),
+    connectorId: v.string(),
+    sourceMessageId: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(200, args.limit ?? 80));
+
+    const [signal, jobs, mirroredRows] = await Promise.all([
+      ctx.db
+        .query("signals")
+        .withIndex("by_sourceMessageId", (q) =>
+          q
+            .eq("tenantKey", args.tenantKey)
+            .eq("connectorId", args.connectorId)
+            .eq("sourceMessageId", args.sourceMessageId),
+        )
+        .first(),
+      ctx.db
+        .query("signalMirrorJobs")
+        .withIndex("by_tenant_connector_sourceMessageId", (q) =>
+          q
+            .eq("tenantKey", args.tenantKey)
+            .eq("connectorId", args.connectorId)
+            .eq("sourceMessageId", args.sourceMessageId),
+        )
+        .order("desc")
+        .take(limit),
+      ctx.db
+        .query("mirroredSignals")
+        .withIndex("by_tenant_connector", (q) =>
+          q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+        )
+        .filter((q) => q.eq(q.field("sourceMessageId"), args.sourceMessageId))
+        .take(50),
+    ]);
+
+    const decodedSourceSnowflakeMs = decodeDiscordSnowflakeTimestampMs(args.sourceMessageId);
+
+    return {
+      sourceMessageId: args.sourceMessageId,
+      decodedSourceSnowflakeMs,
+      decodedSourceSnowflakeIso:
+        typeof decodedSourceSnowflakeMs === "number"
+          ? new Date(decodedSourceSnowflakeMs).toISOString()
+          : null,
+      signal: signal
+        ? {
+            sourceChannelId: signal.sourceChannelId,
+            sourceGuildId: signal.sourceGuildId,
+            createdAt: signal.createdAt,
+            createdAtIso: new Date(signal.createdAt).toISOString(),
+            editedAt: signal.editedAt ?? null,
+            editedAtIso:
+              typeof signal.editedAt === "number"
+                ? new Date(signal.editedAt).toISOString()
+                : null,
+            deletedAt: signal.deletedAt ?? null,
+            deletedAtIso:
+              typeof signal.deletedAt === "number"
+                ? new Date(signal.deletedAt).toISOString()
+                : null,
+            attachmentCount: Array.isArray(signal.attachments)
+              ? signal.attachments.length
+              : 0,
+          }
+        : null,
+      jobs: jobs.map((job) => ({
+        jobId: job._id,
+        status: job.status,
+        eventType: job.eventType,
+        targetChannelId: job.targetChannelId,
+        sourceCreatedAt: job.sourceCreatedAt,
+        sourceCreatedAtIso: new Date(job.sourceCreatedAt).toISOString(),
+        sourceEditedAt: job.sourceEditedAt ?? null,
+        sourceEditedAtIso:
+          typeof job.sourceEditedAt === "number"
+            ? new Date(job.sourceEditedAt).toISOString()
+            : null,
+        runAfter: job.runAfter,
+        runAfterIso: new Date(job.runAfter).toISOString(),
+        createdAt: job.createdAt,
+        createdAtIso: new Date(job.createdAt).toISOString(),
+        updatedAt: job.updatedAt,
+        updatedAtIso: new Date(job.updatedAt).toISOString(),
+        attemptCount: job.attemptCount,
+        maxAttempts: job.maxAttempts,
+        lastError: job.lastError ?? null,
+      })),
+      mirroredSignals: mirroredRows.map((row) => ({
+        targetChannelId: row.targetChannelId,
+        mirroredMessageId: row.mirroredMessageId,
+        mirroredExtraMessageIds: row.mirroredExtraMessageIds ?? [],
+        lastMirroredAt: row.lastMirroredAt,
+        lastMirroredAtIso: new Date(row.lastMirroredAt).toISOString(),
+        deletedAt: row.deletedAt ?? null,
+        deletedAtIso:
+          typeof row.deletedAt === "number"
+            ? new Date(row.deletedAt).toISOString()
+            : null,
+      })),
     };
   },
 });

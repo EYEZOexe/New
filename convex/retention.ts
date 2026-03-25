@@ -3,6 +3,7 @@ import { v } from "convex/values";
 
 import type { Id } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
+import { shouldDeleteMirroredSignalRow } from "./retentionPolicy";
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const RETENTION_BATCH_LIMIT = 120;
@@ -135,6 +136,15 @@ export const runThirtyDayRetention = internalMutation({
       hasMore = true;
     }
     for (const row of mirroredRows) {
+      if (
+        !shouldDeleteMirroredSignalRow({
+          lastMirroredAt: row.lastMirroredAt,
+          deletedAt: row.deletedAt,
+          cutoffMs,
+        })
+      ) {
+        continue;
+      }
       await ctx.db.delete(row._id);
       summary.mirroredSignalsDeleted += 1;
     }

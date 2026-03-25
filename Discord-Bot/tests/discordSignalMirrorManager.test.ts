@@ -489,6 +489,80 @@ describe("discord signal mirror manager", () => {
     expect(sentPayloads[0].embeds?.[0]?.description).toBe("Signal body");
   });
 
+  it("does not create a fresh mirrored message for an update when the existing mirror pointer is missing", async () => {
+    const sentPayloads: Array<{
+      content?: string;
+      embeds?: APIEmbed[];
+      allowedMentions?: { parse: string[]; roles: string[] };
+    }> = [];
+    const editedPayloads: Array<{
+      messageId: string;
+      payload: {
+        content?: string;
+        embeds?: APIEmbed[];
+        allowedMentions?: { parse: string[]; roles: string[] };
+      };
+    }> = [];
+    const channel = {
+      guildId: "target_guild_1",
+      send: async (payload: {
+        content?: string;
+        embeds?: APIEmbed[];
+        allowedMentions?: { parse: string[]; roles: string[] };
+      }) => {
+        sentPayloads.push(payload);
+        return { id: `mirrored_${sentPayloads.length}` } as unknown as Message;
+      },
+      messages: {
+        fetch: async () => {
+          throw new Error("unexpected_message_fetch");
+        },
+        edit: async (
+          messageId: string,
+          payload: {
+            content?: string;
+            embeds?: APIEmbed[];
+            allowedMentions?: { parse: string[]; roles: string[] };
+          },
+        ) => {
+          editedPayloads.push({ messageId, payload });
+          return { id: messageId } as unknown as Message;
+        },
+        delete: async () => undefined,
+      },
+    };
+    const client = {
+      channels: {
+        fetch: async () => channel,
+      },
+      guilds: {
+        cache: new Map([
+          [
+            "1087843967573438504",
+            {
+              roles: {
+                cache: new Map<string, { id: string }>(),
+              },
+            },
+          ],
+        ]),
+      },
+    } as unknown as Client;
+
+    const manager = new DiscordSignalMirrorManager(client);
+    const result = await manager.executeJob({
+      ...buildJob("Late edit should not recreate the relay message"),
+      eventType: "update",
+      existingMirroredMessageId: null,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe("message_skipped_missing_existing_mirror");
+    expect(result.mirroredMessageId).toBeUndefined();
+    expect(sentPayloads).toHaveLength(0);
+    expect(editedPayloads).toHaveLength(0);
+  });
+
   it("removes missing role mentions while preserving valid mentions and message text", async () => {
     const sentPayloads: Array<{
       content?: string;
