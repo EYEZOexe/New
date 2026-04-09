@@ -80,6 +80,21 @@ function normalizeUrlToken(value: string): string {
   return trimmed.replace(/[),.;!?]+$/g, "");
 }
 
+function normalizeUrlMatchText(token: string): string {
+  const normalizedToken = normalizeUrlToken(token).toLowerCase();
+  if (!normalizedToken) return "";
+
+  if (normalizedToken.startsWith("http://")) {
+    return normalizedToken.slice("http://".length);
+  }
+  if (normalizedToken.startsWith("https://")) {
+    return normalizedToken.slice("https://".length);
+  }
+  return normalizedToken.startsWith("www.")
+    ? normalizedToken.slice("www.".length)
+    : normalizedToken;
+}
+
 function extractDomainFromUrlToken(token: string): string | null {
   const normalizedToken = normalizeUrlToken(token);
   if (!normalizedToken) return null;
@@ -98,6 +113,32 @@ function extractDomainFromUrlToken(token: string): string | null {
 
 function domainMatches(domain: string, candidate: string): boolean {
   return domain === candidate || domain.endsWith(`.${candidate}`);
+}
+
+function urlTokenMatchesCandidate(domain: string, token: string, candidate: string): boolean {
+  if (domainMatches(domain, candidate)) {
+    return true;
+  }
+
+  const normalizedToken = normalizeUrlMatchText(token);
+  if (!normalizedToken) {
+    return false;
+  }
+
+  if (normalizedToken.includes(`/${candidate}/`)) {
+    return true;
+  }
+  if (normalizedToken.includes(`/${candidate}?`)) {
+    return true;
+  }
+  if (normalizedToken.endsWith(`/${candidate}`)) {
+    return true;
+  }
+  if (normalizedToken.includes(`@${candidate}`)) {
+    return true;
+  }
+
+  return false;
 }
 
 export function parseMessageFilteringRules(raw: unknown): MessageFilteringRules {
@@ -152,13 +193,13 @@ export function applyMessageFiltering(content: string, rawRules: unknown): Messa
       if (!domain) return token;
 
       for (const allowed of allowedDomains.values()) {
-        if (domainMatches(domain, allowed)) {
+        if (urlTokenMatchesCandidate(domain, token, allowed)) {
           return token;
         }
       }
 
       for (const blocked of blockedDomains.values()) {
-        if (domainMatches(domain, blocked)) {
+        if (urlTokenMatchesCandidate(domain, token, blocked)) {
           removedUrlCount += 1;
           return "";
         }

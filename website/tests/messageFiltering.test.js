@@ -44,5 +44,23 @@ describe("message filtering", () => {
     expect(result.content).toBe("Watch https://www.x.com/alpha now");
     expect(result.removedUrlCount).toBe(0);
   });
-});
 
+  it("removes URLs when a blocked token appears in the path", () => {
+    const result = applyMessageFiltering("Read https://x.com/unityacademy/status/123 now", {
+      blockedDomains: ["unityacademy"],
+    });
+
+    expect(result.content).toBe("Read now");
+    expect(result.removedUrlCount).toBe(1);
+  });
+
+  it("keeps URLs when a token path is allowlisted over a blocklist match", () => {
+    const result = applyMessageFiltering("Read https://x.com/unityacademy/status/123 now", {
+      blockedDomains: ["unityacademy"],
+      allowedDomains: ["x.com"],
+    });
+
+    expect(result.content).toBe("Read https://x.com/unityacademy/status/123 now");
+    expect(result.removedUrlCount).toBe(0);
+  });
+});

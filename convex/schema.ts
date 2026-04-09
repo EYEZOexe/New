@@ -511,6 +511,19 @@ export default defineSchema({
     .index("by_status_runAfter", ["status", "runAfter"])
     .index("by_status_updatedAt", ["status", "updatedAt"])
     .index("by_tenant_connector", ["tenantKey", "connectorId"])
+    .index("by_tenant_connector_updatedAt", ["tenantKey", "connectorId", "updatedAt"])
+    .index("by_tenant_connector_status_updatedAt", [
+      "tenantKey",
+      "connectorId",
+      "status",
+      "updatedAt",
+    ])
+    .index("by_tenant_connector_status_runAfter", [
+      "tenantKey",
+      "connectorId",
+      "status",
+      "runAfter",
+    ])
     .index("by_tenant_connector_sourceMessageId", [
       "tenantKey",
       "connectorId",
@@ -537,6 +550,11 @@ export default defineSchema({
     deletedAt: v.optional(v.number()),
   })
     .index("by_tenant_connector", ["tenantKey", "connectorId"])
+    .index("by_tenant_connector_sourceMessageId", [
+      "tenantKey",
+      "connectorId",
+      "sourceMessageId",
+    ])
     .index("by_lastMirroredAt", ["lastMirroredAt"])
     .index("by_source_target", [
       "tenantKey",
@@ -618,6 +636,12 @@ export default defineSchema({
   })
     .index("by_provider_eventId", ["provider", "eventId"])
     .index("by_provider_status", ["provider", "status"])
+    .index("by_provider_status_resolvedUserId_receivedAt", [
+      "provider",
+      "status",
+      "resolvedUserId",
+      "receivedAt",
+    ])
     .index("by_receivedAt", ["receivedAt"])
     .index("by_status", ["status"]),
 });

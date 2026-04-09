@@ -295,6 +295,81 @@ function areStrategySectionsEqual(
   );
 }
 
+function normalizeLiveIntelComparable(row: {
+  panel: string;
+  title: string;
+  value: number;
+  changePct: number;
+  timeframe: "5m" | "15m" | "1h" | "4h" | "1d";
+  sentiment: "bullish" | "bearish" | "neutral";
+}) {
+  return {
+    panel: row.panel,
+    title: row.title,
+    value: row.value,
+    changePct: row.changePct,
+    timeframe: row.timeframe,
+    sentiment: row.sentiment,
+  };
+}
+
+function normalizeIndicatorAlertComparable(row: {
+  panel: "oracle" | "watchlist";
+  title: string;
+  side: "bull" | "bear";
+  timeframe: string;
+  price: string;
+  eventDate: string;
+  live?: boolean;
+}) {
+  return {
+    panel: row.panel,
+    title: row.title,
+    side: row.side,
+    timeframe: row.timeframe,
+    price: row.price,
+    eventDate: row.eventDate,
+    live: row.live === true,
+  };
+}
+
+function normalizeNewsArticleComparable(row: {
+  source: string;
+  title: string;
+  url: string;
+  category: string;
+  publishedAt: number;
+  featured?: boolean;
+}) {
+  return {
+    source: row.source,
+    title: row.title,
+    url: row.url,
+    category: row.category,
+    publishedAt: row.publishedAt,
+    featured: row.featured === true,
+  };
+}
+
+function compareNormalizedRows<T>(
+  left: T[],
+  right: T[],
+  sortKey: (value: T) => string,
+): boolean {
+  if (left.length !== right.length) return false;
+
+  const leftSorted = [...left].sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+  const rightSorted = [...right].sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+
+  for (let index = 0; index < leftSorted.length; index += 1) {
+    if (JSON.stringify(leftSorted[index]) !== JSON.stringify(rightSorted[index])) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function toUsdPrice(value: number): string {
   return `$${value.toLocaleString("en-US", { maximumFractionDigits: 4 })}`;
 }
@@ -721,8 +796,21 @@ export const replaceLiveIntelItems = internalMutation({
     rows: v.array(LiveIntelItemInput),
   },
   handler: async (ctx, args) => {
-    const now = Date.now();
     const existing = await ctx.db.query("liveIntelItems").collect();
+    const normalizedExisting = existing.map(normalizeLiveIntelComparable);
+    const normalizedIncoming = args.rows.map(normalizeLiveIntelComparable);
+    if (
+      compareNormalizedRows(
+        normalizedExisting,
+        normalizedIncoming,
+        (row) => `${row.panel}:${row.timeframe}:${row.title}`,
+      )
+    ) {
+      console.info(`[workspace/ingest] live intel unchanged count=${existing.length}`);
+      return { deleted: 0, inserted: 0 };
+    }
+
+    const now = Date.now();
     for (const row of existing) {
       await ctx.db.delete(row._id);
     }
@@ -751,8 +839,23 @@ export const replaceIndicatorAlerts = internalMutation({
     rows: v.array(IndicatorAlertInput),
   },
   handler: async (ctx, args) => {
-    const now = Date.now();
     const existing = await ctx.db.query("indicatorAlerts").collect();
+    const normalizedExisting = existing.map(normalizeIndicatorAlertComparable);
+    const normalizedIncoming = args.rows.map(normalizeIndicatorAlertComparable);
+    if (
+      compareNormalizedRows(
+        normalizedExisting,
+        normalizedIncoming,
+        (row) => `${row.panel}:${row.timeframe}:${row.title}:${row.price}`,
+      )
+    ) {
+      console.info(
+        `[workspace/ingest] indicator alerts unchanged count=${existing.length}`,
+      );
+      return { deleted: 0, inserted: 0 };
+    }
+
+    const now = Date.now();
     for (const row of existing) {
       await ctx.db.delete(row._id);
     }
@@ -782,8 +885,21 @@ export const replaceNewsArticles = internalMutation({
     rows: v.array(NewsArticleInput),
   },
   handler: async (ctx, args) => {
-    const now = Date.now();
     const existing = await ctx.db.query("newsArticles").collect();
+    const normalizedExisting = existing.map(normalizeNewsArticleComparable);
+    const normalizedIncoming = args.rows.map(normalizeNewsArticleComparable);
+    if (
+      compareNormalizedRows(
+        normalizedExisting,
+        normalizedIncoming,
+        (row) => `${row.publishedAt}:${row.url}`,
+      )
+    ) {
+      console.info(`[workspace/ingest] news articles unchanged count=${existing.length}`);
+      return { deleted: 0, inserted: 0 };
+    }
+
+    const now = Date.now();
     for (const row of existing) {
       await ctx.db.delete(row._id);
     }
@@ -882,152 +998,172 @@ export const refreshExternalWorkspaceFeeds = internalAction({
     const coinGeckoUrl =
       "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=80&page=1&sparkline=true&price_change_percentage=1h,24h";
     const cryptoCompareNewsUrl = "https://min-api.cryptocompare.com/data/v2/news/?lang=EN";
+    const startedAt = Date.now();
 
-    let marketData: CoinGeckoMarketRow[] | null = null;
     try {
-      marketData = await fetchJson<CoinGeckoMarketRow[]>(coinGeckoUrl);
+      let marketData: CoinGeckoMarketRow[] | null = null;
+      try {
+        marketData = await fetchJson<CoinGeckoMarketRow[]>(coinGeckoUrl);
+      } catch (error) {
+        console.warn(`[workspace/ingest] CoinGecko fetch failed: ${String(error)}`);
+      }
+
+      let newsPayload: CryptoCompareNewsResponse | null = null;
+      try {
+        newsPayload = await fetchJson<CryptoCompareNewsResponse>(cryptoCompareNewsUrl);
+      } catch (error) {
+        console.warn(`[workspace/ingest] CryptoCompare fetch failed: ${String(error)}`);
+      }
+
+      if (!marketData && !newsPayload) {
+        console.warn("[workspace/ingest] both external feeds unavailable, skipping refresh");
+        return { ok: true as const, skipped: true as const };
+      }
+
+      const marketRows = (marketData ?? [])
+        .map((row) => {
+          const symbol = (row.symbol ?? "").trim().toUpperCase();
+          const name = (row.name ?? "").trim();
+          if (!symbol || !name) return null;
+
+          const sparkline = (row.sparkline_in_7d?.price ?? [])
+            .map((value) => toFiniteNumber(value))
+            .filter((value) => Number.isFinite(value))
+            .slice(-72);
+
+          return {
+            symbol,
+            name,
+            price: toFiniteNumber(row.current_price),
+            change1h: toFiniteNumber(row.price_change_percentage_1h_in_currency),
+            change24h: toFiniteNumber(row.price_change_percentage_24h),
+            marketCap: toFiniteNumber(row.market_cap),
+            volume24h: toFiniteNumber(row.total_volume),
+            high24h: toFiniteNumber(row.high_24h),
+            low24h: toFiniteNumber(row.low_24h),
+            ...(sparkline.length > 0 ? { sparkline7d: sparkline } : {}),
+          };
+        })
+        .filter((row): row is NonNullable<typeof row> => row !== null)
+        .slice(0, DEFAULT_MARKET_LIMIT);
+
+      const sortedByChange = [...marketRows].sort((a, b) => b.change24h - a.change24h);
+      const sortedByVolume = [...marketRows].sort((a, b) => b.volume24h - a.volume24h);
+
+      const liveIntelRows = [
+        ...sortedByChange.slice(0, 6).map((row) => ({
+          panel: "market-movers",
+          title: `${row.symbol} Gainer`,
+          value: row.price,
+          changePct: row.change24h,
+          timeframe: "1d" as const,
+          sentiment: "bullish" as const,
+        })),
+        ...sortedByChange.slice(-6).reverse().map((row) => ({
+          panel: "market-movers",
+          title: `${row.symbol} Loser`,
+          value: row.price,
+          changePct: row.change24h,
+          timeframe: "1d" as const,
+          sentiment: "bearish" as const,
+        })),
+        ...sortedByVolume.slice(0, 8).map((row) => ({
+          panel: "top-volume",
+          title: `${row.symbol} Volume`,
+          value: row.volume24h,
+          changePct: row.change24h,
+          timeframe: "1h" as const,
+          sentiment: row.change24h >= 0 ? ("bullish" as const) : ("bearish" as const),
+        })),
+      ];
+
+      const now = Date.now();
+      const indicatorRows = [
+        ...sortedByChange.slice(0, 10).map((row) => ({
+          panel: "oracle" as const,
+          title: `${row.symbol} Bullish Momentum`,
+          side: "bull" as const,
+          timeframe: "1h",
+          price: toUsdPrice(row.price),
+          eventDate: toIsoDate(now),
+          live: true,
+        })),
+        ...sortedByChange.slice(-10).reverse().map((row) => ({
+          panel: "watchlist" as const,
+          title: `${row.symbol} Bearish Momentum`,
+          side: "bear" as const,
+          timeframe: "1h",
+          price: toUsdPrice(row.price),
+          eventDate: toIsoDate(now),
+          live: true,
+        })),
+      ];
+
+      const newsRows = (newsPayload?.Data ?? [])
+        .map((item, index) => {
+          const title = (item.title ?? "").trim();
+          const url = (item.url ?? "").trim();
+          if (!title || !url) return null;
+          const source =
+            (item.source_info?.name ?? item.source ?? "Unknown").trim() || "Unknown";
+          const categoryRaw = (item.categories ?? "MARKET").split("|")[0]?.trim();
+          const category = categoryRaw && categoryRaw.length > 0 ? categoryRaw : "MARKET";
+          const publishedAtSeconds = toFiniteNumber(item.published_on);
+          const publishedAtMs = publishedAtSeconds > 0 ? publishedAtSeconds * 1000 : Date.now();
+          return {
+            source,
+            title,
+            url,
+            category,
+            publishedAt: publishedAtMs,
+            featured: index < 1,
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null)
+        .slice(0, DEFAULT_NEWS_LIMIT);
+
+      const marketResult = marketData
+        ? await ctx.runMutation(internal.workspace.upsertMarketSnapshots, { rows: marketRows })
+        : null;
+      const liveIntelResult = marketData
+        ? await ctx.runMutation(internal.workspace.replaceLiveIntelItems, {
+            rows: liveIntelRows,
+          })
+        : null;
+      const indicatorResult = marketData
+        ? await ctx.runMutation(internal.workspace.replaceIndicatorAlerts, {
+            rows: indicatorRows,
+          })
+        : null;
+      const newsResult = newsPayload
+        ? await ctx.runMutation(internal.workspace.replaceNewsArticles, { rows: newsRows })
+        : null;
+      const strategySeedResult = await ctx.runMutation(
+        internal.workspace.seedStrategiesIfMissing,
+        {},
+      );
+
+      console.info(
+        `[workspace/ingest] refresh complete market_ok=${Boolean(marketData)} news_ok=${Boolean(newsPayload)} markets_inserted=${marketResult?.inserted ?? "skipped"} markets_updated=${marketResult?.updated ?? "skipped"} live_intel_inserted=${liveIntelResult?.inserted ?? "skipped"} indicator_inserted=${indicatorResult?.inserted ?? "skipped"} news_inserted=${newsResult?.inserted ?? "skipped"} strategy_seed_inserted=${strategySeedResult.inserted} strategy_seed_updated=${strategySeedResult.updated} elapsed_ms=${Date.now() - startedAt}`,
+      );
+
+      return {
+        ok: true as const,
+        markets: marketResult,
+        liveIntel: liveIntelResult,
+        indicators: indicatorResult,
+        news: newsResult,
+        strategySeed: strategySeedResult,
+      };
     } catch (error) {
-      console.warn(`[workspace/ingest] CoinGecko fetch failed: ${String(error)}`);
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(
+        `[workspace/ingest] refresh failed error=${message} elapsed_ms=${Date.now() - startedAt}`,
+      );
+      return {
+        ok: false as const,
+        error: message,
+      };
     }
-
-    let newsPayload: CryptoCompareNewsResponse | null = null;
-    try {
-      newsPayload = await fetchJson<CryptoCompareNewsResponse>(cryptoCompareNewsUrl);
-    } catch (error) {
-      console.warn(`[workspace/ingest] CryptoCompare fetch failed: ${String(error)}`);
-    }
-
-    if (!marketData && !newsPayload) {
-      console.warn("[workspace/ingest] both external feeds unavailable, skipping refresh");
-      return { ok: true as const, skipped: true as const };
-    }
-
-    const marketRows = (marketData ?? [])
-      .map((row) => {
-        const symbol = (row.symbol ?? "").trim().toUpperCase();
-        const name = (row.name ?? "").trim();
-        if (!symbol || !name) return null;
-
-        const sparkline = (row.sparkline_in_7d?.price ?? [])
-          .map((value) => toFiniteNumber(value))
-          .filter((value) => Number.isFinite(value))
-          .slice(-72);
-
-        return {
-          symbol,
-          name,
-          price: toFiniteNumber(row.current_price),
-          change1h: toFiniteNumber(row.price_change_percentage_1h_in_currency),
-          change24h: toFiniteNumber(row.price_change_percentage_24h),
-          marketCap: toFiniteNumber(row.market_cap),
-          volume24h: toFiniteNumber(row.total_volume),
-          high24h: toFiniteNumber(row.high_24h),
-          low24h: toFiniteNumber(row.low_24h),
-          ...(sparkline.length > 0 ? { sparkline7d: sparkline } : {}),
-        };
-      })
-      .filter((row): row is NonNullable<typeof row> => row !== null)
-      .slice(0, DEFAULT_MARKET_LIMIT);
-
-    const sortedByChange = [...marketRows].sort((a, b) => b.change24h - a.change24h);
-    const sortedByVolume = [...marketRows].sort((a, b) => b.volume24h - a.volume24h);
-
-    const liveIntelRows = [
-      ...sortedByChange.slice(0, 6).map((row) => ({
-        panel: "market-movers",
-        title: `${row.symbol} Gainer`,
-        value: row.price,
-        changePct: row.change24h,
-        timeframe: "1d" as const,
-        sentiment: "bullish" as const,
-      })),
-      ...sortedByChange.slice(-6).reverse().map((row) => ({
-        panel: "market-movers",
-        title: `${row.symbol} Loser`,
-        value: row.price,
-        changePct: row.change24h,
-        timeframe: "1d" as const,
-        sentiment: "bearish" as const,
-      })),
-      ...sortedByVolume.slice(0, 8).map((row) => ({
-        panel: "top-volume",
-        title: `${row.symbol} Volume`,
-        value: row.volume24h,
-        changePct: row.change24h,
-        timeframe: "1h" as const,
-        sentiment: row.change24h >= 0 ? ("bullish" as const) : ("bearish" as const),
-      })),
-    ];
-
-    const now = Date.now();
-    const indicatorRows = [
-      ...sortedByChange.slice(0, 10).map((row) => ({
-        panel: "oracle" as const,
-        title: `${row.symbol} Bullish Momentum`,
-        side: "bull" as const,
-        timeframe: "1h",
-        price: toUsdPrice(row.price),
-        eventDate: toIsoDate(now),
-        live: true,
-      })),
-      ...sortedByChange.slice(-10).reverse().map((row) => ({
-        panel: "watchlist" as const,
-        title: `${row.symbol} Bearish Momentum`,
-        side: "bear" as const,
-        timeframe: "1h",
-        price: toUsdPrice(row.price),
-        eventDate: toIsoDate(now),
-        live: true,
-      })),
-    ];
-
-    const newsRows = (newsPayload?.Data ?? [])
-      .map((item, index) => {
-        const title = (item.title ?? "").trim();
-        const url = (item.url ?? "").trim();
-        if (!title || !url) return null;
-        const source = (item.source_info?.name ?? item.source ?? "Unknown").trim() || "Unknown";
-        const categoryRaw = (item.categories ?? "MARKET").split("|")[0]?.trim();
-        const category = categoryRaw && categoryRaw.length > 0 ? categoryRaw : "MARKET";
-        const publishedAtSeconds = toFiniteNumber(item.published_on);
-        const publishedAtMs = publishedAtSeconds > 0 ? publishedAtSeconds * 1000 : Date.now();
-        return {
-          source,
-          title,
-          url,
-          category,
-          publishedAt: publishedAtMs,
-          featured: index < 1,
-        };
-      })
-      .filter((item): item is NonNullable<typeof item> => item !== null)
-      .slice(0, DEFAULT_NEWS_LIMIT);
-
-    const marketResult = marketData
-      ? await ctx.runMutation(internal.workspace.upsertMarketSnapshots, { rows: marketRows })
-      : null;
-    const liveIntelResult = marketData
-      ? await ctx.runMutation(internal.workspace.replaceLiveIntelItems, { rows: liveIntelRows })
-      : null;
-    const indicatorResult = marketData
-      ? await ctx.runMutation(internal.workspace.replaceIndicatorAlerts, { rows: indicatorRows })
-      : null;
-    const newsResult = newsPayload
-      ? await ctx.runMutation(internal.workspace.replaceNewsArticles, { rows: newsRows })
-      : null;
-    const strategySeedResult = await ctx.runMutation(internal.workspace.seedStrategiesIfMissing, {});
-
-    console.info(
-      `[workspace/ingest] refresh complete market_ok=${Boolean(marketData)} news_ok=${Boolean(newsPayload)} markets_inserted=${marketResult?.inserted ?? "skipped"} markets_updated=${marketResult?.updated ?? "skipped"} live_intel_inserted=${liveIntelResult?.inserted ?? "skipped"} indicator_inserted=${indicatorResult?.inserted ?? "skipped"} news_inserted=${newsResult?.inserted ?? "skipped"} strategy_seed_inserted=${strategySeedResult.inserted} strategy_seed_updated=${strategySeedResult.updated}`,
-    );
-
-    return {
-      ok: true as const,
-      markets: marketResult,
-      liveIntel: liveIntelResult,
-      indicators: indicatorResult,
-      news: newsResult,
-      strategySeed: strategySeedResult,
-    };
   },
 });

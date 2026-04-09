@@ -350,14 +350,19 @@ export const listBotGuildChannels = query({
             .withIndex("by_guildId", (q) => q.eq("guildId", guildId))
             .collect()
         : await ctx.db.query("discordBotChannels").collect()
-      : await ctx.db
-          .query("discordBotChannels")
-          .withIndex("by_active", (q) => q.eq("active", true))
-          .collect();
+      : guildId
+        ? (
+            await ctx.db
+              .query("discordBotChannels")
+              .withIndex("by_guildId", (q) => q.eq("guildId", guildId))
+              .collect()
+          ).filter((row) => row.active)
+        : await ctx.db
+            .query("discordBotChannels")
+            .withIndex("by_active", (q) => q.eq("active", true))
+            .collect();
 
-    const filtered = guildId
-      ? rows.filter((row) => row.guildId === guildId)
-      : rows;
+    const filtered = guildId ? rows.filter((row) => row.guildId === guildId) : rows;
     filtered.sort((a, b) => {
       const byGuild = a.guildId.localeCompare(b.guildId);
       if (byGuild !== 0) return byGuild;
@@ -395,10 +400,17 @@ export const listBotGuildRoles = query({
             .withIndex("by_guildId", (q) => q.eq("guildId", guildId))
             .collect()
         : await ctx.db.query("discordBotRoles").collect()
-      : await ctx.db
-          .query("discordBotRoles")
-          .withIndex("by_active", (q) => q.eq("active", true))
-          .collect();
+      : guildId
+        ? (
+            await ctx.db
+              .query("discordBotRoles")
+              .withIndex("by_guildId", (q) => q.eq("guildId", guildId))
+              .collect()
+          ).filter((row) => row.active)
+        : await ctx.db
+            .query("discordBotRoles")
+            .withIndex("by_active", (q) => q.eq("active", true))
+            .collect();
 
     const filtered = guildId ? rows.filter((row) => row.guildId === guildId) : rows;
     filtered.sort((a, b) => {

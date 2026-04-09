@@ -21,29 +21,31 @@ type QueueSummary = {
   wakeUpdatedAt: number | null;
 };
 
-function summarizePendingJobs(
-  rows: Array<{ runAfter: number; updatedAt: number }>,
+async function summarizePendingJobsFromEarliest(
+  loadEarliestPending: () => Promise<Array<{ runAfter: number; updatedAt: number }>>,
   now: number,
-): QueueSummary {
-  let pendingReady = 0;
-  let nextRunAfter: number | null = null;
-  let wakeUpdatedAt: number | null = null;
-
-  for (const row of rows) {
-    if (row.runAfter <= now) pendingReady += 1;
-    if (nextRunAfter === null || row.runAfter < nextRunAfter) {
-      nextRunAfter = row.runAfter;
-    }
-    if (wakeUpdatedAt === null || row.updatedAt > wakeUpdatedAt) {
-      wakeUpdatedAt = row.updatedAt;
-    }
+): Promise<QueueSummary> {
+  // The wake scheduler only needs a minimal summary: whether any job is ready
+  // immediately and when the next pending job becomes due. Reading only the
+  // earliest pending row avoids full-queue scans on every wake-state update.
+  const [earliest] = await loadEarliestPending();
+  if (!earliest) {
+    return {
+      pendingReady: 0,
+      nextRunAfter: null,
+      pendingTotal: 0,
+      wakeUpdatedAt: null,
+    };
   }
 
   return {
-    pendingReady,
-    nextRunAfter,
-    pendingTotal: rows.length,
-    wakeUpdatedAt,
+    pendingReady: earliest.runAfter <= now ? 1 : 0,
+    nextRunAfter: earliest.runAfter,
+    // Wake state is consumed as a scheduling hint, not an admin stats surface.
+    // Returning a lower bound here preserves low-latency wake behavior without
+    // loading every pending row from SQLite on each realtime update.
+    pendingTotal: 1,
+    wakeUpdatedAt: earliest.updatedAt,
   };
 }
 
@@ -55,19 +57,26 @@ export const getWorkerQueueWakeState = query({
     assertWorkerWakeTokenOrThrow(args.botToken);
 
     const now = Date.now();
-    const [mirrorPending, rolePending] = await Promise.all([
-      ctx.db
-        .query("signalMirrorJobs")
-        .withIndex("by_status_runAfter", (q) => q.eq("status", "pending"))
-        .collect(),
-      ctx.db
-        .query("roleSyncJobs")
-        .withIndex("by_status_runAfter", (q) => q.eq("status", "pending"))
-        .collect(),
+    const [mirror, role] = await Promise.all([
+      summarizePendingJobsFromEarliest(
+        () =>
+          ctx.db
+            .query("signalMirrorJobs")
+            .withIndex("by_status_runAfter", (q) => q.eq("status", "pending"))
+            .order("asc")
+            .take(1),
+        now,
+      ),
+      summarizePendingJobsFromEarliest(
+        () =>
+          ctx.db
+            .query("roleSyncJobs")
+            .withIndex("by_status_runAfter", (q) => q.eq("status", "pending"))
+            .order("asc")
+            .take(1),
+        now,
+      ),
     ]);
-
-    const mirror = summarizePendingJobs(mirrorPending, now);
-    const role = summarizePendingJobs(rolePending, now);
 
     return {
       mirror,

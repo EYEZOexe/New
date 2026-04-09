@@ -17,11 +17,8 @@ crons.interval(
   {},
 );
 
-crons.interval(
-  "purge non-critical data (30d retention)",
-  { hours: 24 * 30 },
-  internal.retention.runThirtyDayRetention,
-  {},
-);
+// Temporarily disabled while self-hosted backend memory/query pressure is being
+// stabilized. Retention cleanup can be re-enabled once operator paths and claim
+// mutations are consistently staying under the isolate timeout budget.
 
 export default crons;

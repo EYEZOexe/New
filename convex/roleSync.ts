@@ -16,6 +16,47 @@ function assertBotTokenOrThrow(token: string) {
   }
 }
 
+const ROLE_SYNC_JOB_STATUSES = [
+  "pending",
+  "processing",
+  "completed",
+  "failed",
+] as const;
+
+function serializeRoleSyncJob(row: {
+  _id: string;
+  userId: string;
+  discordUserId: string;
+  guildId: string;
+  roleId: string;
+  action: "grant" | "revoke";
+  status: "pending" | "processing" | "completed" | "failed";
+  attemptCount: number;
+  maxAttempts: number;
+  runAfter: number;
+  source?: string;
+  lastError?: string;
+  updatedAt: number;
+  createdAt: number;
+}) {
+  return {
+    jobId: row._id,
+    userId: row.userId,
+    discordUserId: row.discordUserId,
+    guildId: row.guildId,
+    roleId: row.roleId,
+    action: row.action,
+    status: row.status,
+    attemptCount: row.attemptCount,
+    maxAttempts: row.maxAttempts,
+    runAfter: row.runAfter,
+    source: row.source ?? null,
+    lastError: row.lastError ?? null,
+    updatedAt: row.updatedAt,
+    createdAt: row.createdAt,
+  };
+}
+
 export const claimPendingRoleSyncJobs = mutation({
   args: {
     botToken: v.string(),
@@ -26,7 +67,7 @@ export const claimPendingRoleSyncJobs = mutation({
     assertBotTokenOrThrow(args.botToken);
 
     const now = Date.now();
-    const limit = Math.max(1, Math.min(20, args.limit ?? 5));
+    const limit = Math.max(1, Math.min(5, args.limit ?? 2));
     const workerId = args.workerId?.trim() || undefined;
 
     const pending = await ctx.db
@@ -204,43 +245,26 @@ export const listRoleSyncJobs = internalQuery({
     if (args.status) {
       const rows = await ctx.db
         .query("roleSyncJobs")
-        .withIndex("by_status_runAfter", (q) => q.eq("status", args.status!))
+        .withIndex("by_status_updatedAt", (q) => q.eq("status", args.status))
         .order("desc")
         .take(limit);
-      return rows.map((row) => ({
-        jobId: row._id,
-        userId: row.userId,
-        discordUserId: row.discordUserId,
-        guildId: row.guildId,
-        roleId: row.roleId,
-        action: row.action,
-        status: row.status,
-        attemptCount: row.attemptCount,
-        maxAttempts: row.maxAttempts,
-        runAfter: row.runAfter,
-        source: row.source ?? null,
-        lastError: row.lastError ?? null,
-        updatedAt: row.updatedAt,
-        createdAt: row.createdAt,
-      }));
+      return rows.map(serializeRoleSyncJob);
     }
 
-    const rows = await ctx.db.query("roleSyncJobs").order("desc").take(limit);
-    return rows.map((row) => ({
-      jobId: row._id,
-      userId: row.userId,
-      discordUserId: row.discordUserId,
-      guildId: row.guildId,
-      roleId: row.roleId,
-      action: row.action,
-      status: row.status,
-      attemptCount: row.attemptCount,
-      maxAttempts: row.maxAttempts,
-      runAfter: row.runAfter,
-      source: row.source ?? null,
-      lastError: row.lastError ?? null,
-      updatedAt: row.updatedAt,
-      createdAt: row.createdAt,
-    }));
+    const rowsByStatus = await Promise.all(
+      ROLE_SYNC_JOB_STATUSES.map((status) =>
+        ctx.db
+          .query("roleSyncJobs")
+          .withIndex("by_status_updatedAt", (q) => q.eq("status", status))
+          .order("desc")
+          .take(limit),
+      ),
+    );
+
+    return rowsByStatus
+      .flat()
+      .sort((left, right) => right.updatedAt - left.updatedAt)
+      .slice(0, limit)
+      .map(serializeRoleSyncJob);
   },
 });

@@ -429,6 +429,10 @@ export default function FilteringPage() {
           Rules are applied before the mirror bot posts. Allow-list entries override matching
           block-list entries.
         </p>
+        <p className="mt-2 text-xs text-slate-500">
+          URL rules support both hostnames and path/handle fragments. Examples: <code>x.com</code>,
+          <code>twitter.com</code>, <code>unityacademy</code>.
+        </p>
       </AdminSectionCard>
 
       <AdminSectionCard title="Filtering rules">
@@ -457,13 +461,13 @@ export default function FilteringPage() {
                 label="Blocked domains"
                 tags={draft.blockedDomains}
                 onChange={(tags) => setDraft((d) => ({ ...d, blockedDomains: tags }))}
-                placeholder="x.com, example.org"
+                placeholder="x.com, twitter.com, unityacademy"
               />
               <TagInput
                 label="Allowed domains"
                 tags={draft.allowedDomains}
                 onChange={(tags) => setDraft((d) => ({ ...d, allowedDomains: tags }))}
-                placeholder="trusted.example"
+                placeholder="trusted.example, x.com/allowedhandle"
               />
             </div>
 

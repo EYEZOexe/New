@@ -720,40 +720,47 @@ export const listUnresolvedImageSignals = internalQuery({
       .slice(0, limit);
 
     const sourceMessageIds = unresolved.map((row) => row.sourceMessageId);
-    const [mediaRows, jobRows] = await Promise.all([
-      ctx.db
-        .query("signalMirrorMedia")
-        .withIndex("by_tenant_connector_sourceMessageId", (q) =>
-          q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
-        )
-        .collect(),
-      ctx.db
-        .query("signalMirrorJobs")
-        .withIndex("by_tenant_connector", (q) =>
-          q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
-        )
-        .collect(),
+    const [mediaRowsBySource, jobsBySource] = await Promise.all([
+      Promise.all(
+        sourceMessageIds.map(async (sourceMessageId) => ({
+          sourceMessageId,
+          rows: await ctx.db
+            .query("signalMirrorMedia")
+            .withIndex("by_tenant_connector_sourceMessageId", (q) =>
+              q
+                .eq("tenantKey", args.tenantKey)
+                .eq("connectorId", args.connectorId)
+                .eq("sourceMessageId", sourceMessageId),
+            )
+            .collect(),
+        })),
+      ),
+      Promise.all(
+        sourceMessageIds.map(async (sourceMessageId) => ({
+          sourceMessageId,
+          rows: await ctx.db
+            .query("signalMirrorJobs")
+            .withIndex("by_tenant_connector_sourceMessageId", (q) =>
+              q
+                .eq("tenantKey", args.tenantKey)
+                .eq("connectorId", args.connectorId)
+                .eq("sourceMessageId", sourceMessageId),
+            )
+            .collect(),
+        })),
+      ),
     ]);
 
-    const mediaBySource = new Map<string, typeof mediaRows>();
-    for (const row of mediaRows) {
-      if (!sourceMessageIds.includes(row.sourceMessageId)) continue;
-      const current = mediaBySource.get(row.sourceMessageId) ?? [];
-      current.push(row);
-      mediaBySource.set(row.sourceMessageId, current);
-    }
-
-    const jobsBySource = new Map<string, typeof jobRows>();
-    for (const row of jobRows) {
-      if (!sourceMessageIds.includes(row.sourceMessageId)) continue;
-      const current = jobsBySource.get(row.sourceMessageId) ?? [];
-      current.push(row);
-      jobsBySource.set(row.sourceMessageId, current);
-    }
+    const mediaBySource = new Map(
+      mediaRowsBySource.map((entry) => [entry.sourceMessageId, entry.rows]),
+    );
+    const jobsBySourceMap = new Map(
+      jobsBySource.map((entry) => [entry.sourceMessageId, entry.rows]),
+    );
 
     return unresolved.map((row) => {
       const media = mediaBySource.get(row.sourceMessageId) ?? [];
-      const jobs = jobsBySource.get(row.sourceMessageId) ?? [];
+      const jobs = jobsBySourceMap.get(row.sourceMessageId) ?? [];
       return {
         ...row,
         mediaRows: media.map((mediaRow) => ({
@@ -913,14 +920,15 @@ export const requeueMirrorUpdateForSourceMessage = internalMutation({
       mediaRowsPatched += 1;
     }
 
-    const mirrorRows = (await ctx.db
+    const mirrorRows = await ctx.db
       .query("mirroredSignals")
-      .withIndex("by_tenant_connector", (q) =>
-        q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+      .withIndex("by_tenant_connector_sourceMessageId", (q) =>
+        q
+          .eq("tenantKey", args.tenantKey)
+          .eq("connectorId", args.connectorId)
+          .eq("sourceMessageId", args.sourceMessageId),
       )
-      .collect()).filter(
-      (row) => row.sourceMessageId === args.sourceMessageId,
-    );
+      .collect();
     const targets = mirrorRows.map((row) => ({
       targetChannelId: row.targetChannelId,
       targetGuildId: row.mirroredGuildId ?? undefined,

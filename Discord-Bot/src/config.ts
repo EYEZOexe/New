@@ -63,13 +63,13 @@ export function loadBotConfig(): BotConfig {
       process.env.DISCORD_BOT_WORKER_ID?.trim() || `discord-worker-${process.pid}`,
     queueWakeFallbackMinMs,
     queueWakeFallbackMaxMs,
-    roleSyncClaimLimit: parseIntEnv("ROLE_SYNC_CLAIM_LIMIT", 5, {
+    roleSyncClaimLimit: parseIntEnv("ROLE_SYNC_CLAIM_LIMIT", 2, {
       min: 1,
-      max: 20,
+      max: 5,
     }),
-    mirrorClaimLimit: parseIntEnv("MIRROR_CLAIM_LIMIT", 10, {
+    mirrorClaimLimit: parseIntEnv("MIRROR_CLAIM_LIMIT", 2, {
       min: 1,
-      max: 20,
+      max: 5,
     }),
     mirrorFastPollMs: parseIntEnv("MIRROR_FAST_POLL_MS", 100, {
       min: 25,

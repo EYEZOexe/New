@@ -241,9 +241,13 @@ async function hasPriorProcessedFreeTrialEventForUser(
 ): Promise<boolean> {
   const processedEvents = await ctx.db
     .query("webhookEvents")
-    .withIndex("by_provider_status", (q) =>
-      q.eq("provider", args.provider).eq("status", "processed"),
+    .withIndex("by_provider_status_resolvedUserId_receivedAt", (q) =>
+      q
+        .eq("provider", args.provider)
+        .eq("status", "processed")
+        .eq("resolvedUserId", args.userId),
     )
+    .order("desc")
     .collect();
 
   return processedEvents.some((row) => {
@@ -320,7 +324,9 @@ async function getWebhookEventByKey(
 ): Promise<Doc<"webhookEvents"> | null> {
   return await ctx.db
     .query("webhookEvents")
-    .withIndex("by_provider_eventId", (q) => q.eq("provider", provider).eq("eventId", eventId))
+    .withIndex("by_provider_eventId", (q) =>
+      q.eq("provider", provider).eq("eventId", eventId),
+    )
     .first();
 }
 
@@ -330,6 +336,22 @@ async function findUserByEmail(
 ): Promise<{ id: Id<"users">; email: string } | null> {
   const normalized = normalizeEmail(email);
   if (!normalized) return null;
+
+  const passwordAccount = await ctx.db
+    .query("authAccounts")
+    .withIndex("providerAndAccountId", (q) =>
+      q.eq("provider", PASSWORD_PROVIDER).eq("providerAccountId", normalized),
+    )
+    .first();
+  if (passwordAccount) {
+    const user = await ctx.db.get(passwordAccount.userId);
+    if (user) {
+      return {
+        id: user._id,
+        email: normalized,
+      };
+    }
+  }
 
   const users = await ctx.db.query("users").collect();
   for (const user of users) {
@@ -348,28 +370,26 @@ async function findPaymentCustomerByExternalSubscriptionId(
   ctx: MutationCtx,
   externalSubscriptionId: string,
 ): Promise<Doc<"paymentCustomers"> | null> {
-  const rows = await ctx.db.query("paymentCustomers").collect();
-  return (
-    rows.find(
-      (row) =>
-        row.provider === PROVIDER &&
-        row.externalSubscriptionId === externalSubscriptionId,
-    ) ?? null
-  );
+  return await ctx.db
+    .query("paymentCustomers")
+    .withIndex("by_provider_externalSubscriptionId", (q) =>
+      q
+        .eq("provider", PROVIDER)
+        .eq("externalSubscriptionId", externalSubscriptionId),
+    )
+    .first();
 }
 
 async function findPaymentCustomerByExternalCustomerId(
   ctx: MutationCtx,
   externalCustomerId: string,
 ): Promise<Doc<"paymentCustomers"> | null> {
-  const rows = await ctx.db.query("paymentCustomers").collect();
-  return (
-    rows.find(
-      (row) =>
-        row.provider === PROVIDER &&
-        row.externalCustomerId === externalCustomerId,
-    ) ?? null
-  );
+  return await ctx.db
+    .query("paymentCustomers")
+    .withIndex("by_provider_externalCustomerId", (q) =>
+      q.eq("provider", PROVIDER).eq("externalCustomerId", externalCustomerId),
+    )
+    .first();
 }
 
 async function resolveUserFromPaymentTracking(
@@ -453,11 +473,12 @@ async function upsertPaymentCustomerTracking(
   }
 
   if (!existing) {
-    const byUserRows = await ctx.db.query("paymentCustomers").collect();
-    existing =
-      byUserRows.find(
-        (row) => row.provider === PROVIDER && row.userId === args.userId,
-      ) ?? null;
+    existing = await ctx.db
+      .query("paymentCustomers")
+      .withIndex("by_provider_userId", (q) =>
+        q.eq("provider", PROVIDER).eq("userId", args.userId),
+      )
+      .first();
   }
 
   const next = {
@@ -1037,13 +1058,16 @@ export const adminUpdatePaymentCustomerEmail = mutation({
         throw new Error("email_invalid");
       }
 
-      const users = await ctx.db.query("users").collect();
-      const existingUser = users.find(
-        (row) =>
-          normalizeEmail(typeof row.email === "string" ? row.email : null) === normalizedEmail &&
-          row._id !== args.userId,
-      );
-      if (existingUser) {
+      const conflictingPasswordAccount = await ctx.db
+        .query("authAccounts")
+        .withIndex("providerAndAccountId", (q) =>
+          q.eq("provider", PASSWORD_PROVIDER).eq("providerAccountId", normalizedEmail),
+        )
+        .first();
+      if (
+        conflictingPasswordAccount &&
+        conflictingPasswordAccount.userId !== args.userId
+      ) {
         throw new Error("email_in_use");
       }
 
@@ -1054,20 +1078,28 @@ export const adminUpdatePaymentCustomerEmail = mutation({
         )
         .first();
       if (passwordAccount) {
-        const allPasswordAccounts = await ctx.db.query("authAccounts").collect();
-        const conflictingAccount = allPasswordAccounts.find(
-          (account) =>
-            account.provider === PASSWORD_PROVIDER &&
-            normalizeEmail(account.providerAccountId) === normalizedEmail &&
-            account._id !== passwordAccount._id,
-        );
-        if (conflictingAccount) {
+        if (
+          conflictingPasswordAccount &&
+          conflictingPasswordAccount._id !== passwordAccount._id
+        ) {
           throw new Error("email_in_use");
         }
 
         await ctx.db.patch(passwordAccount._id, {
           providerAccountId: normalizedEmail,
         });
+      }
+
+      if (!conflictingPasswordAccount) {
+        const users = await ctx.db.query("users").collect();
+        const existingUser = users.find(
+          (row) =>
+            normalizeEmail(typeof row.email === "string" ? row.email : null) === normalizedEmail &&
+            row._id !== args.userId,
+        );
+        if (existingUser) {
+          throw new Error("email_in_use");
+        }
       }
 
       await ctx.db.patch(args.userId, {
@@ -1392,4 +1424,3 @@ export const listPaymentCustomers = query({
     return result;
   },
 });
-

@@ -9,7 +9,8 @@ Create `.env.local` from `.env.example` and set:
 NEXT_PUBLIC_CONVEX_URL=https://convex-backend.g3netic.com
 CONVEX_SELF_HOSTED_URL=https://convex-backend.g3netic.com
 CONVEX_SELF_HOSTED_ADMIN_KEY=__SET_ME__
-# Convex Auth/OIDC origin for self-hosted HTTP actions (note the /http prefix)
+# Convex Auth/OIDC public origin for self-hosted HTTP actions (note the /http prefix)
+# If Cloudflare Tunnel fronts an internal HTTP origin, keep the public URL HTTPS here.
 CONVEX_SITE_URL=https://convex-backend.g3netic.com/http
 NEXT_PUBLIC_CONVEX_SITE_URL=https://convex-backend.g3netic.com/http
 # Public website/dashboard origin for OAuth callback construction fallback
@@ -41,6 +42,7 @@ Domain mapping in this project:
 - `https://convex-backend.g3netic.com` = Convex Cloud/backend origin
 - `https://convex-backend.g3netic.com/http` = Convex Auth/OIDC HTTP routes
 - `https://convex.g3netic.com` = Convex dashboard UI
+- internal tunnel target can still be plain HTTP, for example `http://10.10.20.114:80`
 
 Webhook endpoints (Convex HTTP actions):
 - `POST /webhooks/sellapp` (Sell.app delivery + idempotent processing)
@@ -100,8 +102,9 @@ Expected `issuer`:
 - `https://convex-backend.g3netic.com/http`
 
 If issuer is wrong, fix your self-hosted Convex service-level site origin so the
-built-in `CONVEX_SITE_URL` resolves to backend `/http`, then redeploy/restart
-the Convex backend service.
+built-in `CONVEX_SITE_URL` resolves to the public HTTPS backend `/http` URL,
+then redeploy/restart the Convex backend service. With Cloudflare Tunnel, the
+origin service may remain HTTP internally while the public issuer stays HTTPS.
 
 After updating env vars, verify auth endpoints:
 

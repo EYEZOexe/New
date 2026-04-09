@@ -6,7 +6,7 @@ import { internalMutation } from "./_generated/server";
 import { shouldDeleteMirroredSignalRow } from "./retentionPolicy";
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-const RETENTION_BATCH_LIMIT = 120;
+const RETENTION_BATCH_LIMIT = 30;
 const CONTINUATION_DELAY_MS = 1_000;
 
 type RetentionSummary = {

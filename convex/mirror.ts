@@ -10,7 +10,6 @@ import { enqueueMirrorJobsForSignal, getMirrorBotTokenFromEnv, nextMirrorRetryAt
 import { evaluateSeatGate } from "./seatEnforcement";
 
 const SEAT_GATE_REQUEUE_MS = 15_000;
-const PROCESSING_RECLAIM_AFTER_MS = 5 * 60_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const hydrateSignalMediaForMessageRef = makeFunctionReference<
   "action",
@@ -156,34 +155,8 @@ export const claimPendingSignalMirrorJobs = mutation({
     assertBotTokenOrThrow(args.botToken);
 
     const now = Date.now();
-    const limit = Math.max(1, Math.min(20, args.limit ?? 5));
+    const limit = Math.max(1, Math.min(5, args.limit ?? 2));
     const workerId = args.workerId?.trim() || undefined;
-
-    // Reclaim jobs stuck in "processing" (e.g., bot crash, or UPDATE jobs
-    // that were set to processing then delayed but never moved back to pending).
-    const processingJobs = await ctx.db
-      .query("signalMirrorJobs")
-      .withIndex("by_status_runAfter", (q) => q.eq("status", "processing").lte("runAfter", now))
-      .take(50);
-    let reclaimed = 0;
-    for (const job of processingJobs) {
-      const claimedAt = job.claimedAt ?? 0;
-      if (claimedAt <= 0) continue;
-      if (now - claimedAt < PROCESSING_RECLAIM_AFTER_MS) continue;
-      await ctx.db.patch(job._id, {
-        status: "pending",
-        runAfter: now,
-        updatedAt: now,
-        claimToken: undefined,
-        claimWorkerId: undefined,
-        claimedAt: undefined,
-        lastError: "processing_reclaimed_after_timeout",
-      });
-      reclaimed += 1;
-    }
-    if (reclaimed > 0) {
-      console.warn(`[mirror] reclaimed_stale_processing_jobs=${reclaimed}`);
-    }
 
     const pending = await ctx.db
       .query("signalMirrorJobs")
@@ -717,20 +690,21 @@ export const getSignalMirrorLatencyStats = query({
     const cutoff = Date.now() - windowMinutes * 60_000;
     const rows = await ctx.db
       .query("signalMirrorJobs")
-      .withIndex("by_tenant_connector", (q) =>
-        q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+      .withIndex("by_tenant_connector_status_updatedAt", (q) =>
+        q
+          .eq("tenantKey", args.tenantKey)
+          .eq("connectorId", args.connectorId)
+          .eq("status", "completed")
+          .gte("updatedAt", cutoff),
       )
       .order("desc")
-      .take(2000);
+      .take(500);
 
     const createLatencies: number[] = [];
     const updateLatencies: number[] = [];
     const deleteLatencies: number[] = [];
 
     for (const row of rows) {
-      if (row.status !== "completed") continue;
-      if (row.updatedAt < cutoff) continue;
-
       const baseEventAt =
         row.eventType === "delete" && typeof row.sourceDeletedAt === "number"
           ? row.sourceDeletedAt
@@ -1093,32 +1067,68 @@ export const getSignalMirrorQueueStats = query({
     connectorId: v.string(),
   },
   handler: async (ctx, args) => {
-    const jobs = await ctx.db
-      .query("signalMirrorJobs")
-      .withIndex("by_tenant_connector", (q) =>
-        q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
-      )
-      .collect();
-
     const now = Date.now();
-    let pending = 0;
-    let pendingReady = 0;
-    let processing = 0;
-    let completed = 0;
-    let failed = 0;
+    const STATUS_SAMPLE_LIMIT = 250;
+    const [pendingReadyRows, pendingRows, processingRows, completedRows, failedRows] =
+      await Promise.all([
+        ctx.db
+          .query("signalMirrorJobs")
+          .withIndex("by_tenant_connector_status_runAfter", (q) =>
+            q
+              .eq("tenantKey", args.tenantKey)
+              .eq("connectorId", args.connectorId)
+              .eq("status", "pending")
+              .lte("runAfter", now),
+          )
+          .take(STATUS_SAMPLE_LIMIT),
+        ctx.db
+          .query("signalMirrorJobs")
+          .withIndex("by_tenant_connector_status_updatedAt", (q) =>
+            q
+              .eq("tenantKey", args.tenantKey)
+              .eq("connectorId", args.connectorId)
+              .eq("status", "pending"),
+          )
+          .order("desc")
+          .take(STATUS_SAMPLE_LIMIT),
+        ctx.db
+          .query("signalMirrorJobs")
+          .withIndex("by_tenant_connector_status_updatedAt", (q) =>
+            q
+              .eq("tenantKey", args.tenantKey)
+              .eq("connectorId", args.connectorId)
+              .eq("status", "processing"),
+          )
+          .order("desc")
+          .take(STATUS_SAMPLE_LIMIT),
+        ctx.db
+          .query("signalMirrorJobs")
+          .withIndex("by_tenant_connector_status_updatedAt", (q) =>
+            q
+              .eq("tenantKey", args.tenantKey)
+              .eq("connectorId", args.connectorId)
+              .eq("status", "completed"),
+          )
+          .order("desc")
+          .take(STATUS_SAMPLE_LIMIT),
+        ctx.db
+          .query("signalMirrorJobs")
+          .withIndex("by_tenant_connector_status_updatedAt", (q) =>
+            q
+              .eq("tenantKey", args.tenantKey)
+              .eq("connectorId", args.connectorId)
+              .eq("status", "failed"),
+          )
+          .order("desc")
+          .take(STATUS_SAMPLE_LIMIT),
+      ]);
 
-    for (const job of jobs) {
-      if (job.status === "pending") {
-        pending += 1;
-        if (job.runAfter <= now) pendingReady += 1;
-      } else if (job.status === "processing") {
-        processing += 1;
-      } else if (job.status === "completed") {
-        completed += 1;
-      } else if (job.status === "failed") {
-        failed += 1;
-      }
-    }
+    const pending = pendingRows.length;
+    const pendingReady = pendingReadyRows.length;
+    const processing = processingRows.length;
+    const completed = completedRows.length;
+    const failed = failedRows.length;
+    const total = pending + processing + completed + failed;
 
     return {
       pending,
@@ -1126,7 +1136,7 @@ export const getSignalMirrorQueueStats = query({
       processing,
       completed,
       failed,
-      total: jobs.length,
+      total,
       updatedAt: now,
     };
   },
@@ -1150,32 +1160,45 @@ export const listSignalMirrorJobs = query({
     const limit = Math.max(1, Math.min(200, args.limit ?? 50));
 
     // Fetch recent jobs (newest first) — broad scan so we catch non-failed jobs.
-    const recentRows = await ctx.db
-      .query("signalMirrorJobs")
-      .withIndex("by_tenant_connector", (q) =>
-        q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
-      )
-      .order("desc")
-      .take(limit * 4);
+    const recentRows = args.status
+      ? await ctx.db
+          .query("signalMirrorJobs")
+          .withIndex("by_tenant_connector_status_updatedAt", (q) =>
+            q
+              .eq("tenantKey", args.tenantKey)
+              .eq("connectorId", args.connectorId)
+              .eq("status", args.status),
+          )
+          .order("desc")
+          .take(limit)
+      : await ctx.db
+          .query("signalMirrorJobs")
+          .withIndex("by_tenant_connector_updatedAt", (q) =>
+            q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+          )
+          .order("desc")
+          .take(limit * 2);
 
     // Always surface ALL failed jobs for this connector regardless of age.
     // Failed jobs are typically few; cap at 200 to avoid runaway scans.
-    const recentIds = new Set(recentRows.map((r) => r._id));
     const failedRows = args.status && args.status !== "failed"
       ? [] // status filter explicitly excludes failed — skip
       : await ctx.db
           .query("signalMirrorJobs")
-          .withIndex("by_tenant_connector", (q) =>
-            q.eq("tenantKey", args.tenantKey).eq("connectorId", args.connectorId),
+          .withIndex("by_tenant_connector_status_updatedAt", (q) =>
+            q
+              .eq("tenantKey", args.tenantKey)
+              .eq("connectorId", args.connectorId)
+              .eq("status", "failed"),
           )
-          .filter((q) => q.eq(q.field("status"), "failed"))
           .order("desc")
-          .take(200);
+          .take(limit);
 
     // Merge: failed jobs first (pinned), then recent rows not already included.
+    const failedIds = new Set(failedRows.map((row) => row._id));
     const mergedRows = [
       ...failedRows,
-      ...recentRows.filter((r) => !failedRows.some((f) => f._id === r._id)),
+      ...recentRows.filter((row) => !failedIds.has(row._id)),
     ];
 
     const filtered = mergedRows

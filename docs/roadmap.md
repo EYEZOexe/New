@@ -1,475 +1,371 @@
-# Roadmap
+# Product Roadmap
 
-Living plan for delivering G3netic Crypto Signals SaaS (web dashboard + customer Discord mirroring + Convex backend).
+Living roadmap for rebuilding G3n S1gnals around the current stack: Next.js, Convex, Clerk, and Stripe.
 
-## Scope / North Star
+This replaces the older roadmap that was tied to a different structure. The product direction is still the same: ingest trading signals, normalize them, sell access cleanly, and deliver a reliable multi-user SaaS experience. What changes here is the implementation strategy: simpler boundaries, fewer duplicated concerns, stronger reliability defaults, and a backend model that is safe under concurrency.
 
-Capture "signals" from a source Discord guild and deliver them to paying customers via:
+## North Star
 
-- a web dashboard feed (`apps/web`)
-- a customer Discord guild where a bot mirrors messages (`apps/bot`)
+Build a signal platform that can safely handle:
 
-Backend is Convex.
+- many concurrent users reading live and historical signals
+- many concurrent writes from signal ingestion and billing events
+- deterministic access control across auth, billing, and entitlements
+- replayable and observable workflows for failures, retries, and drift recovery
+
+## Core Principles
+
+- `SOLID`: each module owns one business capability and exposes a narrow API
+- `DRY`: shared policies, validators, and mapping logic live in one place
+- idempotency by default for webhooks, ingestion, and job processing
+- append-only or immutable event history where auditability matters
+- bounded reads and writes; no unbounded scans on hot paths
+- explicit ownership boundaries between auth, billing, entitlements, signals, and delivery
+- eventual consistency for side effects, strong consistency for entitlement decisions
+- favor queue/outbox workflows over inline third-party side effects
+
+## Stack Decisions
 
 ## Current Status
 
-**Now**
-- Closed relay history-gap that could recreate fresh Discord mirror posts for old source messages after retention purged the source->mirror pointer row: active `mirroredSignals` links are now retained past the 30-day cleanup window unless the mirrored message was actually deleted, and Discord-Bot now refuses to turn an `update` without `existingMirroredMessageId` into a new post (`[mirror] skipped update without existing mirror pointer ...`). This addresses the incident where historical source message `1248605194116272249` (2024-era snowflake) later produced a new mirrored Discord message `1484689408144838770` on 2026-03-20 after the linkage had aged out. Added regression coverage in `website/tests/retentionPolicy.test.js` and `Discord-Bot/tests/discordSignalMirrorManager.test.ts`. Verified with `bun test website/tests/retentionPolicy.test.js`, `bun test tests/discordSignalMirrorManager.test.ts` (`Discord-Bot`), and `bun run typecheck` (`website`, `Discord-Bot`). (2026-03-25)
-- Investigated live embed-image miss on `mirroredMessageId=1479848203733176537` (`sourceMessageId=1479848198934761584`) and confirmed image ingest/hydration succeeded (`signal.attachmentCount=1`, `signalMirrorMedia.status=ready`) but mirror delivery used `http://` Convex storage URLs, which caused Discord render drop despite successful update jobs. Added protocol normalization for mirror delivery URLs (`http` -> `https` for non-local hosts) in Convex media URL resolution and Discord-Bot payload building, broadened pending-image fallback checks to include synthetic embed attachment IDs (`embed:*`), and added operational mutation `mirrorMedia:requeueMirrorUpdateForSourceMessage` to patch legacy stored URLs to HTTPS and requeue update jobs for affected messages. Executed requeue for source `1479848198934761584` (`enqueued=1`, `mediaRowsPatched=1`, `signalMirrorUrlChanged=true`) and verified latest update job completed with HTTPS mirror URL persisted in `signals` and `signalMirrorMedia`. Verified with `bun run typecheck` (`website`, `Discord-Bot`), `bun test tests/discordSignalMirrorManager.test.ts` (`Discord-Bot`), `bun test website/tests/ingestUtils.test.js`, and `bunx convex dev --once --env-file .env.example` (`website`). (2026-03-07)
-- Fixed remaining embed-image mirror misses for weak URL metadata: Convex ingest now treats embed `image`/`thumbnail` slots as hydration candidates even when URL path/query lacks image hints (also accepts `proxyURL` casing), and hydration scheduling/diagnostics now treat synthetic embed attachment IDs (`embed:*`) as hydratable image refs instead of filtering them out via strict URL heuristics. This prevents embed charts/previews from being skipped before media fetch/signature validation. Added regression coverage in `website/tests/ingestUtils.test.js` (`extracts embed image URLs from image/thumbnail slots even without extension hints`) plus backend observability continuity via existing ingest/hydration logs. Verified with `bun test website/tests/ingestUtils.test.js`, `bun run typecheck` (`website`), `bun run typecheck` (`Discord-Bot`), and `bunx convex dev --once --env-file .env.example` (`website`). (2026-03-05)
-- Added operator-controlled mirror content filtering in admin with a new sidebar category/route (`/filtering`) for per-mapping allow/block rules on URL domains and keywords. Convex mirror claim processing now applies these rules before bot posting and removes only matching fragments (not the full message), with backend logs for removed URL/keyword counts and frontend save/load logs. Generic-link blanket stripping was removed from Discord-Bot so mapping filters drive URL behavior explicitly. Verified with `bun test website/tests/messageFiltering.test.js`, `bun test tests/discordSignalMirrorManager.test.ts` (`Discord-Bot`), `bun test tests/adminRoutes.test.ts` (`admin`), `bun run typecheck` (`website`, `admin`, `Discord-Bot`), and `bun run build` (`website`, `admin`, `Discord-Bot`). (2026-03-04)
-- Fixed embed-text mirroring gaps for content-empty source messages: plugin embed normalization now prefers serialized embed payloads (`toJSON()` / `data`) before fallback object entries so embed metadata is not dropped, Convex ingest now synthesizes signal content from embed text (`title`, `description`, `author.name`, `fields`, `footer.text`) when `content_clean` is empty, and backend/frontend observability logs were added for this path (`[ingest] synthesized signal content from embeds ...`, `[ChannelScraper] Captured embed payload for content-empty message ...`). Added regression coverage in `website/tests/ingestUtils.test.js` for embed-text fallback and content-preference behavior. Verified with `bun test website/tests/ingestUtils.test.js`, `bun run typecheck` (`website`), and `bun run typecheck` (`Discord-Bot`). (2026-03-04)
-- Hardened website trial abuse controls and pricing visibility: Sell webhook ingestion now captures hashed client IP (`clientIpHash`), payment processing now enforces one-time free-trial grants using durable Convex `trialLocks` fingerprints (`user`, `email`, `customer`, `ip_hash`) and blocks repeat zero-total trial events with explicit backend outcome logs (`[payments] blocked repeat trial ...` / `[payments] trial lock persisted ...`), `/shop` now redirects unauthenticated visitors to `/login?redirectTo=/shop` with frontend redirect logging (`[shop] blocked anonymous pricing access ...`), and the pricing catalog now hides free-trial variants when `viewer.hasConsumedTrial=true` (with frontend visibility logs). Verified with `bunx convex dev --once --env-file .env.example`, `bun test tests/paymentsUtils.test.js`, `bun run typecheck`, and `bun run build` (`website`). (2026-03-04)
-- Fixed Convex media hydration false negatives caused by unreliable upstream `content-type` headers: `mirrorMedia:hydrateSignalMediaForMessage` now resolves image MIME using byte-signature sniffing (JPEG/PNG/GIF/WebP/BMP/TIFF/AVIF/HEIC + SVG probe), falls back to trusted `image/*` headers, and only uses URL extension inference for unknown binary response types. This prevents valid image bytes from being dropped as `non_image_content` while still blocking obvious HTML/text responses. Validated against incident `mirroredMessageId=1478324387416637612` (`sourceMessageId=1478324382169567242`): media row transitioned from `failed/non_image_content` to `ready`, `storageId` + `mirrorUrl` persisted, and mirror `update` job completed (`mirrorAttachmentCount=1`). Verified with `bun run typecheck` (`website`, `Discord-Bot`), `bunx convex dev --once --env-file .env.example` (`website`), and targeted `mirrorMedia:hydrateSignalMediaForMessage` retry + debug queries. (2026-03-03)
-- Added targeted mirrored-message debug lookup in Convex (`mirrorMedia:debugMirroredMessageState`) to trace a Discord mirrored message ID back to source signal/hydration state. Used it to investigate incident IDs `1478073164981469229` and `1477033370549751819`: both mapped to source signals with `attachmentCount=0` (no image refs ingested), so hydration had no candidates and no image could be mirrored. Triggered immediate unresolved-image recovery pass via `mirrorMedia:backfillUnresolvedImageHydration` (`scheduled=200`) for rows that do have unresolved attachment refs. Verified with `bunx convex dev --once --env-file .env.example`, `bunx convex run mirrorMedia:debugMirroredMessageState ...`, and `bun run typecheck` (`website`). (2026-03-02)
-- Fixed mirror image-drop path for embed-based charts/previews (for example TradingView cards) and query-string image URLs: plugin message ingest now forwards real embed payloads (instead of always `embeds: []`), sparse `MESSAGE_UPDATE` events with embeds are no longer skipped, Convex ingest now synthesizes image attachment refs from embed media (`raw_json.image/thumbnail/video`) and dedupes against native attachments, and image detection was hardened across ingest/hydration/mirror to recognize image URLs by pathname/query format parameters (not only strict suffix checks). Verified with `bun test tests/ingestUtils.test.js` + `bun run typecheck` (`website`) and `bun test tests/discordSignalMirrorManager.test.ts` + `bun run typecheck` (`Discord-Bot`). (2026-03-02)
-- Prevented `(empty signal)` mirror noise in Discord: `DiscordSignalMirrorManager.executeJob` now short-circuits create/update jobs when the sanitized signal body is empty (for example after link/role filtering), logs the skip outcome (`[mirror] skipped empty signal body ...`), and returns success without posting a placeholder embed. Also hardened channel cache access to tolerate clients/mocks without `channels.cache` so mirror execution remains stable. Verified with `bun test tests/discordSignalMirrorManager.test.ts` and `bun run typecheck` (`Discord-Bot`). (2026-03-02)
-- Updated non-critical data retention window from 14 days to 30 days: renamed retention mutation to `retention:runThirtyDayRetention`, adjusted cutoff to `30 * 24h`, and updated cron cadence to run strictly every 30 days (`24 * 30` hours) while preserving the same purge scope/batch continuation behavior. Verified with `bun run typecheck` and `bunx convex dev --once --env-file .env.example` (`website`). (2026-03-02)
-- Added a second no-media-row self-heal path at mirror completion time: `mirror:completeSignalMirrorJob` now schedules `mirrorMedia:hydrateSignalMediaForMessage` when a successful non-delete job still has unresolved image attachments and no `signalMirrorMedia` rows exist for that source message. This closes the gap where create jobs could complete with placeholder embed text but no hydration task ever recorded. Validated against live incident `mirroredMessageId=1477983996150550591` (`sourceMessageId=1477983993646415923`) by running targeted backfill and confirming `signalMirrorMedia.status=ready`, `signal.attachments[].mirrorUrl` persisted, and mirror `update` job completed (`mirrorAttachmentCount=1`). Verified with `bun run typecheck` and `bunx convex dev --once --env-file .env.example` (`website`). (2026-03-02)
-- Added mirror-claim hydration self-heal fallback to eliminate remaining no-media-row misses: during `mirror:claimPendingSignalMirrorJobs`, if a non-delete job still has pending image attachments and no `signalMirrorMedia` rows exist yet for that source message, Convex now schedules `mirrorMedia:hydrateSignalMediaForMessage` immediately and logs `[mirror] scheduled hydration fallback ...`. Also validated/unstuck live incident `mirroredMessageId=1477982545244323870` (`sourceMessageId=1477982543092646040`) by backfilling hydration, which produced `signalMirrorMedia.status=ready`, populated `signal.attachments[].mirrorUrl`, and completed mirror `update` job with `mirrorAttachmentCount=1`. Verified with `bun run typecheck` and `bunx convex dev --once --env-file .env.example` (`website`). (2026-03-02)
-- Hardened Convex image-hydration reliability to prevent permanent "pending Convex sync" states when files already exist in Storage: `mirrorMedia:hydrateSignalMediaForMessage` now re-processes image attachments that have `storageId` but missing `mirrorUrl`, resolves URLs directly from Convex storage with short retries, and emits explicit storage-recovery counters in hydration logs (`storage_recovery_candidates`, `storage_recovery_hydrated`). Also restored ingest scheduler fallback by removing forced `scheduleMediaHydration: false` from `/ingest/message-batch` mutation calls so missed inline hydrations self-heal. Ran `mirrorMedia:backfillUnresolvedImageHydration` for `t1/conn_01` and verified current unresolved image rows are legacy `http_404` Discord CDN expirations (no `storageId`/`mirrorUrl` mismatch rows in unresolved set). Verified with `bun run typecheck` and `bunx convex dev --once --env-file .env.example` (`website`). (2026-03-02)
-- Refined admin `/mappings/[tenant]/[connector]` seat-config UX after operator feedback: the table now shows only saved seat configs as editable/deletable rows (so deleting a config removes its row immediately), while snapshot-only/unconfigured guild rows moved to a separate read-only diagnostics section to avoid misleading `Delete` behavior. Verified with `bun run typecheck` (`admin`). (2026-03-02)
-- Added inline seat-config management in admin `/mappings/[tenant]/[connector]`: the seat enforcement table now supports per-guild `Edit/Save/Delete` for seat limit + enforcement directly in-place (including unknown guild IDs surfaced by snapshots), and logs frontend outcomes for save/remove success and failures (`[admin/connectors] seat config ...`). Verified with `bun run typecheck` (`admin`). (2026-03-02)
-- Optimized Discord-Bot mirror execution path after live latency profiling: removed extra Discord REST round trips by using `channel.messages.edit(messageId, ...)` and `channel.messages.delete(messageId)` directly (instead of fetch-then-edit/delete), added per-job bot timing logs (`channel_fetch_ms`, `upsert_ms`, `cleanup_ms`, `extra_image_send_ms`, `total_ms`) to isolate Discord-side latency from Convex queue timing, and introduced optional fast mirror polling (`MIRROR_FAST_POLL_MS`, default `100ms`) to reduce queue-claim lag when realtime wake updates are delayed. Also suppresses retried delete noise for `Unknown Message` races by treating missing messages as successful delete outcomes. Verified with `bun run typecheck` (`Discord-Bot`). (2026-03-02)
-- Tightened mirror image-update latency after live timing review: added `signalMirrorJobs.by_tenant_connector_sourceMessageId` index and switched hydration-apply job patching to source-message scoped queries (no tenant-wide job scan), parallelized Convex media hydration per message (`HYDRATION_CONCURRENCY=3`), and removed the “existing mirror required” update-enqueue gate so hydration updates are always queued. Added claim-side guard in `mirror:claimPendingSignalMirrorJobs` to defer `update` jobs (`waiting_for_create`) while matching `create` is still pending/processing, preventing duplicate sends while preserving eventual image edit updates. Also lowered Discord-Bot fallback wake defaults (`QUEUE_WAKE_FALLBACK_MIN_MS=25`, `QUEUE_WAKE_FALLBACK_MAX_MS=100`) to reduce queue pickup lag when realtime wake is degraded. Verified with `bun run typecheck` (`website`, `Discord-Bot`) and `bunx convex dev --once --env-file .env.example` (`website`). (2026-03-02)
-- Reduced Convex image mirror update latency and added bottleneck telemetry: `/ingest/message-batch` now triggers inline media hydration actions immediately (concurrency-limited) with scheduler fallback only on inline hydration failures, while `ingest:ingestMessageBatch` accepts `scheduleMediaHydration` to disable scheduled hydration on this hot path. Added stage timing logs across media hydration and mirror claims (`scheduler_delay_ms`, `fetch/blob/store/get_url` totals, `ingest_to_hydration_*`, mirror claim queue timing) to isolate delay sources and validate sub-1s image update targets. Verified with `bun run typecheck` and `bunx convex dev --once --env-file .env.example` (`website`). (2026-03-02)
-- Fixed Convex media hydration mirror follow-up for strict no-link image mode: after `mirrorMedia:applyHydratedSignalMedia` patches hydrated `mirrorUrl` attachments onto `signals`, it now immediately enqueues mirror `update` jobs for mapped targets (when forwarding is enabled) so already-posted messages are edited with Convex-hosted images instead of remaining in pending-sync text state. Added backend outcome logging for signal attachment change + mirror update enqueue/dedupe/skip counts. Verified with `bun run typecheck` and `bunx convex dev --once --env-file .env.example` (`website`). (2026-03-02)
-- Enforced strict Convex-only image mirroring with no Discord URL fallback: mirror output now sends images only when attachment `mirrorUrl` exists from Convex media hydration; if not yet hydrated, image slots are omitted and the embed shows a non-link pending-sync note. Added mirror normalization logs for pending Convex image counts and regression coverage in `Discord-Bot/tests/discordSignalMirrorManager.test.ts` (`omits image attachments that are not hydrated to Convex URLs`). Verified with `bun test tests/discordSignalMirrorManager.test.ts`, `bun run typecheck`, and `bun run build` (`Discord-Bot`). (2026-03-02)
-- Improved mirror filtering + image delivery for low-link output: mirror content now strips generic URLs and removes `Unity Academy` mentions, extra images are posted as embeds (not raw URL-only messages), and Convex now asynchronously hydrates image attachments into Storage (`signalMirrorMedia`, `mirrorMedia:*`) then patches pending mirror jobs/signals with `storageId` + `mirrorUrl` for storage-backed image delivery without blocking ingest/mirror hot paths. Added backend outcome logs for content stripping, attachment normalization, and media hydration/apply results; added regression coverage in `Discord-Bot/tests/discordSignalMirrorManager.test.ts`. Verified with `bun test tests/discordSignalMirrorManager.test.ts`, `bun run typecheck`, and `bun run build` (`Discord-Bot`), plus `bunx convex dev --once --env-file .env.example` and `bun run typecheck` (`website`). (2026-03-02)
-- Improved Sell checkout handoff polish in `website`: pricing-card CTA now uses native `target="_blank"` checkout launch and immediately routes the current tab to `/checkout/return` with launch metadata, while checkout return now supports Sell redirect query payloads (`order_id`, `customer_email`), shows launch-aware processing guidance, explicit popup-blocked messaging (without forcing same-tab portal replacement), login handoff when session is missing, status transition logs, and automatic success/failure redirects with countdown + manual override actions. Verified with `bun test tests/shopCheckoutUrl.test.js`, `bun run typecheck`, and `bun run build` (`website`). (2026-02-28)
-- Simplified admin `/shop/catalog` setup wizard to remove redundant product/mapping inputs: Step 1 now uses explicit `Use existing product` vs `Create new product` modes, Step 2 is a read-only policy summary, and Step 3 is the single editable source for tier/duration while policy mapping is auto-upserted on variant save. Added frontend outcome logging for the auto-mapping path (`[admin/shop-wizard] policy mapped from variant save ...`). Verified with `bun run typecheck` (`admin`). (2026-02-28)
-- Added shop/commercial observability + renewal nudging across admin/website: admin now has a new `/shop/statistics` category that aggregates Sell invoice data (`sellStats:getSellStatsOverview`) into manual-renewal-friendly KPIs (completed sales, estimated revenue, AOV, repeat renewals vs first-time purchases, pending/refunded counts, top products), and website dashboard now shows a 24-hour expiry reminder notification with resubscribe CTA when active access is about to end. Added backend/frontend outcome logs for stats load + renewal reminder trigger paths. Verified with `bun test tests/adminRoutes.test.ts tests/catalogUtils.test.ts` and `bun run typecheck` (`admin`), `bun run typecheck` (`website`), and `bunx convex dev --once --env-file .env.example` (`website`). (2026-02-28)
-- Fixed admin catalog/Sell price drift on variant edits: advanced `/shop/catalog` variant saves now sync product-policy variants back to Sell via `sellProducts:upsertSellProductVariant` before committing local catalog updates, so reverting prices (for example `€1` back to `€20`) updates the underlying Sell variant instead of only changing local display metadata. Added frontend outcome logs for sync success/skip/failure plus shared policy/price parsing helpers with regression coverage in `admin/tests/catalogUtils.test.ts`. Verified with `bun test tests/catalogUtils.test.ts` and `bun run typecheck` (`admin`). (2026-02-28)
-- Optimized mirror safety checks for no hot-path latency growth: Discord-Bot now uses a precomputed ownership cache (`knownGuildIds`, `knownRoleIds`, and per-guild role sets) for constant-time message-content validation, populated by periodic guild sync ticks and role event-triggered refreshes instead of per-message Discord role lookups. Added Convex bot-presence role persistence (`discordBotRoles`, `discordBotPresence:syncBotGuildRoles`) so known role ownership is stored/observable server-side, and bot runtime now logs role sync totals plus known ownership cache counts each guild sync cycle. Added cache-path regression coverage in `Discord-Bot/tests/discordSignalMirrorManager.test.ts` and verified with `bun test tests/discordSignalMirrorManager.test.ts`, `bun run typecheck`, and `bun run build` (`Discord-Bot`), plus `bunx convex dev --once --env-file .env.example` and `bun run typecheck` (`website`). (2026-02-27)
-- Adjusted foreign Discord reference handling to strip only invalid fragments while preserving mirror delivery: when mirrored content includes Discord event links or role tokens that do not belong to any guild the bot is currently in, Discord-Bot now removes just those fragments and still mirrors the remaining message text (instead of failing the whole job). Added backend outcome logs (`[mirror] stripped foreign references ...`) and regression coverage in `Discord-Bot/tests/discordSignalMirrorManager.test.ts`, verified with `bun test tests/discordSignalMirrorManager.test.ts`, `bun run typecheck`, and `bun run build` (`Discord-Bot`). (2026-02-27)
-- Completed notification UX pass for website feed visibility: dashboard notifications now raise a side popup and attempt a short audio cue whenever new/changed notification events arrive after initial hydration, and `Signals & Alerts` analyst filters now render from full tier-visible channel mapping scope (not only channels present in the latest signal sample), restoring expected total filter count (for example 12/12). Added frontend logs for popup trigger/tone fallback and analyst filter count diagnostics, and verified with `bun run typecheck` (`website`). (2026-02-27)
-- Shifted dashboard feed UX from raw signal cards to a realtime notifications stream and kept full signal reading in `Signals & Alerts`: dashboard now renders compact notification events (`new`, `updated`, `deleted`) with channel-name labels, timestamps, and attachment counts, while analyst feed filters/chips in `/workspace/signals` now use channel names instead of raw Discord IDs by resolving `sourceChannelName` in `signals:listRecent`. Added frontend/backend observability logs for the new notification/channel-name paths and verified with `bun run typecheck` (`website`, `admin`, `Discord-Bot`). (2026-02-27)
-- Added per-route Discord role ping support for mirrored posts: `/mappings/[tenant]/[connector]` advanced mapping options now include optional `Role ping ID`, persisted via mapping `transformJson.rolePingId`; mirror claim payloads now resolve and include that role ID, and Discord-Bot now sends the role mention outside the embed on newly posted mirrored messages in the mapped target channel (with role-existence validation logs). Added regression coverage in `Discord-Bot/tests/discordSignalMirrorManager.test.ts` and verified with `bun test tests/discordSignalMirrorManager.test.ts` + `bun run typecheck` (`Discord-Bot`, `website`, `admin`). (2026-02-27)
-- Added operator-facing Discord seat-limit alerting in the bot runtime: when seat enforcement detects over-limit usage for a target guild, the bot now posts a one-time embed warning to each mapped target channel explaining that mirroring is paused due to seat limit, and suppresses repeat alerts until the guild returns under limit (then rearms for future over-limit events). Added regression coverage in `Discord-Bot/tests/discordSeatAuditManager.test.ts` and verified with `bun test tests/discordSeatAuditManager.test.ts` + `bun run typecheck` (`Discord-Bot`). (2026-02-22)
-- Hardened seat-audit execution reliability after live `member_fetch_failed`/`Members didn't arrive in time` reports: Discord-Bot seat counting now uses paginated REST member listing (`guild.members.list`) instead of gateway chunk fetch to avoid chunk-timeout stalls, seat-audit completion paths now emit explicit completion outcome logs (`status/ignored/reason`) for each job, and Convex seat-audit claim flow now reclaims stale `processing` jobs after timeout so orphaned claims self-heal. Added/updated regression coverage in `Discord-Bot/tests/discordSeatAuditManager.test.ts` and verified with `bun test tests/discordSeatAuditManager.test.ts`, `bun run typecheck` (`Discord-Bot`, `website`, `admin`), and `bunx convex dev --once --env-file .env.example` (`website`). (2026-02-22)
-- Fixed mirror deadlock on stale seat snapshots causing repeated `seat_check_pending` pending jobs for otherwise under-limit servers: seat gate now allows mirroring when the latest snapshot is stale/expired but still under limit, while continuing to hard-block immediately on any over-limit snapshot (fresh or stale). Mirror claim flow now enqueues immediate seat-audit refresh when running on stale-under-limit state (`source=mirror_claim_stale_snapshot`) so snapshots recover without introducing send-path blocking. Added regression coverage updates in `website/tests/seatEnforcement.test.js` and verified with `bun test website/tests/seatEnforcement.test.js`, `bun run typecheck` (`website`, `admin`, `Discord-Bot`), and `bunx convex dev --once --env-file .env.example` (`website`). (2026-02-22)
-- Simplified `/mappings` setup flow and removed legacy source-target ambiguity from channel registration: Step 1 source registration is now explicitly source-only (no source/target role toggles), Step 3 route creation is now scoped to the Step 2 selected bot guild by default with advanced options collapsed, and channel registry rows now render a single role label (`source`, `target`, `source + target (legacy)`) to reduce operator confusion. Also fixed target-channel resolution across Convex so bot-side channel metadata is used when rendering guild route previews and when resolving seat-audit/mirror target guild context (`connectors:listMappingsForGuild`, `discordSeatAudit`, `mirror`) to prevent `Unknown (...)` target labels and missing seat counts when mappings reference bot channels. Verified with `bun run typecheck` (`admin`, `Discord-Bot`, `website`), `bun test tests` (`admin`), `bun test` (`Discord-Bot`), `bun run build` (`admin` with `NEXT_PUBLIC_CONVEX_URL`, `Discord-Bot`, `website`), and `bunx convex dev --once --env-file .env.example` (`website`). (2026-02-22)
-- Fixed bot-target discovery gap in `/mappings`: Discord-Bot now syncs text-capable channel catalogs per bot guild into Convex (`discordBotChannels` via `discordBotPresence:syncBotGuildChannels`), and admin mapping setup now uses those bot-side channels for target selection. Added a simplified 3-step setup wizard (`source channels -> target channels -> routes`) that keeps runtime-config compatibility by auto-registering selected target channels into `connectorSources` as `isTarget=true,isSource=false` before mapping save, so mirror/seat-gate logic continues to resolve target guild/channel context. Verified with `Discord-Bot`, `admin`, and `website` typecheck/build, `Discord-Bot` + `admin` tests, and `bunx convex dev --once --env-file .env.example`. (2026-02-22)
-- Refined `/mappings/[tenant]/[connector]` to explicitly separate source vs target responsibilities without changing runtime config semantics: channel registry and mapping forms now label plugin-ingest source channels vs bot-mirror target channels, mapping creation now supports independent source-guild and target-guild filters, and configured route rows show full source->target channel context. Improved layout by replacing cramped side-by-side scroll-heavy tables with full-width sections and removing internal fixed-height scroll containers for channel registry/mapping tables to reduce operator friction. Verified with `admin` typecheck/tests/build (`NEXT_PUBLIC_CONVEX_URL` set in shell). (2026-02-22)
-- Clarified source-vs-target Discord architecture directly in admin `/discord-bot`: added explicit domain split messaging (`Source domain: Vencord plugin discovery` vs `Target domain: Discord bot presence`), surfaced connector source-guild discovery counts beside bot-guild target context, and upgraded route preview rows to render source guild/channel (plugin) separately from target channel (bot) for each mapping. Extended `connectors:listMappingsForGuild` to return source/target guild metadata and names so admin routing context is unambiguous during server seat/role setup. Verified with `admin` + `website` typecheck, `admin` tests/build, and `bunx convex dev --once --env-file .env.example` in `website`. (2026-02-22)
-- Switched `/discord-bot` server selection to bot-presence truth instead of plugin discovery: added `discordBotGuilds` + `discordBotPresence:*` (bot-authenticated upsert/list), wired Discord-Bot periodic guild sync (`BOT_GUILD_SYNC_INTERVAL_MS`) so Convex tracks the exact servers the bot is currently in, and updated admin `/discord-bot` to read from that source for seat/role setup. Added visible signal-channel mapping context in `/discord-bot` for the selected guild (plus direct link to `/mappings/[tenant]/[connector]` to manage channels/mappings). Verified with `bun run typecheck` for `website`, `admin`, `Discord-Bot`; `bun test tests` in `admin`; `bun test` in `Discord-Bot`; builds for `website`, `admin`, `Discord-Bot`; and `bunx convex dev --once --env-file .env.example` in `website`. (2026-02-22)
-- Implemented Phase 7 core multi-server seat-enforcement runtime across Convex + Discord-Bot + admin: added server-scoped Discord config storage (`discordServerConfigs`) with seat limit/enforcement + tier role IDs, introduced seat snapshot/audit queue domains (`discordServerSeatSnapshots`, `discordSeatAuditJobs`) with retry-safe claim/complete lifecycle (`discordSeatAudit:*`), wired a dedicated bot seat-audit worker (`DiscordSeatAuditManager` + `ConvexSeatAuditClient`) on interval polling, and added mirror claim gating so over-limit/stale-seat states are blocked pre-send via snapshot checks (`seat_limit_exceeded` / `seat_check_pending`) while preserving mirror send/edit/delete execution path. Added regression coverage in `website/tests/seatEnforcement.test.js` and `Discord-Bot/tests/discordSeatAuditManager.test.ts`, plus admin `/discord-bot` server seat controls/snapshot visibility and connector workspace seat status diagnostics. Verified with `bun run typecheck` for `website`, `admin`, `Discord-Bot`; `bun test` in `Discord-Bot`; `bun test tests` in `admin`; `bun test website/tests/seatEnforcement.test.js`; and builds for `Discord-Bot`, `website`, and `admin` (admin build run with `NEXT_PUBLIC_CONVEX_URL` set in shell). (2026-02-22)
-- Approved multi-server Discord seat-enforcement design + implementation plan for SaaS scaling: scoped server config to `tenantKey+connectorId+guildId`, retained canonical tier enums (`basic/advanced/pro`) with bronze/silver/gold admin labels, and selected hard-stop mirror enforcement with hybrid snapshot-gating to protect mirror send latency targets. Design: `docs/plans/2026-02-22-discord-multi-server-seat-enforcement-design.md`. Plan: `docs/plans/2026-02-22-discord-multi-server-seat-enforcement-plan.md`. (2026-02-22)
-- Hardened Discord mirror content role-mention filtering: Discord-Bot now cross-checks `<@&roleId>` mentions from stored signal content against roles in the target guild and strips only missing-role mentions while preserving the rest of the message text, with runtime logs for skipped/failed/stripped checks and regression coverage in `Discord-Bot/tests/discordSignalMirrorManager.test.ts`. Verified with `bun test tests/discordSignalMirrorManager.test.ts`, `bun run typecheck`, and `bun run build` in `Discord-Bot`. (2026-02-21)
-- Fixed free-trial activation gap when Sell only emits pre-checkout lifecycle events: payment webhook processing now promotes zero-total `order.created` events to active entitlement updates (while still ignoring non-free pending `order.created`/`pending` events), so free trial checkouts can activate access even when `order.completed` is not delivered. Verified with `website` tests/typecheck, Convex deploy (`convex dev --once`), and operator backfill confirmation for `eyezo@gmail.com` (`payments:adminSetPaymentCustomerSubscription` grant `pro` 7 days) showing active `pro` in `payments:listPaymentCustomers`. (2026-02-20)
-- Fixed Sell webhook handling for real `order.created` payloads that previously hard-failed with `user_not_found` despite nested customer data: parser now supports invoice-style nested fields (`data.customer_information.*`, `data.products[0]`, `data.product_variants[0].product_variant_id`, nested status object), and payment processing now treats pre-checkout `order.created` + `pending` events as intentionally ignored/processed instead of failed. Verified with updated regression coverage in `website/tests/paymentsUtils.test.js`, `website` typecheck, Convex deploy (`convex dev --once`), and replay of failed events `2892933` / `2892943` to processed state (`resolvedVia=pre_checkout_order_created`). (2026-02-20)
-- Fixed Sell checkout identity propagation from website pricing cards: shop checkout URL generation now injects the logged-in viewer email as a validated `email` query param, and tier-card checkout clicks emit frontend observability logs (`[shop] checkout launch ... email_prefill=yes|no`) so missing-identity webhook cases can be traced quickly. Added regression coverage in `website/tests/shopCheckoutUrl.test.js`. Verified with `bun test tests/shopCheckoutUrl.test.js tests/paymentsUtils.test.js` and `bun run typecheck` in `website`. (2026-02-20)
-- Fixed Sell webhook signature compatibility gap blocking real checkout entitlement updates: Convex webhook signature reader now accepts Sell’s standard `signature` header (in addition to legacy custom header names), with regression coverage in `website/tests/paymentsUtils.test.js`. Verified by failing-test-first + green test run, Convex deploy (`convex dev --once --env-file .env.example`), and live signed webhook POST against `/http/webhooks/sellapp` that updated `test@gmail.com` to active `pro`. (2026-02-20)
-- Enabled free-trial and customer-lifecycle operator controls in admin: catalog wizard now accepts non-negative display prices (including `0`) and forwards zero-cent variant payloads to Sell API, and `/shop/customers` now supports inline email updates, password resets (with session invalidation), and manual subscription grant/revoke with tier+duration plus role-sync enqueue logging via new Convex operator functions (`payments:adminUpdatePaymentCustomerEmail`, `payments:adminSetPaymentCustomerPassword`, `payments:adminSetPaymentCustomerSubscription`). Verified with `admin` tests/typecheck/build (build run with `NEXT_PUBLIC_CONVEX_URL` in shell) and `website` typecheck. (2026-02-20)
-- Expanded workspace strategy library + discoverability in `website`/Convex: strategy defaults now synchronize (upsert) instead of one-time seeding, analyst naming now includes requested profiles (`Prestige`, `Grasady`, etc.) with additional playbooks (`Standard Entry Reversal Model`, `HTF Macro-Aligned Framework`, `Harmonic Trading`), and `/workspace/strategies` now supports free-text search across analyst/strategy/tag metadata in addition to tag chips. Verified with `website` typecheck. (2026-02-20)
-- Fixed login/session redirect and Discord link reliability issues in `website`: `/login` and `/signup` now auto-redirect authenticated sessions to their resolved destination and use `router.replace` after auth completion, `discord:linkViewerDiscord` / `discord:unlinkViewerDiscord` now persist link-state even when downstream role-sync enqueue operations fail (with backend error logging retained), strict one-account-per-Discord-user conflict checks remain enforced, and both auth + Discord flows now map backend errors to friendly UI messages instead of Convex/internal phrasing. Verified with `website` typecheck, Discord OAuth tests, user-facing error mapping tests, and `website` build. (2026-02-20)
-- Updated shared website marketing navbar so authenticated users now see a top-level `Dashboard` button (alongside Home/Pricing) while unauthenticated users continue to see `Log in`, improving post-login navigation clarity on the home page. Verified with `website` typecheck. (2026-02-20)
-- Fixed website auth + branding UX issues: login/signup page composition is now balanced around a primary auth form column with cleaner supporting content density, website branding is updated to `G3n S1gnals`, and marketing nav now hides `Log in` for authenticated users (preventing simultaneous `Log in` + `Log out` actions on home). Verified with `website` typecheck/build and `admin` typecheck. (2026-02-20)
-- Refreshed website shop product cards to a premium tiered design system: `ShopTierCard` now uses tier-specific palette treatments, richer duration-selection tiles with inline price context, stronger selected-billing emphasis, and upgraded highlight/CTA composition to improve perceived quality and pricing clarity without changing checkout logic. Verified with `website` typecheck/build. (2026-02-20)
-- Completed comprehensive website design improvement pass across shared styling, shell/navigation, and high-traffic module surfaces: upgraded global visual tokens and background atmosphere, improved marketing/workspace nav hierarchy, unified card depth/hover interactions across dashboard/workspace/shop/auth pages, and tightened composition rhythm on home/shop/auth/checkout routes. Verified with `website` typecheck/build. (2026-02-20)
-- Refined website auth-page composition to fix off-axis form alignment on wide viewports: `/login` and `/signup` now render inside a centered max-width grid shell with a constrained centered form column (`~460px`) plus full-width auth card sizing, producing a more balanced professional layout on desktop while preserving mobile flow. Verified with `website` typecheck/build. (2026-02-20)
-- Completed website production-readiness pass focused on real-data UX + auth/security hardening: homepage KPI/highlight cards now read live Convex snapshot data (`workspace:publicLandingSnapshot`), dashboard/signals connector context now comes from tier-visible connector options (`signals:listViewerConnectorOptions`) with no hardcoded `t1/conn_01` defaults, login/signup redirect handling is centrally sanitized, Discord OAuth callback now handles upstream timeout/network failures with controlled redirects, workspace topbar search now performs real module navigation, and both Next.js apps now ship baseline security headers. Verified with `bun test website/tests`, `website` typecheck/build, and `admin` typecheck/build (admin build run with `NEXT_PUBLIC_CONVEX_URL` set in shell). (2026-02-20)
-- Removed hardcoded market placeholder payload from website news quick-view: `/workspace/news` now sources quick-view symbol/price/change/volume/high/low/funding values from live Convex `workspace:listMarketSnapshots` query data (BTC-preferred, first-market fallback) instead of fixed literals, preserving UI behavior while enforcing DB-backed values. Verified with `website` typecheck/build. (2026-02-20)
-- Fixed sparse attachment-update ingest regression causing some signal rows to lose text content: Convex ingest now preserves existing non-empty content when update payloads arrive attachment-only, legacy Discord plugin now accepts attachment-only `MESSAGE_UPDATE` events (while skipping truly empty sparse updates), and new regression coverage was added in `website/tests/ingestContentMerge.test.js`. Verified with `bun test website/tests/ingestContentMerge.test.js website/tests/ingestAttachmentMerge.test.js website/tests/ingestUtils.test.js`, `website` typecheck, and `Discord-Bot` typecheck. (2026-02-19)
-- Completed customer-readiness redesign pass for all non-dashboard website routes (`/`, `/shop`, `/login`, `/signup`, `/checkout/return`): aligned shell structure with dashboard visual language, replaced cluttered card stacking with clearer section rhythm, and tightened pricing/auth IA for conversion-focused SaaS UX. Verified with `website` typecheck/build. (2026-02-19)
-- Rebuilt all non-dashboard customer pages from scratch (`/`, `/shop`, `/login`, `/signup`, `/checkout/return`) on a dedicated marketing layout system with customer-ready copy and cleaner SaaS page composition (no backend/internal platform messaging). Verified with `website` typecheck/build. (2026-02-19)
-- Completed SaaS layout quality pass for website auth/shop pages: restructured `shop` hero and pricing cards for cleaner hierarchy/spacing, reduced visual clutter in login/signup informational panes, and standardized auth form card composition for a more professional product surface. Verified with `website` typecheck/build. (2026-02-19)
-- Applied Convex backend rollout for website workspace/journal updates via `bunx convex dev --once --env-file website/.env.example`; post-deploy function smoke queries (`workspace:listMarketSnapshots`, `workspace:listStrategies`, `workspace:listNewsArticles`) returned callable payloads. (2026-02-19)
-- Completed second-pass website workspace polish: improved cross-module visual consistency and interaction behavior across `live-intel`, `indicators`, `strategies`, and `news` surfaces (timeframe-aware live intel filtering, strategy tag filtering, better empty states, and stronger card interaction affordances). Also executed Convex env sync from `website/.env.example` for non-placeholder runtime keys via CLI. (2026-02-19)
-- Completed website member experience restructure: promoted `/dashboard` from compatibility redirect to a real workspace-shell page, widened site layout constraints to better use desktop viewport space, refreshed login/signup/shop IA, made workspace auth gating redirect-safe, and upgraded trading journal to computed analytics (profit factor/expectancy/drawdown), interactive P&L calendar, and equity curve visualization with validated closed-trade persistence + backend P&L fallback calculation. (2026-02-19)
-- Implemented Convex-powered live workspace ingestion: added `internal.workspace.refreshExternalWorkspaceFeeds` (CoinGecko + CryptoCompare fetch), idempotent upsert/replace mutations for `marketSnapshots` / `liveIntelItems` / `indicatorAlerts` / `newsArticles`, automatic default strategy seeding, and 2-minute cron scheduling in `convex/crons.ts`; also executed a one-off live refresh to populate current rows. (2026-02-17)
-- Connected `website` workspace modules to live Convex data contracts: `markets`, `live-intel`, `signals`, `indicators`, `strategies`, `journal`, and `news` pages now read from Convex queries (`workspace:*`, `signals:listRecent`, `users:viewer`), and journal trade logging now persists through Convex mutation (`workspace:createJournalTrade`) with validated form payloads. Also introduced new Convex workspace domain tables for market/intel/indicator/strategy/news/journal data storage. (2026-02-17)
-- Executed initial trader workspace expansion in `website`: added authenticated `/workspace/*` IA (`overview`, `markets`, `live-intel`, `signals`, `indicators`, `strategies`, `journal`, `news`), shared sidebar/topbar shell primitives, `/dashboard` compatibility redirect, module adapters with tests, and modal workflows for symbol/trade/strategy details plus trade logging schema validation. (2026-02-17)
-- Approved trader workspace expansion design + implementation plan for `website`: introduces authenticated `/workspace/*` route IA (overview, markets, live-intel, signals, indicators, strategies, journal, news), shared sidebar/topbar shell, modal workflow patterns, and phased adapter-first data integration to incorporate high-density trading UI elements while preserving existing Convex entitlement/Discord flows. (2026-02-17)
-- Completed SaaS website layout polish across home/login/signup/dashboard: introduced stronger header IA with metric callouts, cleaner responsive content hierarchy (including two-column auth layouts), improved visual rhythm/typography tokens, and refined dashboard signal-card readability for long IDs/content/attachments. (2026-02-17)
-- Fixed intermittent signal attachment drops in Convex ingest dedupe/update flow: sparse non-delete events (empty attachment arrays) now preserve previously stored attachment refs instead of overwriting them, with backend diagnostics (`[ingest] preserved existing attachment refs...`) plus regression tests in `website/tests/ingestAttachmentMerge.test.js`. (2026-02-17)
-- Hardened Sell payment-method loading in admin wizard: `sellProducts:listSellPaymentMethods` now fails soft (no client-thrown server error) and supports terminal-configured fallback methods via `SELLAPP_DEFAULT_PAYMENT_METHODS` when API discovery returns none/errors; wizard Step 3 now shows the terminal command hint for setting fallback defaults. (2026-02-17)
-- Fixed Sell wizard payment method failures (`The selected payment_methods.0 is invalid`): admin Step 3 now loads selectable payment methods from Sell product variant API data (`sellProducts:listSellPaymentMethods`) instead of hardcoding `STRIPE`, and Convex variant upsert now only sends `payment_methods` when valid methods are provided/discovered (otherwise it defers to Sell defaults). (2026-02-17)
-- Fixed Sell checkout draft/404 path for wizard-created products: wizard Step 3 now provisions a real Sell product variant (price + payment method + manual deliverable) through Convex (`sellProducts:upsertSellProductVariant`) before saving local catalog variant metadata, and product policy-linked checkout URL `https://g3netic.sell.app/product/new-teste?...` now resolves successfully after variant + visibility sync. (2026-02-17)
-- Fixed shop setup wizard product picker behavior for Sell draft/hidden products: because Sell list API returns only public/live products, the wizard now preserves newly created draft products in-session and merges policy-linked product keys into selectable options so product->policy->variant setup remains continuous without manual ID re-entry. (2026-02-17)
-- Added Sell product lifecycle management directly inside admin policies: operators can list/create/update Sell products via API-backed Convex actions (`sellProducts:*`), reuse product IDs in policy mappings (`productId|slug`), and monitor frontend/backend logs for product sync outcomes. Also completed an admin dark-theme pass across workspace shell surfaces and reworked mappings UX with editable available-channel/mapping rows, scrollable sticky-header tables, and richer recent mirror-job status/error visibility. (2026-02-17)
-- Fixed Sell checkout URL generation mismatch causing 404 storefront links when product policies used numeric IDs: admin catalog auto-checkout now treats numeric-only product IDs as non-resolvable, supports `productId|slug` policy format (for example `349820|basic-plan`) so entitlement matching still uses webhook IDs while checkout links resolve to slug-based storefront URLs, and Convex policy resolution now accepts alias-formatted IDs during webhook matching. (2026-02-17)
-- Completed admin workspace route refactor implementation: admin now uses unified sidebar workspace IA (`/mappings`, `/discord-bot`, `/shop/*`), shared shell/page primitives, canonical route migrations with legacy redirects (`/connectors`, `/discord`, `/payments/*`), and verified route helpers/breadcrumbs coverage in `admin/tests/adminRoutes.test.ts`. (2026-02-17)
-- Completed full `website` dark-theme redesign and componentization pass: home/shop/dashboard/checkout-return/login/signup now share a unified nocturnal visual system, use `shadcn` UI primitives (`Card`, `Button`, `Badge`, `Input`, `Alert`) with reusable site shell components, and dashboard logic is split from a monolithic page into dedicated hook/types/utils/component modules for maintainability. (2026-02-17)
-- Completed component-structure cleanup for redesigned catalog/shop surfaces: `admin` catalog now uses a split hook+component architecture (no monolithic page), and `website` shop now uses `useShopCatalog` + dedicated hero/tier card components with lighter render work and stable selection state updates. (2026-02-17)
-- Synced self-hosted Convex env variables from `website/.env.example` for non-placeholder keys via CLI; `CONVEX_SITE_URL` remains deployment-managed because Convex rejects overriding built-in env var names via `convex env set`. (2026-02-17)
-- Applied Phase 6 UX correction pass for catalog/shop quality: admin `/payments/catalog` now uses policy-driven checkout wiring with automatic checkout URL generation from selected Sell product policies (custom URL only as advanced override), and both admin catalog + website shop surfaces were visually refreshed with stronger hierarchy/contrast and richer merchandising presentation. (2026-02-17)
-- Completed Phase 6 storefront/admin redesign rollout: Convex now includes admin-managed shop catalog domain (`shopTiers`, `shopVariants`) with strict policy-link validation and consistent mutation error shapes, connector mappings now support explicit dashboard visibility + minimum-tier rules, website dashboard feed now applies hidden-by-default tier visibility filtering per mapping, admin now includes redesigned home/payments surfaces plus realtime catalog management, website now ships redesigned home/shop/dashboard and realtime checkout-return state, and Discord-Bot queue workers now use event-driven Convex wake subscriptions with bounded fallback polling instead of fixed ultra-low claim loops. (2026-02-17)
-- Approved Phase 6 product/UX design for website/admin modernization: tier-first shop with admin-managed catalog, realtime checkout-return/dashboard state, website-only tier-gated dashboard signal visibility (default hidden until explicitly configured), and worker queue architecture upgrade from fixed ultra-low polling to event-driven wakeups with bounded fallback polling to reduce empty claim spam while preserving low-latency mirroring targets. (2026-02-17)
-- Completed Phase 5 attachment hardening across ingest, dashboard, and mirror paths: ingest now normalizes/stores Discord attachment references with IDs (`attachmentId`) and URL/type/size sanitization, signal queries expose sanitized attachment refs with backend attachment-count diagnostics, dashboard now enforces safe attachment rendering (type/size-aware image preview limits + blocked executable-type handling) while preserving stable attachment links, and mirror payload attachment contracts are aligned end-to-end. (2026-02-17)
-- Closed Phase 4 mirror reliability/observability gaps: Convex mirror completion now distinguishes terminal vs retryable Discord failures (including retry-after aware requeue), stores mirrored extra image message IDs for deterministic cleanup, and admin connector detail now shows mirror latency stats (`create`/`update`/`delete` p95 over last 60m) alongside queue/runtime status to enforce the `<100ms` target. (2026-02-17)
-- Upgraded mirror message formatting for customer channels: bot now posts signal content as Discord embeds, includes non-image attachments in embed fields, and posts multi-image attachments as sequential raw image messages below the embed, with extra mirrored message IDs tracked for update/delete cleanup. (2026-02-16)
-- Reduced Phase 4 mirror path latency by removing fixed queue waits: Vencord plugin outbox now fast-flushes message events immediately (with async disk persistence) and lowers fallback flush cadence from 250ms to 25ms, while Discord-Bot now runs a dedicated low-latency mirror queue loop (`MIRROR_POLL_INTERVAL_MS`, default 25ms) with immediate drain when work is present and per-job latency logs. (2026-02-16)
-- Started Phase 4 mirroring implementation end-to-end: Convex now persists signal mirror queue + message linkage state (`signalMirrorJobs`, `mirroredSignals`), ingest enqueues create/update/delete mirror jobs from admin-configured source->target mappings when connector forwarding is enabled, Discord-Bot worker now claims mirror jobs and posts/edits/deletes messages in target channels, and admin connector config now includes mirroring toggle + bot runtime/queue visibility. (2026-02-16)
-- Simplified payments model to fixed-term only (no recurring path): Sell access policies now enforce duration days for product/variant mappings, subscription access is validated against `endsAt`, and dashboard now shows tier + expiration + live time-left countdown from Convex. (2026-02-16)
-- Hardened Discord role-sync worker verification to prevent false-positive completes: worker now force-fetches guild member state, validates target role exists, and verifies post-condition after grant/revoke before ACKing `roleSync:completeRoleSyncJob`. (2026-02-16)
-- Added Sell billing enforcement for mixed payment models: Convex now supports admin-configured Sell access policies (`/payments/policies`) that map product/variant IDs to tier + billing mode (`recurring` / `fixed_term`), persists entitlement metadata on subscriptions (`tier`, `billingMode`, `variantId`, `endsAt`), and runs scheduled expiry to auto-revoke fixed-term access/roles after duration windows (30/60/90/etc). (2026-02-16)
-- Extended Phase 3 to tier-aware Discord role sync: Convex now supports admin-configured `basic`/`advanced`/`pro` product-to-role mappings (`discordTierRoleMappings` + `discordRoleConfig:*` functions), payment and link/unlink flows enqueue grant/revoke jobs against the desired tier role set, and admin has a new `/discord` surface to manage mappings and role-sync runtime status. Legacy env single-role sync remains as fallback when tier mappings are not configured. (2026-02-16)
-- Phase 3 role assignment automation is implemented end-to-end: Convex `roleSyncJobs` outbox table + claim/complete queue mutations (`roleSync:claimPendingRoleSyncJobs`, `roleSync:completeRoleSyncJob`) are live, Discord link/unlink and payment subscription transitions enqueue grant/revoke jobs, and a Bun-based worker bot was added in `Discord-Bot` to process jobs against Discord roles with retry/backoff semantics and structured logs. (2026-02-16)
-- Fixed dashboard Discord OAuth completion UI state so "Completing link..." no longer gets stuck: callback query cleanup now uses client history replacement and completion state resets reliably after `discord:linkViewerDiscord` success/failure. (2026-02-16)
-- Phase 3 Discord OAuth linking is now implemented in `website`: new Next.js auth routes (`/api/auth/discord/start`, `/api/auth/discord/callback`, `/api/auth/discord/complete`) validate OAuth state cookies, exchange code for Discord identity, and dashboard flow persists link/unlink state in Convex (`discord:linkViewerDiscord`, `discord:unlinkViewerDiscord`) with frontend/backend linkage logs. (2026-02-16)
-- Added an operator surface in `admin` for payment linkage visibility: `payments:listPaymentCustomers` query and `admin` route `/payments/customers` show Sell customer/subscription mappings, user email/status context, and searchable linkage metadata for support/debugging. (2026-02-16)
-- Added durable Sell payment identity tracking in Convex (`paymentCustomers`): webhook processing now resolves users by external subscription/customer IDs before email fallback, and stores provider linkage for subsequent events and operator visibility. (2026-02-16)
-- Fixed Sell.app webhook failure persistence semantics in Convex: processing failures now commit `webhookEvents` as `failed` with incrementing attempt counts, and replay increments attempts predictably while keeping failure inbox visibility (`/webhooks/sellapp/failures`). (2026-02-16)
-- Phase 2 payments + access gating is live in Convex: Sell.app webhook ingestion (`/webhooks/sellapp`) is idempotent by provider event ID, updates subscription state, records attempt/failure metadata, and exposes controlled replay/failure inbox endpoints (`/webhooks/sellapp/replay`, `/webhooks/sellapp/failures`). Signal feed access is now gated server-side on active subscription status. (2026-02-16)
-- Website signup/login is validated end-to-end against self-hosted Convex (`https://convex-backend.g3netic.com`) using domain mapping:
-  `convex-backend.g3netic.com` = backend origin, `convex-backend.g3netic.com/http` = auth/OIDC routes, and `convex.g3netic.com` = dashboard origin. (2026-02-16)
-- Establish Convex data model and auth strategy for `website`; `admin` does not require customer signup/login.
-- Define migration steps and stop adding new backend features to legacy code paths.
-- Define and enforce realtime signal delivery targets (p95 < 100ms) across web, admin, and bot.
-- Connector discovery bootstrap improved: plugin now sends accessible guild/channel metadata (IDs + names) even before source mappings exist, and admin config filters source channels by selected guild. (2026-02-16)
-- Fixed Vencord channel discovery extraction to handle wrapped/nested ChannelStore entries so channel snapshots persist in `discordChannels` for admin selection. (2026-02-16)
-- Expanded Vencord channel discovery fallbacks to probe multiple guild-scoped ChannelStore methods and log detected method availability for environment-specific debugging. (2026-02-16)
-- Added REST fallback (`/api/v10|v9/guilds/:id/channels`) for channel discovery when ChannelStore-based extraction returns empty in specific Discord client variants. (2026-02-16)
-- Hardened REST fallback auth + diagnostics: token lookup now includes Discord webpack `getToken()`, and cookie-auth fallback requests are attempted when token extraction fails. (2026-02-16)
-- Added DOM-based fallback channel discovery by parsing visible `/channels/<guild>/<channel>` links when ChannelStore and REST fallbacks still return zero channels in constrained client contexts. (2026-02-16)
-- Added dynamic webpack-based channel store discovery to recover no-click channel discovery in builds where `@webpack/common` exposes only `getChannel`. (2026-02-16)
-- Refactored admin connector UX: left side now models "Available Channels", and mappings source/target selectors are constrained to enabled available channels instead of all discovered channels. (2026-02-16)
-- Added on-demand channel discovery requests from admin ("Fetch channels" per selected guild) and removed periodic plugin snapshot loops to reduce unnecessary discovery traffic. (2026-02-16)
-- Added per-available-channel role flags (`Source` / `Target`) in admin config and constrained mapping selectors accordingly (source list from source-enabled channels, target list from target-enabled channels). (2026-02-16)
-- Plugin ingestion scope now respects runtime `is_source` and only monitors channels marked as source for message/thread ingestion. (2026-02-16)
-- Hardened plugin webpack/token module probing to avoid proxy/i18n side effects and added explicit REST network diagnostics for guild channel fetch failures. (2026-02-16)
-- Decoupled discovery requests from config reloads: admin "Fetch channels" now only updates discovery request version, and plugin only reapplies runtime config when `config_version` changes (add/update path). (2026-02-16)
-- Fixed thread ingest 400s by aligning Convex thread event validation with emitted plugin fields and hardening plugin thread payload normalization for sparse thread events. (2026-02-16)
-- Tightened dynamic webpack channel-store selection to require guild-channel APIs, preventing i18n/proxy collisions that caused zero-channel discovery snapshots. (2026-02-16)
-- Simplified discovery flow: plugin now sends guild-only snapshots automatically on startup/runtime sync, and admin channel discovery remains explicit via guild-selected "Fetch channels". (2026-02-16)
-- Reduced discovery pickup latency and hardened dynamic store validation to avoid i18n/proxy false-positives during channel discovery probes. (2026-02-16)
-- Replaced dynamic token/store probing in plugin discovery with Vencord store-based lookup (`findStoreLazy("AuthenticationStore")`) and stable ChannelStore-only probing to reduce false positives and restore guild-channel REST discovery reliability. (2026-02-16)
-- Added guild-object channel extraction fallback (`GuildStore.getGuild`) so channel discovery can still succeed when REST auth is unavailable and dynamic channel-store probing is disabled. (2026-02-16)
-- Fixed discovery request replay semantics on plugin restart: stale backend requests are baselined (not replayed), initial guild sync retries until GuildStore is ready, and targeted channel discovery no longer triggers channel-store fallback scans for guild enumeration. (2026-02-16)
-- Phase 1 signal pipeline is now hardened end-to-end: message ingest normalizes update/delete timestamps with fallbacks, stale post-delete updates are ignored server-side, plugin emits message delete events, and dashboard feed surfaces edited/deleted state with realtime update logs. (2026-02-16)
+Now:
 
-**Next**
-- Add explicit operational reliability docs/alerts for seat-audit freshness drift and over-limit pause durations.
-- Add scheduled payment reconciliation and alerting for webhook drift/failure spikes.
-- Monitor queue-wake rollout metrics (`wake source`, `empty/non-empty claim outcomes`, pickup latency) and tune bounded fallback ranges if websocket quality degrades in production.
-- Add operational dashboards/alerts for shop catalog publish validation failures (`policy_link_required`, `policy_link_disabled`, checkout URL validation).
+- `2026-04-09`: self-hosted Convex is in an unstable state under load; `https://convex.g3netic.com` is returning `502 Bad Gateway` and retention cleanup is still disabled in [`convex/crons.ts`](/f:/Github%20Projects/New/convex/crons.ts)
+- `2026-04-09`: HTTP signal ingest now includes embed-hosted image media in inline hydration, so Discord messages whose charts only exist in embeds still mirror their images instead of landing as text-only signals
+- payment webhook/customer tracking is being moved off full-table scans onto indexed lookups to reduce backend pressure as event volume grows
+- payment email resolution and admin email conflict checks now prefer indexed `authAccounts.providerAndAccountId` lookups instead of scanning account rows
+- role-sync and Discord bot admin list queries are being moved onto existing status/guild indexes to avoid broad operational scans
+- signal viewer connector discovery now scopes mapping reads per connector, and workspace feed refreshes skip full rewrites when upstream data is unchanged
+- mirror/media diagnostics now fetch rows by source message instead of loading connector-wide job/media sets into memory
+- message filtering now supports both hostname matches and URL path/handle token matches so entries like `unityacademy` can suppress links such as `x.com/unityacademy/...`
+- OIDC metadata currently reports `http://convex-backend.g3netic.com/http` as the issuer instead of `https://convex-backend.g3netic.com/http`, which needs to be corrected at the self-hosted service/proxy layer
+- repo defaults now normalize public Convex auth/OIDC URLs to HTTPS for non-local deployments so Cloudflare Tunnel can front an internal HTTP origin safely
 
-**Blockers / Risks**
-- Shared-network false-positive risk on IP trial lock keys: the new `ip_hash` trial guard reduces alt-account trial abuse but can block legitimate users behind the same NAT/VPN egress; operators should monitor repeat-trial blocks and keep admin manual grant path available for support overrides.
-- Mirror image hydration availability risk: strict Convex-only image delivery now omits non-hydrated images (no source URL fallback), so delayed/failed media hydration can temporarily reduce mirrored image completeness; operators should monitor `[mirror-media]` failures and pending-sync counts in mirror logs.
-- Discord seat-audit scale/performance risk for large guilds: visibility-based seat counting requires careful pagination/concurrency caps and snapshot freshness controls; misconfiguration or insufficient bot permissions can cause stale snapshots that pause mirroring.
-- Local Windows/Bun CLI caveat during `convex run` smoke checks: command returns valid payload output but exits with a post-output `uv` assertion (`!(handle->flags & UV_HANDLE_CLOSING)`); deploy operations still succeed, but local CLI verification ergonomics are degraded until runtime/tooling update.
-- External provider dependency for workspace feeds. Market/news ingestion relies on public upstream APIs (CoinGecko/CryptoCompare); provider outages, schema changes, or rate limits can temporarily reduce feed freshness.
-- Sell product CRUD in admin depends on `SELLAPP_API_TOKEN` being configured in Convex runtime env; missing token causes product list/create/update actions to fail (`sell_api_token_missing`).
-- Sell free/zero-price variant behavior may differ per Sell account/store rules; admin now permits `0` pricing, but operators should monitor Sell API responses and use manual admin grants as fallback if provider-side validation rejects zero-value variants.
-- Sell invoice schema variance risk for admin statistics: revenue/renewal aggregation now reads Sell invoice payloads with resilient field fallbacks, but stores should periodically validate reported totals/status mappings against provider exports and adjust mapping heuristics if upstream shapes change.
-- Data migration. We need a clear plan to migrate users/subscriptions/signals into Convex without downtime.
-- Auth and identity mapping. We need one stable user identifier across web, bot, and webhook processing.
-- Convex Auth configuration. Self-hosted Convex must be configured with signing keys/JWKS and correct site URL, otherwise auth flows will fail at runtime.
-- Convex Auth issuer should be HTTPS. The current self-hosted issuer is `http://convex-backend.g3netic.com/http`; align `CONVEX_CLOUD_ORIGIN`/`CONVEX_SITE_ORIGIN` + proxy headers so OIDC metadata uses `https://...` to avoid mixed-scheme issues.
-- Convex deployment credentials. We need `CONVEX_SELF_HOSTED_ADMIN_KEY` available in CI/deploy to push schema/functions to self-hosted Convex.
-- Convex built-in env management caveat. `CONVEX_SITE_URL` cannot be overridden with `convex env set`; it must be controlled through deployment/runtime configuration.
-- Discord OAuth app configuration. `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, and callback URL registration must stay aligned with deployed `NEXT_PUBLIC_APP_URL` / `DISCORD_REDIRECT_URI`.
-- Discord role sync configuration/permissions. `ROLE_SYNC_BOT_TOKEN` must be aligned across Convex + bot env; tier role mappings must be maintained in admin (`/discord-bot`) or legacy fallback env must be set; bot needs `Manage Roles` with hierarchy above all managed customer tier roles.
-- Discord mirror permissions/configuration. `MIRROR_BOT_TOKEN` (or `ROLE_SYNC_BOT_TOKEN` fallback) must be aligned across Convex + bot env; connector forwarding must be enabled per connector and source->target mappings maintained in admin; bot needs send/edit/delete permissions in mapped target channels.
-- Sell webhook payload variance risk. Some events may omit `variant_id`; maintain product-level fallback policies so fixed-term duration enforcement remains deterministic.
-- Some provider webhook variants may omit stable customer/subscription IDs; fallback email matching still exists for those events and should be monitored.
-- Bun migration consistency. Build and CI/deploy tooling must stay aligned with Bun lockfiles/workspaces or deployments will fail before app startup.
-- Webhook idempotency and retries. We need to guarantee "at least once" delivery does not create duplicate state.
-- Performance. Sub-100ms p95 delivery requires careful schema/indexing and realtime subscriptions; polling is not acceptable on the critical path.
+Next:
 
-## Milestones (Phases)
+- run Convex deployment health checks (`convex insights`, failure logs, queue depth, table growth) from an environment that has `CONVEX_SELF_HOSTED_ADMIN_KEY`
+- re-enable retention in small safe batches only after query/memory pressure is confirmed back under budget
+- audit and remove remaining unbounded `.collect()` usage on hot/operator paths, especially large queue/history tables
 
-### Phase 0: Foundations
+Blockers:
 
-- [x] Convex project initialized for this repo
-  Exit criteria: `apps/web` and backend functions can read/write Convex in dev.
-- [x] Cut over website auth to Convex Auth (email + password) (2026-02-15)
-  Exit criteria: `website` build includes Convex Auth login/signup and uses `NEXT_PUBLIC_CONVEX_URL`; admin is explicitly out of scope for signup/login.
-- [x] Schema defined for core entities (users, subscriptions, signals, discord linkage) (2026-02-15)
-  Exit criteria: schema exists with indexes needed for critical queries (`website/convex/schema.ts`).
+- the repo workspace does not include `CONVEX_SELF_HOSTED_ADMIN_KEY`, so direct deployment insights/log access is currently blocked here
+- self-hosted Convex/proxy configuration is unhealthy enough to produce `502` responses and incorrect public OIDC metadata
 
-  ### Phase 1: Signal Pipeline (ingestion -> Convex -> dashboard)
+### Convex
 
-Goal: signals show up in the dashboard quickly and consistently.
+Use Convex as the operational system of record for app state, signal pipelines, entitlements, jobs, and read models.
 
-- [x] Collector ingestion writes normalized signal docs to Convex (2026-02-16)
-  Exit criteria: new messages appear in Convex and are queryable by customer.
-- [x] Dashboard feed reads signals and updates near realtime (2026-02-16)
-  Exit criteria: paid user sees new signals with p95 end-to-end delivery < 100ms.
-- [x] Idempotency + edit/delete semantics defined (2026-02-16)
-  Exit criteria: edits/deletes converge correctly across dashboard + bot.
+Best-practice defaults:
 
-### Phase 2: Payments + Access (Sell.app webhook)
+- define schemas and indexes intentionally up front
+- query through indexes, never by collecting and filtering large datasets
+- paginate all user-facing lists and admin feeds
+- avoid hot documents by separating high-churn operational rows from stable entities
+- use internal mutations/actions for background workflows and integration boundaries
+- keep mutations small, deterministic, and safe for retries
 
-Goal: payments reliably grant/revoke access even if the website is down.
+### Clerk
 
-- [x] Webhook ingestion writes events and updates subscription state in Convex (2026-02-16)
-  Exit criteria: a test webhook creates an event record, upserts subscription, and updates access gate.
-- [x] Failure capture + replay for webhook processing (2026-02-16)
-  Exit criteria: failures are recorded with enough context to retry safely.
-  Link: `docs/reliability.md`
-- [x] Enforce recurring vs fixed-term entitlement lifecycle in Convex (2026-02-16)
-  Exit criteria: active subscription access is policy-driven by product/variant mapping, and fixed-term access auto-expires with role revocation via scheduled jobs.
-- [x] Move to fixed-term-only subscription windows + dashboard remaining-time visibility (2026-02-16)
-  Exit criteria: policies are duration-driven without recurring mode selection, and customer dashboard shows live time left from Convex `endsAt`.
-- [x] Add customer-support operator controls for email/password/subscription management in admin (`/shop/customers`). (2026-02-20)
-  Exit criteria: operators can update customer email, reset password with session invalidation, and manually grant/revoke subscription access (tier + duration) from admin with backend/frontend outcome logs.
-- [x] Accept Sell standard webhook `signature` header in Convex validation path. (2026-02-20)
-  Exit criteria: Sell webhook deliveries using `signature` authenticate successfully, entitlement updates process for paid/free checkout events, and regression test coverage exists for signature-header extraction.
+Use Clerk for authentication, session management, and organization-aware identity if team or workspace support is needed.
 
-### Phase 3: Discord Linking (customer identity + roles)
+Best-practice defaults:
 
-Goal: customers can link Discord and get the right role(s) in the customer guild.
+- protect routes centrally with `clerkMiddleware`
+- authorize server-side with `auth()` in App Router and route handlers
+- never trust client-supplied user identifiers for access checks
+- sync only the minimum identity metadata needed by the app
+- treat Clerk as identity and Convex as application state
 
-- [x] Discord OAuth linking flow stores linkage in Convex (2026-02-16)
-  Exit criteria: user can link/unlink; linkage is stored and queryable.
-- [x] Role assignment automation via job queue stored in Convex (2026-02-16)
-  Exit criteria: paid users get correct role; revoked users lose role.
-- [x] Tier-based role mapping configurable in admin (2026-02-16)
-  Exit criteria: operator can set tier->guild/role mapping for basic/advanced/pro and role sync converges Discord roles accordingly.
-- [x] Role sync worker post-condition verification for grant/revoke (2026-02-16)
-  Exit criteria: jobs only complete when target role state is confirmed on member after action; stale cache reads cannot produce false success.
+### Stripe
 
-### Phase 4: Mirroring (bot -> customer guild)
+Use Stripe Billing for subscriptions, Stripe Checkout for signup and plan changes, and Customer Portal for self-serve subscription management.
 
-Goal: signals are mirrored to the customer guild with mapping for updates/deletes.
+Best-practice defaults:
 
-- [x] Bot posts new signals into mapped channels (2026-02-17)
-  Exit criteria: new signal results in one mirrored message with p95 ingestion -> bot receive < 100ms.
-- [x] Bot handles edits/deletes (2026-02-17)
-  Exit criteria: mirrored messages update/delete consistently.
-- [x] Rate-limit handling and retry strategy (2026-02-17)
-  Exit criteria: bot survives transient Discord/API failures without drifting state.
-- [x] Filter missing target-guild role mentions from mirrored signal content. (2026-02-21)
-  Exit criteria: when mirrored content contains `<@&roleId>` and the role does not exist in the target guild, only that mention token is removed while remaining message content is preserved and posted.
-- [x] Support per-mapping role ping mentions outside mirrored embeds via admin route configuration. (2026-02-27)
-  Exit criteria: admin mappings can store optional Discord role IDs per source->target route, mirror claim payloads surface that role ID, and newly mirrored messages mention the configured role outside the embed.
-- [x] Strip foreign Discord event/role fragments from mirrored content while preserving valid message text. (2026-02-27)
-  Exit criteria: when content includes foreign `discord.com/events/...` guild IDs or foreign role tokens (`<@&roleId>` / `@role:roleId`), only those fragments are removed and the remaining message is still mirrored with backend logs showing stripped IDs.
-- [x] Add admin-controlled per-mapping domain/keyword content filtering with allow/block lists and fragment-only removal semantics. (2026-03-04)
-  Exit criteria: admin workspace exposes a dedicated filtering route/category for mapping-level blocked/allowed domains/keywords, mirror claim path applies those rules before posting, and blocked tokens/URLs are removed from message text while non-matching content still posts.
-- [x] Move mirror ownership validation to precomputed guild/role caches so checks stay O(1) on the mirror hot path. (2026-02-27)
-  Exit criteria: mirror content safety checks read from periodic bot guild/role snapshots (`knownGuildIds`/`knownRoleIds`) without per-message Discord role fetches, and role ownership snapshots are persisted in Convex for observability/debugging.
-- [x] Skip mirrored create/update sends when filtered signal body is empty to avoid placeholder `(empty signal)` posts. (2026-03-02)
-  Exit criteria: if mirror sanitization leaves no body text, Discord-Bot logs a skip outcome and marks the job successful without sending a signal embed.
+- use Checkout Sessions for subscription start flows
+- use Stripe Billing primitives, not manual renewal logic
+- use Prices instead of deprecated plan patterns
+- process webhooks with signature verification and idempotent event storage
+- derive entitlements from Stripe events plus reconciliation jobs
+- keep payment provider side effects and app entitlements decoupled
 
-### Phase 5: Attachments (Discord -> storage -> dashboard/mirror)
+## Target Architecture
 
-Goal: attachments are preserved and accessible across dashboard + mirror.
+### 1. Identity Domain
 
-- [x] Store Discord attachments and references in Convex (2026-02-17)
-  Exit criteria: attachments are accessible with references stored alongside signals.
-- [x] Display attachments in dashboard (2026-02-17)
-  Exit criteria: dashboard renders attachments safely (type/size restrictions).
-- [x] Mirror attachments to Discord where appropriate (2026-02-17)
-  Exit criteria: mirrored messages include attachments or stable links.
-- [x] Remove direct link-style image posting in mirror output and back image attachments with Convex Storage metadata for low-link mirrored delivery. (2026-03-02)
-  Exit criteria: mirrored images (including extras) are sent only from Convex `mirrorUrl` values with no source URL fallback, raw URL-only image posts are eliminated, content strips generic links/`Unity Academy` mentions, and pending mirror jobs can be patched with `storageId` + `mirrorUrl` from asynchronous Convex media hydration.
-- [x] Capture embed-based image media (not only native Discord attachments) so chart preview images are eligible for Convex hydration and mirrored delivery. (2026-03-02)
-  Exit criteria: ingest accepts embed payloads from plugin events, normalizes embed media URLs into attachment refs, and mirror hydration/image detection covers query-parameter image URLs used by CDN/proxy endpoints.
+Owns:
 
-### Phase 6: Storefront + Admin UX + Tier-Gated Dashboard
+- Clerk user identity
+- optional organizations or workspaces
+- user profile projection in Convex
+- user-to-workspace membership and roles
 
-Goal: deliver a conversion-focused shop/admin experience and enforce tier-based dashboard signal visibility.
+Rules:
 
-- [x] Add admin-managed shop catalog domain (tiers + per-tier duration variants + policy linkage) (2026-02-17)
-  Exit criteria: operator can manage presentation variants without modifying enforcement policy logic.
-- [x] Add website tier-first shop + checkout-return state powered by realtime Convex data (2026-02-17)
-  Exit criteria: customer can select tier/duration and launch external Sell checkout from a polished storefront.
-- [x] Enforce website-only dashboard visibility by mapping/channel minimum tier rules (2026-02-17)
-  Exit criteria: signal feed content is filtered by subscription tier with hidden-by-default mapping behavior.
-- [x] Replace worker fixed low-interval claim loops with event-driven queue wakeups (2026-02-17)
-  Exit criteria: idle queue claim mutation spam is significantly reduced while maintaining low-latency processing when jobs arrive.
-- [x] Refactor admin workspace IA to sidebar-based route domains (`/mappings`, `/discord-bot`, `/shop/*`) with legacy redirects and shared shell/page composition primitives (2026-02-17)
-  Exit criteria: canonical admin routes use shared workspace shell + breadcrumbs/header/table primitives, legacy paths redirect, and admin route helper tests pass.
-- [x] Polish website layout hierarchy and responsive UX for home/auth/dashboard surfaces (2026-02-17)
-  Exit criteria: shared page/header primitives enforce clearer visual hierarchy and spacing, auth pages use split informational + form layout on desktop, and dashboard feed cards remain readable for long metadata/content.
-- [x] Introduce workspace route-group shell and multi-module member UI surfaces in `website` (`/workspace/*`) with compatibility redirect from `/dashboard` (2026-02-17)
-  Exit criteria: workspace routes build/typecheck pass, sidebar/topbar shell is shared, module adapter tests pass, and journal trade schema validation test coverage is present.
-- [x] Promote `/dashboard` to canonical workspace entry and upgrade journal analytics from placeholders to computed metrics/charts/calendar with validated persistence rules. (2026-02-19)
-  Exit criteria: `/dashboard` renders workspace shell directly, `/workspace/overview` compatibility remains intact, journal KPIs/curve/calendar derive from stored trade data, and website tests/typecheck/build pass.
-- [x] Complete second-pass workspace module UX consistency pass and refresh Convex env values from `website/.env.example`. (2026-02-19)
-  Exit criteria: module-level cards/filtering/empty states are consistent across key workspace pages and Convex runtime env sync command succeeds for non-placeholder keys.
-- [x] Deploy latest Convex function/schema set from `website` and execute post-deploy workspace query smoke checks. (2026-02-19)
-  Exit criteria: `convex dev --once` succeeds with current env file context and workspace queries are callable after deploy.
-- [x] Finalize professional SaaS layout composition for website auth/shop surfaces (hierarchy, spacing, card composition). (2026-02-19)
-  Exit criteria: auth and shop pages avoid crowded blocks, card internals are structured, and `website` typecheck/build pass.
-- [x] Rebuild non-dashboard customer experience from scratch with dedicated marketing layout and customer-first content. (2026-02-19)
-  Exit criteria: `/`, `/shop`, `/login`, `/signup`, and `/checkout/return` use cohesive marketing composition, remove backend jargon, and pass website verification commands.
-- [x] Execute customer-readiness second-pass redesign for non-dashboard pages with dashboard-aligned shell composition and conversion-focused pricing/auth layout. (2026-02-19)
-  Exit criteria: non-dashboard page composition avoids floating-card clutter, uses clearer section hierarchy and responsive spacing, and `website` typecheck/build pass.
-- [x] Execute production-readiness hardening pass for real-data rendering, connector-source selection, and baseline auth/security safeguards across `website` and `admin`. (2026-02-20)
-  Exit criteria: homepage uses live Convex snapshot data (no placeholder KPI/sample feed values), dashboard/signals connector selection uses real visible connector options, redirect/OAuth edge cases return controlled outcomes, and verification commands pass for tests/typecheck/build.
-- [x] Rebalance auth-page desktop composition so login/signup forms remain visually centered and not edge-shifted on large viewports. (2026-02-20)
-  Exit criteria: auth forms render in a constrained centered column, surrounding informational panel remains balanced, and `website` typecheck/build pass.
-- [x] Execute comprehensive website design-system polish across shared styling, shell/navigation, and workspace module surfaces. (2026-02-20)
-  Exit criteria: visual hierarchy/interaction depth is consistent across marketing and workspace routes, shared components carry updated styling primitives, and `website` typecheck/build pass.
-- [x] Refresh shop product cards with a premium visual treatment and clearer pricing-selection hierarchy. (2026-02-20)
-  Exit criteria: tier cards present stronger premium differentiation, selected duration/price context is immediately legible, and `website` typecheck/build pass.
-- [x] Fix auth-page visual balance, apply `G3n S1gnals` branding across website surfaces, and hide top-nav `Log in` for authenticated sessions. (2026-02-20)
-  Exit criteria: `/login` and `/signup` layouts are no longer lopsided on wide viewports, website-facing brand labels/metadata use `G3n S1gnals`, and authenticated users no longer see the marketing-nav `Log in` action.
-- [x] Add authenticated `Dashboard` action to marketing navbar for faster post-login navigation. (2026-02-20)
-  Exit criteria: when authenticated, top nav includes `Dashboard`; when not authenticated, `Log in` remains visible; styling stays consistent with existing nav items.
-- [x] Fix login redirect reliability and harden Discord link mutations against role-sync enqueue failures. (2026-02-20)
-  Exit criteria: authenticated login/signup sessions reliably route to target pages, Discord link/unlink operations no longer fail solely due to role-sync queue enqueue errors, one active Discord account cannot be linked to multiple users, and auth/Discord errors are shown with friendly user-facing messages.
-- [x] Prefill Sell checkout email from logged-in website viewer on pricing-card launch to improve webhook user resolution. (2026-02-20)
-  Exit criteria: checkout URLs include validated `email` when viewer email exists, shop launch logging indicates whether prefill was attached, and website checkout URL helper tests + typecheck pass.
-- [x] Parse nested Sell invoice/order webhook payload shapes and ignore pre-checkout `order.created` pending lifecycle events to stop false failure noise. (2026-02-20)
-  Exit criteria: nested customer/product/variant/status fields project correctly, `order.created` + `pending` events are marked processed with ignore reason instead of failed, and payment utility tests + website typecheck + Convex deploy pass.
-- [x] Activate zero-total free trial orders from Sell `order.created` lifecycle when completion webhooks are absent, while preserving ignore behavior for non-free pending orders. (2026-02-20)
-  Exit criteria: zero-total `order.created` events can resolve user + policy and write active subscriptions, non-free pending orders stay ignored, and verification/deploy commands pass.
-- [x] Replace dashboard signal-card feed with a notification stream and show channel names (not IDs) in Signals & Alerts analyst filters. (2026-02-27)
-  Exit criteria: dashboard surfaces notification-style events for visible channels while deep signal reading stays under `Signals & Alerts`, and analyst filter chips/cards use resolved channel names.
-- [x] Add realtime notification side popup + audio cue and ensure analyst filters render full visible-channel set (not only active sample channels). (2026-02-27)
-  Exit criteria: dashboard shows non-blocking side popup and attempts notification tone on new signal events post-hydration, and Signals & Alerts filter chips include all tier-visible channels (e.g., 12 total when 12 channels are mapped/visible).
-- [x] Sync advanced admin catalog variant edits to Sell product variants for product-policy rows so display-price changes do not drift from provider pricing. (2026-02-28)
-  Exit criteria: saving a product-policy variant in `/shop/catalog` updates Sell variant pricing via admin action before local catalog persistence, and admin verification (`tests/catalogUtils.test.ts`, `typecheck`) passes.
-- [x] Add shop statistics category in admin and dashboard renewal reminder notification for subscriptions ending within 24 hours. (2026-02-28)
-  Exit criteria: `/shop/statistics` surfaces manual-renewal invoice KPIs from Sell API with operator-visible diagnostics, and website dashboard renders an expiry reminder alert + frontend notification log when active access has <=1 day remaining.
-- [x] Remove redundant fields from admin `/shop/catalog` setup wizard so product selection/creation and policy mapping are single-source and non-overlapping. (2026-02-28)
-  Exit criteria: Step 1 separates existing-vs-new product flows, Step 2 no longer duplicates editable tier/duration controls, Step 3 save upserts product policy mapping automatically, and `admin` typecheck passes.
-- [x] Add a polished checkout processing experience for Sell purchases with launch-state visibility and automatic post-result redirects. (2026-02-28)
-  Exit criteria: pricing CTA launches Sell checkout while routing user to `/checkout/return`, return page reports `pending/success/failure` with launch fallback instructions, and success/failure states auto-redirect with countdown/manual actions plus frontend outcome logs.
+- Clerk is the source of identity truth
+- Convex stores app-specific profile, membership, and role state
+- authorization decisions are computed server-side in Convex and Next.js
 
-### Phase 7: Multi-Server Discord Seat Enforcement
+### 2. Billing Domain
 
-Goal: support many customer Discord servers with per-server configuration and hard seat enforcement that can pause mirroring without adding send-path latency.
+Owns:
 
-- [x] Add server-scoped Discord config domain (`tenantKey+connectorId+guildId`) for seat limits, enforcement toggle, and tier role IDs. (2026-02-22)
-  Exit criteria: admin can configure and persist server-specific seat limits and tier-role mappings independent of legacy global tier role config.
-- [x] Add seat snapshot + seat-audit queue domains and worker lifecycle. (2026-02-22)
-  Exit criteria: seat usage snapshots (`seatsUsed`, `isOverLimit`, freshness/error metadata) are continuously maintained per server via retry-safe queue processing.
-- [x] Gate mirror claim flow with seat snapshot status. (2026-02-22)
-  Exit criteria: when `isOverLimit=true`, mirror jobs for that server remain pending with explicit reason; when compliant, mirroring resumes automatically.
-- [x] Add admin visibility for seat status and enforcement diagnostics on `/discord-bot`. (2026-02-22)
-  Exit criteria: operators can configure seat settings and tier role IDs per server and inspect snapshot freshness/usage/error state from admin.
-- [x] Add connector-workspace seat status diagnostics on `/mappings/[tenant]/[connector]`. (2026-02-22)
-  Exit criteria: operators can see seat status directly from connector workspace and navigate to server seat controls without context switching.
-- [x] Add inline seat-config edit/delete controls in connector workspace seat table, including rows where guild metadata is missing/unknown. (2026-03-02)
-  Exit criteria: operators can update or delete server seat configs directly from `/mappings/[tenant]/[connector]` without switching to `/discord-bot`, and actions emit clear UI feedback plus frontend outcome logs.
-- [x] Verify low-latency mirror send path remains unchanged under seat enforcement architecture. (2026-02-22)
-  Exit criteria: mirror send/edit/delete execution path avoids live seat scans and verification commands pass for `Discord-Bot`, `admin`, and `website`.
-- [x] Source `/discord-bot` guild selection from the bot's actual server membership and expose selected-guild signal channel mappings in-panel. (2026-02-22)
-  Exit criteria: admin guild dropdown reflects bot-presence list (not plugin discovery), and operators can inspect selected-guild source->target mapping rows with a direct path to mapping management.
-- [x] Clarify source (plugin) vs target (bot) domains in `/discord-bot` with explicit UI separation and source/target-labeled route preview rows. (2026-02-22)
-  Exit criteria: operators can immediately distinguish plugin-discovered source guild/channels from bot target guild/channels while configuring seat enforcement and routing.
-- [x] Apply the same source(plugin)/target(bot) separation in `/mappings/[tenant]/[connector]` and reduce nested-scroll friction in channel/mapping management layout. (2026-02-22)
-  Exit criteria: mapping forms/tables use explicit source/target terminology, source and target selection remain fully configurable for runtime config loading, and channel/mapping tables no longer rely on fixed-height inner scroll regions.
-- [x] Ensure `/mappings` can target newly-added bot guild channels without plugin discovery coupling, using a setup wizard flow that remains runtime-config compatible. (2026-02-22)
-  Exit criteria: target channel picker reads bot-synced channels, new bot guilds/channels appear in mapping setup, and mapping save preserves seat-gate/runtime behavior.
-- [x] Remove legacy source/target registration ambiguity in `/mappings` and make target resolution bot-channel canonical for previews + seat/mirror guild lookup. (2026-02-22)
-  Exit criteria: Step 1 no longer exposes source/target role toggles, Step 3 uses Step 2 target-guild context by default, target labels resolve via bot channel catalog, and seat/mirror target guild resolution no longer depends solely on `connectorSources` target rows.
-- [x] Prevent `seat_check_pending` mirror backlog when snapshots are stale-but-under-limit by allowing stale-under-limit pass-through with immediate audit refresh. (2026-02-22)
-  Exit criteria: stale/expired snapshots that are not over-limit no longer block mirror claims, over-limit still hard-blocks, and stale pass-through triggers seat-audit enqueue for snapshot recovery.
-- [x] Stabilize seat-audit execution under real Discord member-fetch timing failures (`Members didn't arrive in time`) by switching to paginated REST member listing and adding stale-processing reclaim. (2026-02-22)
-  Exit criteria: seat-audit jobs no longer rely on gateway member chunks for full-guild scans, per-job completion outcomes are visible in worker logs, and abandoned `processing` jobs are automatically returned to `pending` for retry.
-- [x] Add one-time over-limit bot notifications in target channels so operators and members can see why mirroring is paused. (2026-02-22)
-  Exit criteria: when a guild goes over seat limit, bot posts a single warning embed per mapped target channel; repeated audits do not spam while still over limit; alerts re-arm after returning under limit.
+- Stripe customer linkage
+- subscription state projection
+- checkout session creation
+- customer portal session creation
+- webhook receipt, verification, replay, and reconciliation
 
-## Checklists / Hygiene
+Rules:
 
-- [x] Reset docs and roadmap for Convex migration (2026-02-14)
-  Exit criteria: docs no longer describe the legacy backend as the plan of record.
-- [x] Align Docker build files with Bun lockfile/workspace setup (2026-02-15)
-  Exit criteria: Docker builds copy `bun.lock` and use Bun install/build commands instead of pnpm artifacts.
-- [x] Add per-service Coolify Dockerfiles for `admin` and `website` (2026-02-15)
-  Exit criteria: each Next.js app can build and run independently via Bun in Docker using standalone output.
-- [x] Scope auth to website only (no signup/login requirement for admin) (2026-02-15)
-  Exit criteria: website provides Convex Auth login/signup flow; admin has no signup/login dependency.
-- [x] Add initial Convex backend scaffold for website auth + core tables (2026-02-15)
-  Exit criteria: `website/convex` includes auth config, auth/http functions, and base schema/query files deployable to self-hosted Convex.
-- [x] Clarify Convex env domain mapping in docs/env examples (2026-02-15)
-  Exit criteria: docs explicitly map backend origin vs site/dashboard origin for Convex URLs.
-- [x] Clarify self-hosted Convex `/http` auth route prefix in env/docs (2026-02-16)
-  Exit criteria: `CONVEX_SITE_URL` examples point to backend `/http` origin where `/.well-known/*` endpoints are reachable.
-- [x] Clarify Convex client URL vs auth URL to prevent websocket 404s (2026-02-16)
-  Exit criteria: docs explicitly require `NEXT_PUBLIC_CONVEX_URL` without `/http` and `CONVEX_SITE_URL` with `/http` for self-hosted auth routes.
-- [x] Fix Convex Auth JWT header compatibility (`kid`/`typ`) for self-hosted Convex (2026-02-16)
-  Exit criteria: website auth results in `useConvexAuth() === signed in` and backend `auth:isAuthenticated === true` after sign-in.
-- [x] Bootstrap connector discovery metadata without preconfigured sources (2026-02-16)
-  Exit criteria: discovery sync populates guild/channel selectors with names + IDs for a fresh connector.
-- [x] Improve admin connector selection UX with guild-scoped channel filtering (2026-02-16)
-  Exit criteria: source channel picker only shows channels from the selected guild; mapping/source tables show readable names with IDs.
-- [x] Fix channel snapshot extraction from Discord ChannelStore wrappers + global fallback scan (2026-02-16)
-  Exit criteria: channel-guild sync writes non-empty `discordChannels` rows for accessible guilds even when guild-scoped store helpers are empty, and admin channel dropdowns populate after snapshot sync.
-- [x] Add ChannelStore method-probing fallbacks and diagnostics for channel discovery (2026-02-16)
-  Exit criteria: plugin attempts multiple channel store APIs per guild, logs detected methods once, and increases discovery compatibility across Discord client variants.
-- [x] Add Discord REST fallback for channel snapshot discovery (2026-02-16)
-  Exit criteria: when store-derived channels are empty, plugin fetches guild channels via Discord REST and snapshot payload includes non-zero channels when the account can access them.
-- [x] Improve REST fallback auth compatibility + diagnostics (2026-02-16)
-  Exit criteria: plugin attempts token retrieval from storage and webpack runtime, and emits actionable REST HTTP diagnostics when channel REST fetches fail.
-- [x] Add DOM fallback discovery for visible guild channels (2026-02-16)
-  Exit criteria: when store and REST fallbacks are empty, plugin extracts channel IDs/names from rendered Discord channel links and sends them in discovery snapshots.
-- [x] Add dynamic webpack channel-store fallback for non-standard Discord client exports (2026-02-16)
-  Exit criteria: plugin scans webpack modules for richer channel-store APIs and uses them for discovery when the common ChannelStore wrapper is incomplete.
-- [x] Constrain mapping source/target selectors to enabled available channels (2026-02-16)
-  Exit criteria: mapping dropdowns no longer show all discovered channels; they only show channels explicitly saved/enabled in the left-side availability list.
-- [x] Add admin-triggered guild channel fetch requests and remove periodic discovery sync loop (2026-02-16)
-  Exit criteria: admin can request discovery for a selected guild via UI; plugin processes the request through runtime-config polling and does not run unconditional periodic snapshot sync.
-- [x] Add source/target role flags for available channels and enforce source-only ingestion (2026-02-16)
-  Exit criteria: admin can mark a channel as source/target/both; plugin only ingests from channels flagged as source; mapping source/target dropdowns are filtered by respective role flags.
-- [x] Stabilize discovery fallback probing to avoid i18n proxy collisions and expose REST fetch failure diagnostics (2026-02-16)
-  Exit criteria: plugin no longer emits `Requested message getAllChannels/getToken` warnings from scanner probes, and failed Discord REST channel fetch attempts emit explicit HTTP/network diagnostics per guild.
-- [x] Reduce runtime-config churn by separating discovery requests from config updates (2026-02-16)
-  Exit criteria: clicking "Fetch channels" triggers discovery sync without bumping connector config version, and plugin only reapplies runtime ingestion configuration after actual add/update changes.
-- [x] Fix thread payload validation mismatch and harden thread event normalization (2026-02-16)
-  Exit criteria: `/ingest/thread` no longer returns HTTP 400 for create/update/delete/member thread events generated by the plugin, including sparse payload variants.
-- [x] Tighten dynamic channel-store detection to avoid non-channel module collisions (2026-02-16)
-  Exit criteria: discovery probing no longer binds to i18n/proxy modules, `getChannels/getAllChannels` locale warnings stop, and guild channel snapshots populate reliably without opening each guild.
-- [x] Separate automatic guild discovery from manual channel discovery (2026-02-16)
-  Exit criteria: plugin publishes guild metadata without fetching all channels, and admin only requests channel discovery for a selected guild via "Fetch channels".
-- [x] Reduce config polling latency and validate dynamic channel-store probe candidates (2026-02-16)
-  Exit criteria: plugin processes discovery requests faster (low-second pickup), and channel store probes no longer trigger repeated locale-key warnings from non-channel modules.
-- [x] Stabilize discovery auth/store lookups using Vencord webpack store APIs (2026-02-16)
-  Exit criteria: plugin resolves Discord auth token via store lookup and avoids broad dynamic module probing that can call i18n proxy functions during channel discovery.
-- [x] Add non-proxy channel fallback via guild object traversal (2026-02-16)
-  Exit criteria: selected-guild channel discovery can extract channel IDs/names from guild object structures without invoking unstable store methods that trigger locale proxy warnings.
-- [x] Prevent stale discovery replay and wait for guild-store readiness on startup (2026-02-16)
-  Exit criteria: restarting Discord no longer auto-runs old guild-specific channel fetch requests, and initial guild metadata sync completes once GuildStore is populated.
+- store stable external IDs for customer, subscription, price, and event
+- store every processed webhook event once
+- never grant access based only on a frontend redirect
+- webhook handlers must be retry-safe and duplicate-safe
 
-## Decision Log
+### 3. Entitlements Domain
 
-| Date | Decision | Link |
-|---|---|---|
-| 2026-02-14 | Pivot backend to Convex and hard-reset docs/roadmap | `docs/plans/2026-02-14-convex-adoption-design.md` |
-| 2026-02-14 | Hard cutover auth to Convex Auth (email+password), start fresh (no Appwrite migration) | `docs/plans/2026-02-14-convex-auth-hard-cutover-design.md` |
-| 2026-02-15 | Limit signup/login scope to website only; admin auth requirement removed | N/A |
-| 2026-02-15 | Use `convex-backend.g3netic.com` as backend origin and `convex.g3netic.com` as site/dashboard origin in env docs | N/A |
-| 2026-02-16 | Self-hosted Convex auth routes are served under `/http`; `CONVEX_SITE_URL` must use backend `/http` origin | N/A |
-| 2026-02-16 | `NEXT_PUBLIC_CONVEX_URL` must not include `/http` to avoid websocket sync 404s (`/http/api/*`) | N/A |
-| 2026-02-17 | Adopt split-domain Phase 6 architecture (policy enforcement separated from shop catalog), website-only tier-gated dashboard visibility, and event-driven worker queue wakeups replacing fixed ultra-low polling | `docs/plans/2026-02-17-shop-admin-redesign-design.md` |
-| 2026-02-17 | Execute Phase 6 implementation plan across Convex/admin/website/Discord-Bot with verification and roadmap sync | `docs/plans/2026-02-17-shop-admin-redesign-plan.md` |
-| 2026-02-17 | Remove manual per-variant checkout URL authoring in admin catalog default flow; auto-build checkout from selected Sell product policy + storefront origin with custom override only for edge cases | N/A |
-| 2026-02-17 | Approve full admin workspace route rewrite centered on sidebar IA (`Mappings`, `Discord Bot`, `Shop`) with route migrations + redirects | `docs/plans/2026-02-17-admin-workspace-refactor-design.md` |
-| 2026-02-17 | Define implementation task plan for admin workspace refactor with verification gates (`typecheck`, `build`, smoke checks) | `docs/plans/2026-02-17-admin-workspace-refactor-plan.md` |
-| 2026-02-17 | Apply website UI layout polish pass focused on hierarchy, responsive composition, and feed readability across home/auth/dashboard | N/A |
-| 2026-02-17 | Approve trader workspace expansion IA for `website` using `/workspace/*` modules + shared shell with phased execution plan | `docs/plans/2026-02-17-trader-workspace-expansion-design.md` |
-| 2026-02-17 | Execute workspace expansion implementation tasks for shared shell, module routes, adapters/tests, and modal workflows in `website` | `docs/plans/2026-02-17-trader-workspace-expansion-plan.md` |
-| 2026-02-17 | Wire workspace module pages to live Convex query/mutation data paths and add dedicated workspace domain tables for market/intel/indicator/strategy/news/journal datasets | `docs/plans/2026-02-17-trader-workspace-expansion-plan.md` |
-| 2026-02-17 | Add scheduled external feed ingestion for workspace modules (Convex internal action + cron + upsert mutations) and trigger first live refresh | `docs/plans/2026-02-17-trader-workspace-expansion-plan.md` |
-| 2026-02-19 | Execute website member experience restructure for canonical dashboard routing, wider layout usage, auth/shop refresh, and functional journal analytics | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
-| 2026-02-19 | Execute second-pass workspace UI consistency polish and Convex env sync from `website/.env.example` | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
-| 2026-02-19 | Push Convex backend updates (`convex dev --once`) and run post-deploy workspace smoke queries | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
-| 2026-02-19 | Complete professional SaaS layout pass for website login/signup/shop composition quality | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
-| 2026-02-19 | Rebuild non-dashboard website pages from scratch on dedicated marketing layout with customer-facing messaging | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
-| 2026-02-19 | Execute customer-readiness second pass for non-dashboard website IA/layout with dashboard-aligned shell and cleaner pricing/auth UX | `docs/plans/2026-02-19-website-experience-restructure-plan.md` |
-| 2026-02-20 | Execute production-readiness pass for live-data UX, connector-source integrity, auth redirect hardening, and baseline security headers | `docs/plans/2026-02-20-website-production-readiness-pass.md` |
-| 2026-02-20 | Execute comprehensive website design improvement pass spanning global visual system, shell/nav composition, and module-level consistency polish | `docs/plans/2026-02-20-website-design-improvement-plan.md` |
-| 2026-02-20 | Refresh website shop product cards to a premium tiered composition with stronger duration/price affordances | `docs/plans/2026-02-20-shop-premium-cards-refresh-plan.md` |
-| 2026-02-20 | Fix auth layout composition, website branding rename to `G3n S1gnals`, and authenticated marketing-nav login visibility | `docs/plans/2026-02-20-auth-layout-brand-nav-fix-plan.md` |
-| 2026-02-20 | Add authenticated `Dashboard` button to shared marketing navbar | `docs/plans/2026-02-20-marketing-nav-dashboard-link-plan.md` |
-| 2026-02-20 | Fix login redirect behavior and Discord linking reliability under role-sync enqueue failure scenarios | `docs/plans/2026-02-20-discord-link-login-redirect-fix-plan.md` |
-| 2026-02-22 | Use bot-presence as canonical guild source for `/discord-bot` server config and surface selected-guild channel mappings directly in panel | N/A |
-| 2026-02-22 | Enforce explicit source(plugin)-to-target(bot) terminology and route-preview labeling in `/discord-bot` to prevent mapping/operator confusion | N/A |
-| 2026-02-22 | Rework `/mappings` layout to full-width source/target workflow sections and preserve full source/target route configurability while reducing inner table scroll friction | N/A |
-| 2026-02-22 | Add bot-side channel catalog sync and use it in `/mappings` setup wizard so target selection is independent of plugin discovery while preserving existing runtime/seat-gate semantics | N/A |
+Owns:
 
-## Links
+- product-to-feature mapping
+- access windows and feature flags
+- seat limits if needed later
+- billing-to-access translation
 
-- Convex adoption design: `docs/plans/2026-02-14-convex-adoption-design.md`
-- Convex adoption plan: `docs/plans/2026-02-14-convex-adoption-plan.md`
-- Shop/admin redesign design: `docs/plans/2026-02-17-shop-admin-redesign-design.md`
-- Shop/admin redesign implementation plan: `docs/plans/2026-02-17-shop-admin-redesign-plan.md`
-- Admin workspace refactor design: `docs/plans/2026-02-17-admin-workspace-refactor-design.md`
-- Admin workspace refactor implementation plan: `docs/plans/2026-02-17-admin-workspace-refactor-plan.md`
-- Trader workspace expansion design: `docs/plans/2026-02-17-trader-workspace-expansion-design.md`
-- Trader workspace expansion implementation plan: `docs/plans/2026-02-17-trader-workspace-expansion-plan.md`
-- Website member experience restructure implementation plan: `docs/plans/2026-02-19-website-experience-restructure-plan.md`
-- Website production-readiness pass: `docs/plans/2026-02-20-website-production-readiness-pass.md`
-- Website design improvement plan: `docs/plans/2026-02-20-website-design-improvement-plan.md`
-- Shop premium cards refresh plan: `docs/plans/2026-02-20-shop-premium-cards-refresh-plan.md`
-- Auth layout + brand + nav visibility fix plan: `docs/plans/2026-02-20-auth-layout-brand-nav-fix-plan.md`
-- Marketing nav dashboard link plan: `docs/plans/2026-02-20-marketing-nav-dashboard-link-plan.md`
-- Discord link + login redirect fix plan: `docs/plans/2026-02-20-discord-link-login-redirect-fix-plan.md`
+Rules:
+
+- billing state and entitlement state are related but separate
+- entitlements are computed from durable billing facts
+- reads for access checks must be cheap and deterministic
+
+### 4. Signals Domain
+
+Owns:
+
+- raw signal ingestion
+- normalization and enrichment
+- deduplication keys
+- canonical signal records
+- signal status and moderation lifecycle
+
+Rules:
+
+- keep raw ingress data separate from normalized signal documents
+- make signal ingestion idempotent with provider/source message keys
+- preserve enough source metadata for replay and debugging
+
+### 5. Delivery Domain
+
+Owns:
+
+- fan-out jobs
+- per-channel or per-user delivery state
+- retry/backoff logic
+- delivery observability
+
+Rules:
+
+- never perform all fan-out inline on the ingestion write path
+- use claim/process/complete job flows
+- keep job documents small and indexed by status plus next-attempt time
+- persist failure reason and retry count for operational visibility
+
+## Data Model Strategy
+
+Design for growth from day one:
+
+- `users`, `workspaces`, `memberships`
+- `stripeCustomers`, `subscriptions`, `billingEvents`
+- `entitlements`, `featureGrants`, `accessSnapshots`
+- `signalSources`, `rawSignals`, `signals`, `signalDeliveries`
+- `jobs` or scoped job tables such as `deliveryJobs`, `reconciliationJobs`
+
+Modeling rules:
+
+- do not store unbounded arrays inside primary documents
+- create indexes for every hot read path before traffic grows
+- avoid shared mutable counters unless they are truly required
+- maintain denormalized read models only where they materially reduce read cost
+- separate write-heavy state from read-heavy state to reduce contention
+
+## Concurrency and Reliability Roadmap
+
+### Phase 1. Foundation Reset
+
+Goal: establish clean module boundaries and production-safe defaults before feature expansion.
+
+- define domain modules in Convex by business capability, not by page
+- standardize naming, validators, auth guards, and internal/public API boundaries
+- add a single source of truth for environment/config validation
+- document ownership boundaries for Clerk, Stripe, and Convex concerns
+
+Exit criteria:
+
+- every Convex function has validators and clear auth rules
+- every table has an owner and documented purpose
+- every hot path has an index plan
+
+### Phase 2. Auth and Workspace Model
+
+Goal: make identity and authorization predictable.
+
+- integrate Clerk middleware and protected route patterns in Next.js
+- create Convex user projection keyed by Clerk token identity
+- add membership and role model for workspace-scoped access
+- make all privileged operations resolve identity server-side
+
+Exit criteria:
+
+- protected pages and APIs cannot rely on client-trusted IDs
+- user bootstrap is automatic and idempotent
+- role checks are centralized and reusable
+
+### Phase 3. Billing and Entitlements
+
+Goal: make subscription state correct even under retries, duplicates, and missed events.
+
+- implement Stripe Checkout subscription flows
+- implement Customer Portal session flow
+- store Stripe customer and subscription mappings in Convex
+- add verified webhook ingestion with immutable event log
+- build entitlement projection from billing events
+- add scheduled reconciliation for subscription drift
+
+Exit criteria:
+
+- duplicate webhooks do not duplicate state or access
+- subscription cancellation, renewal, and payment failure update access correctly
+- access can be recomputed from durable billing data
+
+### Phase 4. Signal Ingestion Pipeline
+
+Goal: ingest and normalize signals safely under load.
+
+- create raw ingestion endpoint or mutation with idempotency keys
+- store source payloads separately from normalized signal records
+- build normalization pipeline with validation and failure capture
+- add dedupe rules for repeated upstream signals
+- add replay tooling for failed or skipped ingress events
+
+Exit criteria:
+
+- repeated inbound payloads do not create duplicate canonical signals
+- malformed input is captured with actionable failure metadata
+- operators can replay failed ingress safely
+
+### Phase 5. Delivery and Fan-Out
+
+Goal: deliver signals to many consumers without making ingestion fragile.
+
+- implement outbox/job model for downstream delivery
+- separate create, retry, dead-letter, and reconciliation states
+- add bounded claims by indexed status and scheduled retry time
+- enforce exponential backoff and max-attempt policies
+- record per-delivery outcome and latency metrics
+
+Exit criteria:
+
+- signal creation remains fast even when downstream delivery slows down
+- retries are deterministic and observable
+- failed jobs are inspectable and replayable
+
+### Phase 6. Read Models and User Experience
+
+Goal: keep user-facing reads fast without compromising write-path simplicity.
+
+- add paginated signal feeds and dashboard queries
+- build role-aware entitlement-aware views
+- create lightweight read models for homepage, dashboard, and admin surfaces
+- keep admin diagnostics separate from customer-facing reads
+
+Exit criteria:
+
+- no user-facing list relies on unbounded reads
+- access-aware rendering is driven from server-side truth
+- dashboard performance remains stable as signal volume grows
+
+### Phase 7. Observability and Operations
+
+Goal: make failures visible before users report them.
+
+- structured logs for webhook, ingest, entitlement, and delivery flows
+- metrics for latency, retry count, backlog depth, duplicate suppression, and failure rate
+- dashboards for queue depth, stale jobs, webhook failures, and access drift
+- runbooks for replay, reconciliation, and incident triage
+- self-hosted Convex health checks must include proxy status, OIDC metadata validation, queue depth, and table-growth tracking
+
+Exit criteria:
+
+- each critical workflow has success/failure telemetry
+- dead-letter queues or failure tables are queryable from admin tooling
+- on-call debugging does not require raw database archaeology
+
+## Engineering Standards
+
+### SOLID in Practice
+
+- one module owns one business policy
+- infrastructure wrappers do not contain domain rules
+- domain services depend on abstractions and shared helpers, not UI concerns
+- public functions expose stable contracts; internal helpers absorb implementation churn
+
+### DRY in Practice
+
+- centralize auth guards, provider ID mapping, and entitlement evaluation
+- centralize Stripe event parsing and normalization
+- centralize signal validation and dedupe logic
+- centralize retry policies and error codes
+
+### Performance Rules
+
+- no `.collect()` on potentially unbounded queries
+- no table scans on hot user or worker paths
+- no large mutable arrays in documents
+- no inline third-party side effects inside critical state mutations when a queue will do
+
+## Security and Compliance Defaults
+
+- verify Stripe webhook signatures
+- scope secrets and environment variables per environment
+- minimize stored personal data from Clerk and Stripe
+- store external IDs and hashes where full payload retention is not required
+- enforce server-side authorization for every billing and signal admin action
+- keep audit trails for access-changing operations
+
+## Delivery Order
+
+Recommended implementation order:
+
+1. foundation reset
+2. Clerk auth and workspace model
+3. Stripe billing plus entitlements
+4. signal ingestion and normalization
+5. delivery jobs and retry loops
+6. user-facing dashboards and admin tooling
+7. deep observability, replay tools, and scale tuning
+
+## What We Are Explicitly Avoiding
+
+- coupling billing success redirects directly to access grants
+- storing all workflow state on one hot document
+- mixing raw third-party payloads with clean application read models
+- building subscription logic manually on top of payment intents
+- relying on client-side auth state for authorization
+- scaling with scans first and indexes later
+
+## Definition of Done
+
+This roadmap is only complete when:
+
+- auth, billing, entitlements, and signals have clear bounded domains
+- the write path is safe under duplicate events and concurrent processing
+- customer-facing reads are indexed and paginated
+- operational failures are replayable instead of mysterious
+- the system can degrade gracefully when Stripe, Clerk, or downstream delivery is slow
+
+## Notes
+
+- This roadmap assumes Clerk remains the identity provider, Convex remains the application backend, and Stripe remains the billing provider.
+- If Discord or other downstream channels are added back into scope, they should remain delivery-domain concerns behind the same outbox and retry model.
+- Reliability ideas from `docs/reliability.md` still apply and should be treated as implementation constraints, not optional polish.

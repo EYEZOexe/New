@@ -6,6 +6,7 @@ import type { ActionCtx } from "./_generated/server";
 import { computeConnectorTokenHashFromRequest } from "./connectorsAuth";
 import { getCorrelationId, jsonError, jsonResponse } from "./httpHelpers";
 import { isLikelyImageAttachment } from "./imageDetection";
+import { messageEventToSignalFields } from "./ingestUtils";
 
 async function authenticateConnector(ctx: ActionCtx, request: Request) {
   const correlationId = getCorrelationId(request);
@@ -81,22 +82,7 @@ function normalizeString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function toFiniteNumber(value: unknown): number | undefined {
-  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
-  return value;
-}
-
-function isHttpUrl(value: string): boolean {
-  if (!value) return false;
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-function buildInlineHydrationCandidates(args: {
+export function buildInlineHydrationCandidates(args: {
   tenantKey: string;
   connectorId: string;
   messages: unknown[];
@@ -113,46 +99,30 @@ function buildInlineHydrationCandidates(args: {
     const sourceChannelId = normalizeString(message.discord_channel_id);
     if (!sourceMessageId || !sourceChannelId) continue;
 
-    const rawAttachments = Array.isArray(message.attachments)
-      ? message.attachments
-      : [];
-    const attachments: InlineHydrationCandidate["attachments"] = [];
-    for (const rawAttachment of rawAttachments) {
-      if (!isObject(rawAttachment)) continue;
-      const url = normalizeString(rawAttachment.source_url);
-      if (!isHttpUrl(url)) continue;
+    const normalized = messageEventToSignalFields(
+      message as any,
+      {
+        tenantKey: args.tenantKey,
+        connectorId: args.connectorId,
+      },
+      { receivedAt: args.receivedAt },
+    );
 
-      const name = normalizeString(rawAttachment.filename);
-      const contentType = normalizeString(rawAttachment.content_type).toLowerCase();
-      if (
-        !isLikelyImageAttachment({
-          url,
-          contentType: contentType || undefined,
-          name,
-        })
-      ) {
-        continue;
+    const attachments = normalized.attachments.filter((attachment) => {
+      const attachmentId = attachment.attachmentId?.trim() ?? "";
+      if (attachmentId.startsWith("embed:")) {
+        return true;
       }
-
-      const attachmentId = normalizeString(rawAttachment.discord_attachment_id);
-      const size = toFiniteNumber(rawAttachment.size);
-
-      attachments.push({
-        ...(attachmentId ? { attachmentId } : {}),
-        url,
-        ...(name ? { name } : {}),
-        ...(contentType ? { contentType } : {}),
-        ...(typeof size === "number" ? { size } : {}),
-      });
-    }
+      return isLikelyImageAttachment(attachment);
+    });
 
     if (attachments.length === 0) continue;
 
     candidates.push({
       tenantKey: args.tenantKey,
       connectorId: args.connectorId,
-      sourceMessageId,
-      sourceChannelId,
+      sourceMessageId: normalized.sourceMessageId,
+      sourceChannelId: normalized.sourceChannelId,
       receivedAt: args.receivedAt,
       attachments,
     });

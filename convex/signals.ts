@@ -10,6 +10,12 @@ import {
 
 const MAX_ATTACHMENT_NAME_LENGTH = 180;
 
+type ConnectorVisibilityRule = {
+  channelId: string;
+  dashboardEnabled?: boolean;
+  minimumTier?: SubscriptionTier | null;
+};
+
 function isHttpUrl(value: string): boolean {
   try {
     const parsed = new URL(value);
@@ -238,47 +244,47 @@ export const listViewerConnectorOptions = query({
     }
 
     const viewerTier = (subscription?.tier ?? null) as SubscriptionTier | null;
-    const mappingRows = await ctx.db.query("connectorMappings").collect();
-    const grouped = new Map<
-      string,
-      {
-        tenantKey: string;
-        connectorId: string;
-        configuredChannelCount: number;
-        rules: Array<{
-          channelId: string;
-          dashboardEnabled?: boolean;
-          minimumTier?: SubscriptionTier | null;
-        }>;
-      }
-    >();
+    const connectors = await ctx.db.query("connectors").collect();
+    const groups = await Promise.all(
+      connectors.map(async (connector) => {
+        const tenantKey = connector.tenantKey.trim();
+        const connectorId = connector.connectorId.trim();
+        if (!tenantKey || !connectorId) {
+          return null;
+        }
 
-    for (const row of mappingRows) {
-      const tenantKey = row.tenantKey.trim();
-      const connectorId = row.connectorId.trim();
-      if (!tenantKey || !connectorId) continue;
+        const mappingRows = await ctx.db
+          .query("connectorMappings")
+          .withIndex("by_tenant_connectorId", (q) =>
+            q.eq("tenantKey", tenantKey).eq("connectorId", connectorId),
+          )
+          .collect();
 
-      const key = `${tenantKey}::${connectorId}`;
-      const current = grouped.get(key) ?? {
-        tenantKey,
-        connectorId,
-        configuredChannelCount: 0,
-        rules: [],
-      };
-      current.rules.push({
-        channelId: row.sourceChannelId,
-        dashboardEnabled: row.dashboardEnabled,
-        minimumTier: row.minimumTier ?? null,
-      });
-      if (row.dashboardEnabled === true && row.minimumTier) {
-        current.configuredChannelCount += 1;
-      }
-      grouped.set(key, current);
-    }
+        const rules: ConnectorVisibilityRule[] = mappingRows.map((row) => ({
+          channelId: row.sourceChannelId,
+          dashboardEnabled: row.dashboardEnabled,
+          minimumTier: row.minimumTier ?? null,
+        }));
 
-    const options = Array.from(grouped.values())
+        return {
+          tenantKey,
+          connectorId,
+          configuredChannelCount: mappingRows.filter(
+            (row) => row.dashboardEnabled === true && Boolean(row.minimumTier),
+          ).length,
+          mappingCount: mappingRows.length,
+          rules,
+        };
+      }),
+    );
+
+    const options = groups
+      .filter((group): group is NonNullable<typeof group> => group !== null)
       .map((group) => {
-        const visibleChannelCount = filterVisibleChannelIdsForTier(viewerTier, group.rules).length;
+        const visibleChannelCount = filterVisibleChannelIdsForTier(
+          viewerTier,
+          group.rules,
+        ).length;
         return {
           tenantKey: group.tenantKey,
           connectorId: group.connectorId,
@@ -300,8 +306,12 @@ export const listViewerConnectorOptions = query({
       })
       .slice(0, 100);
 
+    const scannedMappingCount = groups.reduce(
+      (total, group) => total + (group?.mappingCount ?? 0),
+      0,
+    );
     console.info(
-      `[signals] listViewerConnectorOptions user=${String(userId)} tier=${viewerTier ?? "none"} mappings_scanned=${mappingRows.length} connectors_visible=${options.length}`,
+      `[signals] listViewerConnectorOptions user=${String(userId)} tier=${viewerTier ?? "none"} connectors_scanned=${connectors.length} mappings_scanned=${scannedMappingCount} connectors_visible=${options.length}`,
     );
     return options;
   },
