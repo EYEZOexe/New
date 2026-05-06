@@ -11,7 +11,16 @@
       "PowerShell(Get-ChildItem \"c:\\\\Users\\\\laptop\\\\Documents\\\\New\" -Filter \"package.json\" -Recurse -Depth 3 | Where-Object { $_.FullName -notmatch \"node_modules\" } | Select-Object FullName)",
       "PowerShell(Get-ChildItem \"c:\\\\Users\\\\laptop\\\\Documents\\\\New\\\\admin\" -Recurse -Force -Depth 3 | Where-Object { !$_.PSIsContainer } | Select-Object FullName | Select-Object -First 40)",
       "PowerShell(Get-ChildItem \"c:\\\\Users\\\\laptop\\\\Documents\\\\New\\\\admin\\\\app\" -Recurse -Force | Where-Object { !$_.PSIsContainer } | Select-Object FullName)",
-      "PowerShell($npmCache = \"$env:LOCALAPPDATA\\\\npm-cache\\\\_npx\"; $bunCache = \"$env:LOCALAPPDATA\\\\.bun\"; Test-Path $bunCache; Get-ChildItem \"$env:USERPROFILE\\\\.bun\\\\install\\\\cache\\\\@convex-dev+auth@0.0.90\" -Force -ErrorAction SilentlyContinue | Select-Object -First 5)"
+      "PowerShell($npmCache = \"$env:LOCALAPPDATA\\\\npm-cache\\\\_npx\"; $bunCache = \"$env:LOCALAPPDATA\\\\.bun\"; Test-Path $bunCache; Get-ChildItem \"$env:USERPROFILE\\\\.bun\\\\install\\\\cache\\\\@convex-dev+auth@0.0.90\" -Force -ErrorAction SilentlyContinue | Select-Object -First 5)",
+      "PowerShell($env:CONVEX_SELF_HOSTED_URL=\"https://convex-backend.g3netic.com\"; $env:CONVEX_SELF_HOSTED_ADMIN_KEY=\"self-hosted-convex|019b4847dc9667271743205c17951471fc8154d41b6276445681611331ffcfb7b6ad74c182\"; Set-Location \"c:\\\\Users\\\\laptop\\\\Documents\\\\New\\\\website\"; bunx convex deploy)",
+      "PowerShell(Get-Command npx, bun, bunx, node 2>$null)",
+      "Bash(npx --version)",
+      "Bash(CONVEX_SELF_HOSTED_URL=https://convex-backend.g3netic.com CONVEX_SELF_HOSTED_ADMIN_KEY=\"self-hosted-convex|019b4847dc9667271743205c17951471fc8154d41b6276445681611331ffcfb7b6ad74c182\" npx convex deploy)",
+      "Bash(CONVEX_SELF_HOSTED_URL=https://convex-backend.g3netic.com CONVEX_SELF_HOSTED_ADMIN_KEY=\"self-hosted-convex|019b4847dc9667271743205c17951471fc8154d41b6276445681611331ffcfb7b6ad74c182\" npx convex@1.31.7 deploy)",
+      "Bash(npm install *)",
+      "Bash(CONVEX_SELF_HOSTED_URL=https://convex-backend.g3netic.com CONVEX_SELF_HOSTED_ADMIN_KEY=\"self-hosted-convex|019b4847dc9667271743205c17951471fc8154d41b6276445681611331ffcfb7b6ad74c182\" ./node_modules/.bin/convex deploy)",
+      "Bash(node \"/c/Users/laptop/Documents/New/website/scripts/patch-convex-auth.mjs\")",
+      "Bash(node website/scripts/patch-convex-auth.mjs)"
     ]
   }
 }
