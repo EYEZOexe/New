@@ -61,11 +61,15 @@ export function AuthFormCard(props: AuthFormCardProps) {
               id="auth-password"
               type="password"
               required
+              minLength={8}
               autoComplete={isLogin ? "current-password" : "new-password"}
               value={props.password}
               className="h-11 rounded-xl bg-background/70"
               onChange={(event) => props.onPasswordChange(event.target.value)}
             />
+            {!isLogin && (
+              <p className="text-xs text-muted-foreground">Minimum 8 characters.</p>
+            )}
           </div>
 
           {props.error ? (

@@ -76,9 +76,10 @@ export function toUserFacingAuthError(error: unknown, mode: AuthMode): string {
       "minimum",
       "min length",
       "weak password",
+      "invalid password",
     ])
   ) {
-    return "Password is too weak. Use at least 8 characters.";
+    return "Password must be at least 8 characters.";
   }
 
   if (
