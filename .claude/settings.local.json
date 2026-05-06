@@ -6,7 +6,12 @@
       "Bash(xargs grep:*)",
       "Bash(curl -s \"https://convex-backend.g3netic.com/http/webhooks/sellapp/failures?limit=50\" -H \"Authorization: Bearer k9761h6t53cxxtsgcvsk7z5bs982pp6e\")",
       "Bash(curl -s -X POST \"https://convex-backend.g3netic.com/api/query\" -H \"Content-Type: application/json\" -H \"Authorization: Convex self-hosted-convex|019b4847dc9667271743205c17951471fc8154d41b6276445681611331ffcfb7b6ad74c182\" -d '{:*)",
-      "Bash(python3 -c \"import json,sys; data=json.load\\(sys.stdin\\); events=data.get\\(\"\"value\"\",[]\\); [print\\(json.dumps\\(e,indent=2\\)\\) for e in events if \"\"licaandrei\"\" in str\\(e\\).lower\\(\\) or \"\"licaandrei\"\" in str\\(e\\).lower\\(\\)]\")"
+      "Bash(python3 -c \"import json,sys; data=json.load\\(sys.stdin\\); events=data.get\\(\"\"value\"\",[]\\); [print\\(json.dumps\\(e,indent=2\\)\\) for e in events if \"\"licaandrei\"\" in str\\(e\\).lower\\(\\) or \"\"licaandrei\"\" in str\\(e\\).lower\\(\\)]\")",
+      "PowerShell(Get-ChildItem \"c:\\\\Users\\\\laptop\\\\Documents\\\\New\\\\convex\" -Recurse -Force | Where-Object { !$_.PSIsContainer } | Select-Object FullName)",
+      "PowerShell(Get-ChildItem \"c:\\\\Users\\\\laptop\\\\Documents\\\\New\" -Filter \"package.json\" -Recurse -Depth 3 | Where-Object { $_.FullName -notmatch \"node_modules\" } | Select-Object FullName)",
+      "PowerShell(Get-ChildItem \"c:\\\\Users\\\\laptop\\\\Documents\\\\New\\\\admin\" -Recurse -Force -Depth 3 | Where-Object { !$_.PSIsContainer } | Select-Object FullName | Select-Object -First 40)",
+      "PowerShell(Get-ChildItem \"c:\\\\Users\\\\laptop\\\\Documents\\\\New\\\\admin\\\\app\" -Recurse -Force | Where-Object { !$_.PSIsContainer } | Select-Object FullName)",
+      "PowerShell($npmCache = \"$env:LOCALAPPDATA\\\\npm-cache\\\\_npx\"; $bunCache = \"$env:LOCALAPPDATA\\\\.bun\"; Test-Path $bunCache; Get-ChildItem \"$env:USERPROFILE\\\\.bun\\\\install\\\\cache\\\\@convex-dev+auth@0.0.90\" -Force -ErrorAction SilentlyContinue | Select-Object -First 5)"
     ]
   }
 }

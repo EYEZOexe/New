@@ -52,6 +52,7 @@ export default function SignupPage() {
       await signIn("password", { email, password, flow: "signUp" });
       router.replace(redirectTo);
     } catch (submitError) {
+      console.error("[signup] raw error:", submitError);
       setError(toUserFacingAuthError(submitError, "signup"));
     } finally {
       setIsSubmitting(false);

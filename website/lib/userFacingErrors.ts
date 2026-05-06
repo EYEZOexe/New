@@ -7,6 +7,20 @@ function normalizeErrorText(value: unknown): string {
   if (typeof value === "string") {
     return value.trim();
   }
+  // Convex and other libs throw error-like objects that fail instanceof checks
+  if (value !== null && typeof value === "object") {
+    const asObj = value as Record<string, unknown>;
+    if (typeof asObj["message"] === "string") {
+      return asObj["message"].trim();
+    }
+    if (typeof asObj["data"] === "string") {
+      return asObj["data"].trim();
+    }
+    const str = String(value);
+    if (str !== "[object Object]") {
+      return str.trim();
+    }
+  }
   return "";
 }
 
@@ -88,6 +102,38 @@ export function toUserFacingAuthError(error: unknown, mode: AuthMode): string {
     ])
   ) {
     return "Network issue. Please check your connection and try again.";
+  }
+
+  if (
+    includesAny(message, [
+      "could not find public key",
+      "invalid signature",
+      "jwt",
+      "missing environment variable",
+      "environment variable",
+      "internal server error",
+      "server error",
+      "configuration",
+    ])
+  ) {
+    if (mode === "signup") {
+      return "Account creation is temporarily unavailable. Please try again later or contact support.";
+    }
+    return "Login is temporarily unavailable. Please try again later or contact support.";
+  }
+
+  if (
+    includesAny(message, [
+      "unauthorized",
+      "unauthenticated",
+      "forbidden",
+      "not allowed",
+    ])
+  ) {
+    if (mode === "signup") {
+      return "Registration is not available. Please contact support.";
+    }
+    return "Access denied. Please contact support.";
   }
 
   if (mode === "signup") {
