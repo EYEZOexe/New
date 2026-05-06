@@ -1,13 +1,9 @@
-function normalizePublicAuthDomain(rawValue: string | undefined): string | undefined {
-  const trimmed = rawValue?.trim();
-  if (!trimmed) return undefined;
-  return trimmed.replace(/\/$/, "");
-}
+const rawSiteUrl = process.env.CONVEX_SITE_URL ?? process.env.CONVEX_SITE_ORIGIN;
 
 export default {
   providers: [
     {
-      domain: normalizePublicAuthDomain(process.env.CONVEX_SITE_URL),
+      domain: rawSiteUrl?.trim().replace(/\/$/, ""),
       applicationID: "convex",
     },
   ],

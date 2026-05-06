@@ -50,7 +50,7 @@ export default function LoginPage() {
 
     try {
       await signIn("password", { email, password, flow: "signIn" });
-      router.replace(redirectTo);
+      // redirect handled by useEffect once isAuthenticated becomes true
     } catch (submitError) {
       setError(toUserFacingAuthError(submitError, "login"));
     } finally {

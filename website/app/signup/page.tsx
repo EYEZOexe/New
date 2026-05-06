@@ -50,7 +50,7 @@ export default function SignupPage() {
 
     try {
       await signIn("password", { email, password, flow: "signUp" });
-      router.replace(redirectTo);
+      // redirect handled by useEffect once isAuthenticated becomes true
     } catch (submitError) {
       console.error("[signup] raw error:", submitError);
       setError(toUserFacingAuthError(submitError, "signup"));
